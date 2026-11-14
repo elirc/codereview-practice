@@ -122,7 +122,12 @@ class IdempotencyService(
             .param("apiKeyId", apiKeyId)
             .param("key", key)
             .query { rs, _ ->
-                StoredKey(rs.getString("fingerprint"), rs.getString("state"), rs.intOrNull("response_status"), rs.getString("response_body"))
+                StoredKey(
+                    fingerprint = rs.getString("fingerprint"),
+                    state = rs.getString("state"),
+                    responseStatus = rs.intOrNull("response_status"),
+                    responseBody = rs.getString("response_body")
+                )
             }
             .optional()
             .orElse(null)

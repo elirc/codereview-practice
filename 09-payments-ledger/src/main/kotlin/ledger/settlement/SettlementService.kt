@@ -124,7 +124,13 @@ class SettlementService(
 
     /** Returns the business date and currency of batches still processing for dates before [before]. */
     fun unfinishedBefore(before: LocalDate): List<Pair<LocalDate, Currency>> =
-        jdbc.sql("SELECT business_date, currency FROM settlement_batches WHERE status = 'processing' AND business_date < :before ORDER BY business_date")
+        jdbc.sql(
+            """
+            SELECT business_date, currency FROM settlement_batches
+            WHERE status = 'processing' AND business_date < :before
+            ORDER BY business_date
+            """.trimIndent()
+        )
             .param("before", before)
             .query { rs, _ -> rs.localDate("business_date") to Currency.fromDb(rs.getString("currency")) }
             .list()

@@ -55,6 +55,7 @@ class TransferController(
         @Valid @RequestBody body: WithdrawalRequest,
         request: HttpServletRequest
     ): ResponseEntity<JsonNode> = idempotent.run(caller, request, body) {
-        ApiResult(HttpStatus.CREATED.value(), transfers.withdraw(caller, WithdrawalCommand(body.accountId, body.amountMinor, body.currency)))
+        val command = WithdrawalCommand(body.accountId, body.amountMinor, body.currency)
+        ApiResult(HttpStatus.CREATED.value(), transfers.withdraw(caller, command))
     }
 }

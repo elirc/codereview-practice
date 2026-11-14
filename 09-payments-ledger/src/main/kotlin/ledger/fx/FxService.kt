@@ -164,7 +164,9 @@ class FxService(
                 throw BusinessRuleException("quote_owner_mismatch", "Both accounts must belong to the quote's owner.")
             }
             if (from.currency != quote.sellCurrency || to.currency != quote.buyCurrency) {
-                throw Errors.currencyMismatch("The accounts' currencies do not match the quote's ${quote.sellCurrency} to ${quote.buyCurrency}.")
+                throw Errors.currencyMismatch(
+                    "The account currencies do not match the quote, ${quote.sellCurrency} to ${quote.buyCurrency}."
+                )
             }
             if (quote.usedEntryId != null) throw quoteAlreadyUsed(quote.id)
             if (!clock.instant().isBefore(quote.expiresAt)) {

@@ -23,7 +23,8 @@ class WorkerSchedules(
     private val holdExpiry: HoldExpiryJob,
     private val relayLoop: OutboxRelayLoop,
     private val outboxPurge: OutboxPurgeJob,
-    private val settlementTrigger: SettlementTriggerJob
+    private val settlementTrigger: SettlementTriggerJob,
+    private val reconcile: ReconcileJob
 ) {
     @Scheduled(fixedDelay = RELAY_MS)
     fun relayOutbox() {
@@ -33,6 +34,11 @@ class WorkerSchedules(
     @Scheduled(fixedDelay = HOLD_EXPIRY_MS)
     fun expireHolds() {
         jobs.run("hold-expiry") { holdExpiry.runOnce(clock.instant()) }
+    }
+
+    @Scheduled(fixedDelay = RECONCILE_MS)
+    fun reconcileStatements() {
+        jobs.run("reconcile") { reconcile.runOnce(clock.instant()) }
     }
 
     @Scheduled(cron = "0 15 0 * * *", zone = "UTC")
@@ -53,6 +59,7 @@ class WorkerSchedules(
     private companion object {
         const val RELAY_MS = 200L
         const val HOLD_EXPIRY_MS = 30_000L
+        const val RECONCILE_MS = 10_000L
         const val MINUTE_MS = 60_000L
         const val HOUR_MS = 3_600_000L
     }

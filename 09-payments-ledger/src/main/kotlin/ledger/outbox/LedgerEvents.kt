@@ -152,4 +152,33 @@ class LedgerEvents(private val outbox: OutboxWriter) {
             )
         )
     }
+
+    fun discrepancyFound(
+        statementId: UUID,
+        lineId: UUID,
+        lineNo: Int,
+        reference: String,
+        lineAmountMinor: Long,
+        expectedAmountMinor: Long,
+        currency: Currency,
+        occurredAt: Instant
+    ) {
+        outbox.record(
+            topic = Topics.SETTLEMENT,
+            partitionKey = statementId.toString(),
+            type = "reconciliation.discrepancy_found",
+            aggregateType = "statement",
+            aggregateId = statementId.toString(),
+            sequence = lineNo.toLong(),
+            occurredAt = occurredAt,
+            data = mapOf(
+                "statementId" to statementId,
+                "lineId" to lineId,
+                "reference" to reference,
+                "lineAmountMinor" to lineAmountMinor,
+                "expectedAmountMinor" to expectedAmountMinor,
+                "currency" to currency
+            )
+        )
+    }
 }
