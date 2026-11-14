@@ -1,3 +1,4 @@
+using Billing.Api.Endpoints;
 using Billing.Api.Validation;
 using Billing.Core.Errors;
 using Billing.Core.Json;
@@ -21,8 +22,14 @@ public static class ApiSetup
     {
         app.UseMiddleware<RequestIdMiddleware>();
         app.UseExceptionHandler(_ => { });
+        app.UseMiddleware<ApiKeyMiddleware>();
 
         app.MapGet("/health", () => Results.Ok(new HealthView("ok")));
+
+        var v1 = app.MapGroup("/v1");
+        v1.MapApiKeyEndpoints();
+        v1.MapCustomerEndpoints();
+        v1.MapCatalogEndpoints();
 
         app.MapFallback(_ => throw DomainException.NotFound("The requested resource"));
         return app;
