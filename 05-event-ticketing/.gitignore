@@ -1,0 +1,12 @@
+/.bundle
+/.env
+/.env.*
+!/.env.example
+/log/*
+!/log/.keep
+/tmp/*
+/storage/*
+/public/assets
+/config/master.key
+/config/credentials/*.key
+/coverage/

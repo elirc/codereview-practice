@@ -1,0 +1,21 @@
+# DATABASE_URL, when set, overrides the settings of the current environment.
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  host: localhost
+  port: 5455
+  username: postgres
+  password: postgres
+  pool: <%= AppConfig.db_pool %>
+
+development:
+  <<: *default
+  database: event_ticketing_development
+
+test:
+  <<: *default
+  database: event_ticketing_test
+
+production:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"] %>
