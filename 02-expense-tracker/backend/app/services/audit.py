@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any
 
 from app.models import AuditEvent
+from app.schemas.money import rate_text
 from app.services.context import ServiceContext
 
 JsonDict = dict[str, Any]
@@ -21,7 +22,7 @@ def to_jsonable(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, Decimal):
-        return format(value, "f")
+        return rate_text(value)
     return value
 
 
