@@ -1,8 +1,13 @@
+import threading
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Sum
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
 
 from catalog.models import Product
 from inventory.models import StockItem, StockMovement
@@ -11,6 +16,13 @@ from orders.services import LineRequest, pay_pending_order, place_order, request
 from payments.models import WebhookEvent
 
 NOW = datetime(2026, 3, 2, 12, 0, tzinfo=UTC)
+
+
+def client_for(user) -> APIClient:
+    client = APIClient()
+    token, _ = Token.objects.get_or_create(user=user)
+    client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    return client
 
 
 def stock_of(product: Product) -> StockItem:
@@ -83,3 +95,32 @@ def store_event(event_type: str, order: Order, *, received_at: datetime = NOW, *
         provider_created_at=datetime.fromtimestamp(payload["created"], tz=UTC),
         received_at=received_at,
     )
+
+
+def run_concurrently(*functions: Callable[[], Any], timeout: float = 30) -> list[Any]:
+    """Start ``functions`` together on separate threads and connections.
+
+    Returns each function's result, or the exception it raised, in argument order.
+    """
+    barrier = threading.Barrier(len(functions))
+    results: list[Any] = [None] * len(functions)
+
+    def worker(index: int, function: Callable[[], Any]) -> None:
+        try:
+            barrier.wait(timeout=timeout)
+            results[index] = function()
+        except BaseException as exc:
+            results[index] = exc
+        finally:
+            connections.close_all()
+
+    threads = [
+        threading.Thread(target=worker, args=(index, function))
+        for index, function in enumerate(functions)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout)
+    assert not any(thread.is_alive() for thread in threads), "a worker thread did not finish"
+    return results

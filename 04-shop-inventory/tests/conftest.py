@@ -1,12 +1,11 @@
 from datetime import datetime, timedelta
 
 import pytest
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from payments.provider import get_provider
 from tests.factories import staff_user
-from tests.helpers import NOW
+from tests.helpers import NOW, client_for
 
 
 class FixedClock:
@@ -19,14 +18,6 @@ class FixedClock:
     def advance(self, **delta: float) -> datetime:
         self.current += timedelta(**delta)
         return self.current
-
-
-def client_for(user) -> APIClient:
-    client = APIClient()
-    if user is not None:
-        token, _ = Token.objects.get_or_create(user=user)
-        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
-    return client
 
 
 @pytest.fixture(autouse=True)
