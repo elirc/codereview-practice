@@ -99,7 +99,7 @@ describe('compaction', () => {
     expect((await docRow(docId)).snapshot_seq).toBe(1);
   });
 
-  it('loses nothing when editors append during compaction', async () => {
+  it('keeps every update appended during compaction', async () => {
     const { docId, userId } = await seedDoc(db);
     const updates = typedUpdates(...Array.from({ length: 40 }, (_, i) => `w${i} `));
     await appendAll(docId, userId, updates.slice(0, 20));
@@ -117,7 +117,7 @@ describe('compaction', () => {
     expect((await docRow(docId)).head_seq).toBe(40);
   });
 
-  it('gives a concurrent room load either the old log or the new snapshot, complete', async () => {
+  it('loads the complete text while a compaction runs', async () => {
     const { docId, userId } = await seedDoc(db);
     const updates = typedUpdates(...Array.from({ length: 30 }, (_, i) => `${i},`));
     await appendAll(docId, userId, updates);

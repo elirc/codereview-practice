@@ -63,7 +63,7 @@ describe('permission changes while connected', () => {
     expect((await editor.closed).code).toBe(4403);
   });
 
-  it('refuses the next update after a revoke even when the bus message is lost', async () => {
+  it('refuses the next update after a revoke without any bus message', async () => {
     await owner.api.post(`/api/docs/${docId}/shares`, { email: member.email, role: 'editor' });
     const editor = await TestClient.join(server.url, docId, { token: member.token });
     silenceAccessMessages();
@@ -73,7 +73,7 @@ describe('permission changes while connected', () => {
     expect(await rowCount()).toBe(0);
   });
 
-  it('closes revoked connections at the sweep when the bus message is lost', async () => {
+  it('closes revoked connections at the sweep without any bus message', async () => {
     await owner.api.post(`/api/docs/${docId}/shares`, { email: member.email, role: 'viewer' });
     const viewer = await TestClient.join(server.url, docId, { token: member.token });
     silenceAccessMessages();

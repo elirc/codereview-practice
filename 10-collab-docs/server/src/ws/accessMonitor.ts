@@ -112,7 +112,7 @@ export class AccessMonitor implements AccessListener {
             ).map((row) => row.id),
           );
 
-    const stale: Connection[] = [];
+    const changed: Connection[] = [];
     for (const conn of conns) {
       const doc = byId.get(conn.docId);
       if (!doc || doc.trashed_at !== null) {
@@ -130,10 +130,10 @@ export class AccessMonitor implements AccessListener {
         doc.perm_epoch !== conn.auth.docEpoch ||
         doc.workspace_epoch !== conn.auth.workspaceEpoch
       ) {
-        stale.push(conn);
+        changed.push(conn);
       }
     }
-    await Promise.all(stale.map((conn) => this.reevaluate(conn)));
+    await Promise.all(changed.map((conn) => this.reevaluate(conn)));
   }
 
   private open(): Connection[] {

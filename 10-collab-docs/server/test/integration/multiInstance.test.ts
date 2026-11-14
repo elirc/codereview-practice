@@ -88,7 +88,7 @@ describe('two instances', () => {
     await Promise.all([left.close(), right.close()]);
   });
 
-  it('fills a lost update from the database on the next message', async () => {
+  it('reads a missing update from the database on the next message', async () => {
     const left = await TestClient.join(a.url, docId, { token: owner.token });
     const right = await TestClient.join(b.url, docId, { token: owner.token });
     dropUpdates(a, 1);
@@ -99,7 +99,7 @@ describe('two instances', () => {
     await Promise.all([left.close(), right.close()]);
   });
 
-  it('fills a lost update at the periodic catch-up', async () => {
+  it('reads a missing update at the periodic head check', async () => {
     const left = await TestClient.join(a.url, docId, { token: owner.token });
     const right = await TestClient.join(b.url, docId, { token: owner.token });
     const observer = await TestClient.join(a.url, docId, { token: owner.token });
@@ -107,12 +107,12 @@ describe('two instances', () => {
     left.append('quiet');
     await observer.waitForText('quiet');
     expect(right.text.toString()).toBe('');
-    await b.instance.registry.catchUpStale();
+    await b.instance.registry.catchUpBehind();
     await right.waitForText('quiet');
     await Promise.all([left.close(), right.close(), observer.close()]);
   });
 
-  it('applies reordered and duplicated bus messages once each', async () => {
+  it('applies bus messages by seq, once each', async () => {
     const reader = await TestClient.join(b.url, docId, { token: owner.token });
     const [first, second] = typedUpdates('one ', 'two');
     await a.instance.store.append({ docId, update: first, userId: owner.id });
@@ -196,7 +196,7 @@ describe('two instances', () => {
     );
     expect(compacted).toBe(1);
     expect(b.instance.registry.get(docId)!.appliedSeq).toBe(1);
-    await b.instance.registry.catchUpStale();
+    await b.instance.registry.catchUpBehind();
     await right.waitForText('seen abc');
     expect(b.instance.registry.get(docId)!.appliedSeq).toBe(4);
     await Promise.all([left.close(), right.close(), observer.close()]);

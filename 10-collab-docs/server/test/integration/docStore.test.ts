@@ -46,7 +46,7 @@ describe('DocStore.append', () => {
     expect(doc.log_bytes).toBe(updates[0].byteLength + updates[1].byteLength);
   });
 
-  it('assigns distinct seqs to concurrent appends', async () => {
+  it('assigns seqs 1 to n to appends made in parallel', async () => {
     const { docId, userId } = await seedDoc(db);
     const store = new DocStore(db, clock, 5_242_880);
     const updates = typedUpdates('a', 'b', 'c', 'd', 'e', 'f');

@@ -88,7 +88,7 @@ export class CollabServer extends EventEmitter {
   startLoops(): void {
     if (!this.config.LOOPS_ENABLED) return;
     this.every(this.config.PING_INTERVAL_MS, 'liveness', async () => this.pingOnce());
-    this.every(this.config.CATCHUP_INTERVAL_MS, 'catch-up', () => this.registry.catchUpStale());
+    this.every(this.config.CATCHUP_INTERVAL_MS, 'catch-up', () => this.registry.catchUpBehind());
     this.every(this.config.PERM_SWEEP_MS, 'permission sweep', () =>
       this.monitor.sweep(this.clock.now()),
     );

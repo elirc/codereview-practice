@@ -95,7 +95,7 @@ describe('Room.integrate', () => {
     expect(store.readSinceCalls).toEqual([]);
   });
 
-  it('buffers an early update and applies it once its predecessor arrives', async () => {
+  it('applies an update once the one before it arrives', async () => {
     const store = new FakeStore();
     const room = newRoom(store);
     await room.load();
@@ -109,7 +109,7 @@ describe('Room.integrate', () => {
     expect(text(room)).toBe('ab');
   });
 
-  it('applies a duplicate only once', async () => {
+  it('applies each seq once', async () => {
     const store = new FakeStore();
     const room = newRoom(store);
     await room.load();
@@ -122,7 +122,7 @@ describe('Room.integrate', () => {
     expect(peer.sent).toHaveLength(1);
   });
 
-  it('fills a gap from the store', async () => {
+  it('reads missing seqs from the store', async () => {
     const store = new FakeStore();
     const room = newRoom(store);
     await room.load();
@@ -152,7 +152,7 @@ describe('Room.integrate', () => {
     expect(text(room)).toBe('abcde');
   });
 
-  it('integrates updates received while loading after the stored log', async () => {
+  it('applies updates received during the load after the stored log', async () => {
     const store = new FakeStore();
     const updates = chain(3);
     store.log = { snapshot: null, updates: [{ seq: 1, update: updates[0] }] };

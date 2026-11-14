@@ -7,11 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev:server": "tsx watch server/src/main.ts",
-    "start:server": "tsx server/src/main.ts",
-    "start:worker": "tsx server/src/worker/main.ts",
-    "migrate": "tsx server/src/db/migrateCli.ts",
-    "seed": "tsx server/src/seed.ts",
+    "dev:server": "tsx watch --env-file=.env server/src/main.ts",
+    "start:server": "tsx --env-file=.env server/src/main.ts",
+    "start:worker": "tsx --env-file=.env server/src/worker/main.ts",
+    "migrate": "tsx --env-file=.env server/src/db/migrateCli.ts",
+    "seed": "tsx --env-file=.env server/src/seed.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "build:web": "vite build --config web/vite.config.ts",
     "typecheck": "tsc -p server/tsconfig.json && tsc -p web/tsconfig.json",

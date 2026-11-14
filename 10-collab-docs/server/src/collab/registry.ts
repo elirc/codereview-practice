@@ -127,7 +127,7 @@ export class RoomRegistry implements LiveDocs {
   }
 
   /** Catches up every loaded room whose document head is ahead of what it has applied. */
-  async catchUpStale(): Promise<void> {
+  async catchUpBehind(): Promise<void> {
     const rooms = this.all().filter((room) => room.isLoaded && !room.closing);
     if (rooms.length === 0) return;
     const heads = await this.store.headSeqs(rooms.map((room) => room.docId));

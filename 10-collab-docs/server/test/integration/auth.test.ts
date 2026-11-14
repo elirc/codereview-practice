@@ -23,7 +23,7 @@ describe('registration and sessions', () => {
     ]);
   });
 
-  it('stores emails in lower case and refuses duplicates', async () => {
+  it('stores emails in lower case and refuses one already registered', async () => {
     const api = new ApiClient(t.app);
     const first = await api.post('/api/auth/register', {
       email: 'Bob@Example.com',
