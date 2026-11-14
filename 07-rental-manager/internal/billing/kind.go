@@ -2,6 +2,19 @@
 // allocation of payments, late fees and aging. It performs no I/O.
 package billing
 
+// Lease statuses.
+const (
+	LeaseDraft  = "draft"
+	LeaseActive = "active"
+	LeaseEnded  = "ended"
+)
+
+// Billable reports whether a lease in the given status accepts ledger
+// entries and is processed by the billing jobs.
+func Billable(status string) bool {
+	return status == LeaseActive || status == LeaseEnded
+}
+
 // Kind is the kind of a ledger entry.
 type Kind string
 

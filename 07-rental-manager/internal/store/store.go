@@ -30,8 +30,18 @@ func Open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 
 // WithTx runs fn inside a transaction. The transaction commits when fn
 // returns nil and rolls back when fn returns an error or panics.
-func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(q *db.Queries) error) (err error) {
-	tx, err := pool.Begin(ctx)
+func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(q *db.Queries) error) error {
+	return runTx(ctx, pool, pgx.TxOptions{}, fn)
+}
+
+// WithSnapshot runs read-only fn in a repeatable-read transaction so that
+// every query sees the same snapshot.
+func WithSnapshot(ctx context.Context, pool *pgxpool.Pool, fn func(q *db.Queries) error) error {
+	return runTx(ctx, pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, fn)
+}
+
+func runTx(ctx context.Context, pool *pgxpool.Pool, opts pgx.TxOptions, fn func(q *db.Queries) error) (err error) {
+	tx, err := pool.BeginTx(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
