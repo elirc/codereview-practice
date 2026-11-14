@@ -15,7 +15,7 @@ from orders.models import Order
 from orders.services import pay_pending_order, pay_released_order
 
 from ..exceptions import InvalidEventData, OrderNotFoundYet
-from ..models import WebhookEvent
+from ..models import Refund, WebhookEvent
 from ..serializers import EventDataSerializer
 from . import refunds
 
@@ -168,7 +168,83 @@ def _payment_failed(event: WebhookEvent, data: EventData, now: datetime) -> str:
     return WebhookEvent.Status.PROCESSED
 
 
+def _find_refund(order: Order, data: EventData) -> Refund | None:
+    refunds_of_order = Refund.objects.select_for_update().filter(order=order)
+    if data.refund_id:
+        refund = refunds_of_order.filter(provider_refund_id=data.refund_id).first()
+        if refund is not None:
+            return refund
+    if not data.refund_reference:
+        return None
+    try:
+        reference = uuid.UUID(data.refund_reference)
+    except ValueError:
+        return None
+    refund = refunds_of_order.filter(pk=reference).first()
+    if refund is not None and data.refund_id and not refund.provider_refund_id:
+        refund.provider_refund_id = data.refund_id
+        refund.save(update_fields=["provider_refund_id", "updated_at"])
+    return refund
+
+
+def _record_provider_refund(order: Order, data: EventData) -> str:
+    if not data.refund_id or data.amount_minor <= 0:
+        _flag_for_review(order, "The provider reported a refund that could not be matched.")
+        return WebhookEvent.Status.PROCESSED
+    if refunds.succeeded_minor(order) + data.amount_minor > order.amount_paid_minor:
+        _flag_for_review(
+            order,
+            f"Provider refund {data.refund_id} of {data.amount_minor} {data.currency} would "
+            "exceed the amount paid.",
+        )
+        return WebhookEvent.Status.PROCESSED
+    Refund.objects.create(
+        order=order,
+        amount_minor=data.amount_minor,
+        status=Refund.Status.SUCCEEDED,
+        reason="Issued in the payment provider dashboard.",
+        provider_refund_id=data.refund_id,
+        source=Refund.Source.PROVIDER,
+    )
+    return WebhookEvent.Status.PROCESSED
+
+
+def _refund_event(event: WebhookEvent, data: EventData, *, succeeded: bool) -> str:
+    order = _lock_order(data.payment_intent_id)
+    refund = _find_refund(order, data)
+    if refund is None:
+        if succeeded:
+            return _record_provider_refund(order, data)
+        return WebhookEvent.Status.IGNORED
+
+    if refund.status == Refund.Status.PENDING:
+        if succeeded:
+            refunds.complete_refund(refund, order)
+        else:
+            refunds.mark_refund_failed(refund, reason=data.failure_reason or "Refund failed.")
+        return WebhookEvent.Status.PROCESSED
+
+    reported = Refund.Status.SUCCEEDED if succeeded else Refund.Status.FAILED
+    if refund.status == reported:
+        return WebhookEvent.Status.IGNORED
+    _flag_for_review(
+        order,
+        f"Refund {refund.id} is {refund.status} but the provider sent {event.type}.",
+    )
+    return WebhookEvent.Status.PROCESSED
+
+
+def _refund_succeeded(event: WebhookEvent, data: EventData, now: datetime) -> str:
+    return _refund_event(event, data, succeeded=True)
+
+
+def _refund_failed(event: WebhookEvent, data: EventData, now: datetime) -> str:
+    return _refund_event(event, data, succeeded=False)
+
+
 HANDLERS: dict[str, Handler] = {
     "payment.succeeded": _payment_succeeded,
     "payment.failed": _payment_failed,
+    "refund.succeeded": _refund_succeeded,
+    "refund.failed": _refund_failed,
 }

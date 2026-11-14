@@ -64,6 +64,13 @@ class StockMovement(models.Model):
         blank=True,
         related_name="stock_movements",
     )
+    refund = models.ForeignKey(
+        "payments.Refund",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="stock_movements",
+    )
     reason = models.CharField(max_length=200, blank=True, default="")
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

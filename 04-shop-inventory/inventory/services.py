@@ -14,6 +14,7 @@ from .models import StockItem, StockMovement
 
 if TYPE_CHECKING:
     from orders.models import Order
+    from payments.models import Refund
 
 
 def create_stock_item(product: Product) -> StockItem:
@@ -37,6 +38,7 @@ def apply_movement(
     on_hand_delta: int = 0,
     reserved_delta: int = 0,
     order: "Order | None" = None,
+    refund: "Refund | None" = None,
     reason: str = "",
     actor: AbstractBaseUser | None = None,
 ) -> StockMovement:
@@ -50,6 +52,7 @@ def apply_movement(
         on_hand_delta=on_hand_delta,
         reserved_delta=reserved_delta,
         order=order,
+        refund=refund,
         reason=reason,
         actor=actor,
     )

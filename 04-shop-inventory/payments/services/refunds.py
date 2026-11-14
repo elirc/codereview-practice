@@ -6,11 +6,13 @@ from datetime import datetime
 import structlog
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Sum
 
 from core.errors import InvalidState, NotFound
 from core.jobs import RetryLater, backoff_seconds, enqueue_on_commit
-from orders.models import Order
+from inventory.models import StockMovement
+from inventory.services import apply_movement, lock_stock
+from orders.models import Order, OrderLine
 
 from ..exceptions import (
     ExceedsRefundable,
@@ -237,7 +239,44 @@ def fail_refund(refund_id: uuid.UUID, *, reason: str) -> None:
         refund = Refund.objects.select_for_update().get(pk=refund_id)
         if refund.status != Refund.Status.PENDING:
             return
-        refund.status = Refund.Status.FAILED
-        refund.failure_reason = reason[:500]
-        refund.save(update_fields=["status", "failure_reason", "updated_at"])
-    logger.warning("refund_failed", refund_id=str(refund_id), reason=reason)
+        mark_refund_failed(refund, reason=reason)
+
+
+def mark_refund_failed(refund: Refund, *, reason: str) -> None:
+    """Fail a pending refund whose order the caller has locked."""
+    refund.status = Refund.Status.FAILED
+    refund.failure_reason = reason[:500]
+    refund.save(update_fields=["status", "failure_reason", "updated_at"])
+    logger.warning("refund_failed", refund_id=str(refund.id), reason=reason)
+
+
+def complete_refund(refund: Refund, order: Order) -> None:
+    """Mark a pending refund succeeded and apply it to the order lines and stock.
+
+    The caller holds the lock on ``order``.
+    """
+    refund_lines = list(refund.lines.select_related("order_line"))
+    for refund_line in refund_lines:
+        OrderLine.objects.filter(pk=refund_line.order_line_id).update(
+            refunded_quantity=F("refunded_quantity") + refund_line.quantity,
+        )
+    restocked = [refund_line for refund_line in refund_lines if refund_line.restock]
+    if restocked:
+        stock = lock_stock(refund_line.order_line.product_id for refund_line in restocked)
+        for refund_line in restocked:
+            apply_movement(
+                stock[refund_line.order_line.product_id],
+                kind=StockMovement.Kind.RESTOCK,
+                on_hand_delta=refund_line.quantity,
+                order=order,
+                refund=refund,
+            )
+    refund.status = Refund.Status.SUCCEEDED
+    refund.save(update_fields=["status", "updated_at"])
+
+
+def succeeded_minor(order: Order) -> int:
+    totals = Refund.objects.filter(order=order, status=Refund.Status.SUCCEEDED).aggregate(
+        total=Sum("amount_minor"),
+    )
+    return totals["total"] or 0
