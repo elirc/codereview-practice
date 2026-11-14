@@ -76,6 +76,8 @@ frontend/src/
 
 Request flow: `RequestContextMiddleware` assigns the request id → the `/api` router checks the CSRF header on mutations → dependencies open a session, resolve the `et_session` cookie to a user and build a `ServiceContext` (actor, clock reading, request id, base currency) → the handler validates input with Pydantic and calls one service function → the service locks what it changes, applies domain rules, writes audit events and commits → the handler returns the refreshed view. Domain errors are mapped to the error envelope in `app/core/errors.py`.
 
+A finance user who approves a report's manager step cannot also take its finance step. If no other active finance user exists, the report stays `submitted` until one is added; `no_eligible_approver` is raised at submit only when there is no active finance user other than the owner.
+
 ## Where the hard parts live
 
 | Topic | Files |

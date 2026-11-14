@@ -4,7 +4,7 @@ from typing import Protocol
 
 
 class ReceiptStorage(Protocol):
-    """Blob storage for receipt files, addressed by server-generated keys."""
+    """Blob storage for receipt files."""
 
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
 

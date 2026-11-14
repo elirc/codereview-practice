@@ -35,11 +35,15 @@ def _would_create_cycle(ctx: ServiceContext, user_id: uuid.UUID, manager_id: uui
     return False
 
 
+def _has_reports(ctx: ServiceContext, user: User) -> bool:
+    return ctx.db.scalar(select(User.id).where(User.manager_id == user.id).limit(1)) is not None
+
+
 def update_user(ctx: ServiceContext, user_id: uuid.UUID, changes: UserUpdate) -> User:
     ensure_role(ctx.actor, Role.ADMIN)
     fields = changes.model_fields_set
 
-    if "manager_id" in fields:
+    if "manager_id" in fields or changes.role == Role.EMPLOYEE:
         ctx.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MANAGER_GRAPH_LOCK_KEY})
 
     user = ctx.db.scalars(
@@ -56,13 +60,23 @@ def update_user(ctx: ServiceContext, user_id: uuid.UUID, changes: UserUpdate) ->
     if "manager_id" in fields:
         manager_id = changes.manager_id
         if manager_id is not None:
-            if ctx.db.get(User, manager_id) is None:
+            manager_role = ctx.db.scalar(select(User.role).where(User.id == manager_id))
+            if manager_role is None:
                 raise RuleViolation("unknown_manager", "The selected manager does not exist.")
+            if manager_role == Role.EMPLOYEE:
+                raise RuleViolation(
+                    "manager_role_required", "Employees cannot be assigned as someone's manager."
+                )
             if _would_create_cycle(ctx, user.id, manager_id):
                 raise RuleViolation(
                     "manager_cycle", "That manager would create a cycle in the reporting line."
                 )
         user.manager_id = manager_id
+    if changes.role == Role.EMPLOYEE and user.role != Role.EMPLOYEE and _has_reports(ctx, user):
+        raise RuleViolation(
+            "manager_role_required",
+            "Reassign this user's direct reports before making them an employee.",
+        )
     if changes.role is not None:
         user.role = changes.role
     if changes.approval_limit_minor is not None:

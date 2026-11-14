@@ -20,7 +20,7 @@ _SIGNATURES: tuple[tuple[bytes, FileType], ...] = (
 
 
 def sniff_type(data: bytes) -> FileType | None:
-    """Identify a receipt by its leading bytes; declared types are not consulted."""
+    """Return the receipt file type for `data`, or None if it is not supported."""
     for signature, file_type in _SIGNATURES:
         if data.startswith(signature):
             return file_type
@@ -28,7 +28,7 @@ def sniff_type(data: bytes) -> FileType | None:
 
 
 def sanitize_filename(name: str) -> str:
-    """Keep a display-only copy of the client's filename."""
+    """Strip path separators and control characters and truncate the filename."""
     kept = (ch for ch in name if ch not in "/\\" and not unicodedata.category(ch).startswith("C"))
     return "".join(kept)[:MAX_FILENAME_LENGTH]
 

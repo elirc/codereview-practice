@@ -41,7 +41,7 @@ def can_view_report(ctx: ServiceContext, report_id: uuid.UUID) -> bool:
 
 
 def get_visible_report(ctx: ServiceContext, report_id: uuid.UUID, *, lock: bool = False) -> Report:
-    """Load a report the caller may view; anything else is reported as not found."""
+    """Load a report the caller may view."""
     stmt = select(Report).where(Report.id == report_id)
     if lock:
         stmt = stmt.with_for_update().execution_options(populate_existing=True)

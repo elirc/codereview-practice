@@ -56,7 +56,7 @@ def test_manager_cycle_is_rejected(db: Session, client_for: ClientFor) -> None:
     admin = create_user(db, role="admin")
     top = create_user(db, role="manager")
     middle = create_user(db, role="manager", manager=top)
-    bottom = create_user(db, role="employee", manager=middle)
+    bottom = create_user(db, role="manager", manager=middle)
     client = client_for(admin)
 
     response = client.patch(f"/api/users/{top.id}", json={"manager_id": str(bottom.id)})
@@ -107,3 +107,32 @@ def test_unknown_manager_and_unknown_fields_are_rejected(
     assert unknown.json()["error"]["code"] == "unknown_manager"
     assert extra.status_code == 400
     assert negative.status_code == 400
+
+
+def test_employee_cannot_be_assigned_as_manager(db: Session, client_for: ClientFor) -> None:
+    admin = create_user(db, role="admin")
+    employee = create_user(db, role="employee")
+    user = create_user(db)
+
+    response = client_for(admin).patch(f"/api/users/{user.id}", json={"manager_id": str(employee.id)})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "manager_role_required"
+    assert db.scalar(select(User.manager_id).where(User.id == user.id)) is None
+
+
+def test_manager_with_reports_cannot_become_employee(db: Session, client_for: ClientFor) -> None:
+    admin = create_user(db, role="admin")
+    lead = create_user(db, role="manager")
+    create_user(db, manager=lead)
+    spare = create_user(db, role="manager")
+    client = client_for(admin)
+
+    blocked = client.patch(f"/api/users/{lead.id}", json={"role": "employee"})
+    allowed = client.patch(f"/api/users/{spare.id}", json={"role": "employee"})
+
+    assert blocked.status_code == 422
+    assert blocked.json()["error"]["code"] == "manager_role_required"
+    assert db.scalar(select(User.role).where(User.id == lead.id)) == "manager"
+    assert allowed.status_code == 200
+    assert allowed.json()["role"] == "employee"

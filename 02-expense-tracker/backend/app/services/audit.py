@@ -46,7 +46,7 @@ def record(
     after: JsonDict | None = None,
     report_id: uuid.UUID | None = None,
 ) -> None:
-    """Add an audit event to the caller's unit of work; it commits with the change."""
+    """Add an audit event to the session."""
     ctx.db.add(
         AuditEvent(
             at=ctx.now,

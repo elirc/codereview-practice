@@ -14,8 +14,8 @@ The permissions table grants "manage exchange rates" to finance and admin and is
 ## Line validation outcome for unknown currencies and future dates
 Both are reported as `400 validation_failed` with the offending field path, alongside the schema errors, because the spec groups them with amount and format checks at the boundary.
 
-## Employees named as manager approvers
-The chain walks `manager_id` links without looking at roles, but the permissions table says employees cannot decide a manager step and can only view their own reports. A user whose current role is `employee` cannot decide a step even when named on it, and is never offered as a reassignment target. Admin reassignment is the remedy for such a step once the named user is deactivated.
+## Employees as managers
+The chain walks `manager_id` links without looking at roles, but the permissions table says employees cannot decide a manager step. User management therefore refuses to set an `employee`-role user as anyone's manager, and refuses to change a user's role to `employee` while anyone reports to them (`422 manager_role_required`). The decision check still refuses an `employee`-role approver, and such users are never offered as reassignment targets.
 
 ## Steps of a withdrawn round
 Withdrawal is allowed only while every step of the round is still pending. Those steps are marked `skipped` so the round reads as closed in the history; resubmission builds a new round.

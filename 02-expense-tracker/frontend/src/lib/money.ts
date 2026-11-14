@@ -10,10 +10,7 @@ function tooManyDecimals(exponent: number): string {
   return `Use at most ${exponent} decimal places.`;
 }
 
-/**
- * Parse a user-entered amount such as "12.34" into integer minor units, using only
- * string operations so no binary floating point is involved.
- */
+/** Parse a user-entered amount such as "12.34" into integer minor units. */
 export function parseMinor(input: string, exponent: number): ParseResult {
   const match = AMOUNT_PATTERN.exec(input.trim());
   if (!match) {
