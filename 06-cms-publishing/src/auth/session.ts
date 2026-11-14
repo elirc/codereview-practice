@@ -4,7 +4,7 @@ import { db, type Executor } from "@/db/client";
 import { sessions, users, type Role } from "@/db/schema";
 import { getEnv } from "@/env";
 
-export const SESSION_COOKIE = "cms_session";
+export { SESSION_COOKIE } from "./cookie";
 export const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type SessionUser = { id: string; email: string; name: string; role: Role };
