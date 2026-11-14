@@ -15,3 +15,9 @@ public sealed class PaymentLoop(IServiceScopeFactory scopes, TimeProvider clock,
 {
     protected override TimeSpan Interval => TimeSpan.FromSeconds(30);
 }
+
+public sealed class RefundLoop(IServiceScopeFactory scopes, TimeProvider clock, ILogger<RefundLoop> logger)
+    : LoopService<RefundRun>(scopes, clock, logger)
+{
+    protected override TimeSpan Interval => TimeSpan.FromSeconds(60);
+}

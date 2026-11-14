@@ -44,6 +44,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<InvoiceCollector>();
         services.AddScoped<PaymentRun>();
         services.AddScoped<PaymentService>();
+        services.AddScoped<CreditNoteService>();
+        services.AddScoped<RefundProcessor>();
+        services.AddScoped<RefundRun>();
         services.TryAddSingleton<FakeGateway>();
         services.TryAddSingleton<IPaymentGateway>(sp => sp.GetRequiredService<FakeGateway>());
 

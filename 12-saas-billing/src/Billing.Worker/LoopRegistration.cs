@@ -18,6 +18,11 @@ public static class LoopRegistration
             services.AddHostedService<PaymentLoop>();
         }
 
+        if (settings.WorkerLoops.Contains("refunds"))
+        {
+            services.AddHostedService<RefundLoop>();
+        }
+
         return services;
     }
 }
