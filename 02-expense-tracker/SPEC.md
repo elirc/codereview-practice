@@ -41,7 +41,7 @@ Roles: `employee`, `manager`, `finance`, `admin`. Every user has a role, an opti
 
 ## 4. Domain model
 
-- **users**: `id`, `email` (unique, lower-case), `password_hash`, `full_name`, `role`, `manager_id?`, `approval_limit_minor` (bigint ≥ 0), `active`. The manager graph must be acyclic; setting a manager that would create a cycle is `422 manager_cycle`.
+- **users**: `id`, `email` (unique, lower-case), `password_hash`, `full_name`, `role`, `manager_id?`, `approval_limit_minor` (bigint ≥ 0), `active`. The manager graph must be acyclic; setting a manager that would create a cycle is `422 manager_cycle`. A manager must be able to decide steps: `manager_id` may not point at a user whose role is `employee`, and a user who has direct reports may not be changed to role `employee`; both are `422 manager_role_required`.
 - **currencies**: `code` (PK, ISO-4217), `exponent` (0, 2 or 3). Seeded: USD 2, EUR 2, GBP 2, CAD 2, JPY 0, KWD 3.
 - **exchange_rates**: `id`, `from_currency`, `effective_date`, `rate` `NUMERIC(20,10)` (> 0) meaning *one major unit of `from_currency` equals `rate` major units of base*, `created_by`. Unique `(from_currency, effective_date)`. Rates are immutable once referenced by a submitted line; otherwise editable.
 - **reports**: `id`, `owner_id`, `title` (1–120), `status`, `round` (int, starts 0), `version` (int), `total_base_minor?` (set at submit), `submitted_at?`, `decided_at?`, timestamps.
@@ -112,7 +112,7 @@ Authorisation, evaluated in the service under a row lock on the report (`SELECT 
 
 - Report must be `submitted` (`409 invalid_state`); `expected_version` must equal `reports.version` (`409 version_conflict`, details include the current version).
 - The actor is never the report owner (`403 self_approval`), for any step kind, regardless of role.
-- `manager` step: actor's id equals `approver_id`, and the actor is active. No one else, including admin.
+- `manager` step: actor's id equals `approver_id`, the actor is active, and the actor's current role is not `employee` (the user-management rule in section 4 keeps employees out of chains; this check is the backstop). No one else, including admin.
 - `finance` step: actor's current role is `finance`, actor is active, and the actor has not decided an earlier step in this round (`403 separation_of_duties`).
 - Approve of the final step sets status `approved` and `decided_at`. Reject sets the step `rejected`, all later steps `skipped`, report `rejected`.
 - Every decision bumps `version` and writes audit events for the step and the report.
@@ -202,6 +202,8 @@ None. All work is synchronous in the request. (No scheduler, no queue.)
 28. Amount `0`, negative amounts, unknown currency codes and dates in the future (later than today UTC + 1 day) are rejected at the boundary.
 29. Setting user A's manager to B when B's chain includes A → `422 manager_cycle`.
 30. `UPDATE` or `DELETE` on `audit_events` fails at the database.
+31. Setting a user's manager to someone whose role is `employee` → `422 manager_role_required`.
+32. Changing a user who has direct reports to role `employee` → `422 manager_role_required`; the same change succeeds once their reports have been moved to another manager.
 
 ## 9. Non-goals
 
@@ -234,7 +236,7 @@ Integration (API + Postgres):
 - Receipt upload: type sniffing, size limit, filename sanitisation, download authorisation.
 - Visibility: `404` for reports outside the caller's view; `/approvals/pending` content per user.
 - Audit immutability trigger.
-- Manager cycle rejection; `rate_in_use`.
+- Manager cycle rejection; employee-role manager and demotion-with-reports rejection; `rate_in_use`.
 
 ## 12. Commit plan
 

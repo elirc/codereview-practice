@@ -110,7 +110,8 @@ Event payload: `{ "id": "evt_…", "type": "...", "created": <unix>, "data": { "
 - Order looked up by `payment_intent_id`; not found → raise retryable error (5.7).
 - Currency mismatch or `amount_minor != order.total_minor` → order `needs_review = true` with reason; no status change; event `processed`.
 - Order `pending_payment` → pay (5.3), even if `reservation_expires_at` has passed but the expiry task has not yet run.
-- Order `expired` or `cancelled` → try to re-acquire: lock stock rows; if every line has `available >= qty`, `on_hand -= qty` directly (movement `commit`, `reserved_delta = 0`) and set `paid`. Otherwise record `amount_paid_minor`, leave the status, and create a full system refund (5.6, `reason = stock_unavailable`).
+- Order `expired` or `cancelled` with `amount_paid_minor > 0` (a late payment was already recorded and is being or has been refunded) → no change (`ignored`).
+- Order `expired` or `cancelled` otherwise → try to re-acquire: lock stock rows; if every line has `available >= qty`, `on_hand -= qty` directly (movement `commit`, `reserved_delta = 0`) and set `paid`. Otherwise record `amount_paid_minor`, leave the status, and create a full system refund (5.6, `reason = stock_unavailable`).
 - Order already `paid`/`fulfilled` → no change (`ignored`).
 - Set `last_payment_event_at = max(existing, provider_created_at)`.
 
@@ -122,7 +123,7 @@ Event payload: `{ "id": "evt_…", "type": "...", "created": <unix>, "data": { "
 - Refund looked up by `provider_refund_id = data.refund_id`, else by `data.refund_reference` (our Refund UUID); in the second case `provider_refund_id` is filled in.
 - Found and `pending`: on success set `succeeded`, add quantities to `OrderLine.refunded_quantity`, restock lines flagged `restock` (`on_hand += qty`, `restock` movement); on failure set `failed` with reason (its claim on refundable amount and quantities is released by virtue of status).
 - Found and already terminal: if the event agrees with the status, `ignored`. A `refund.failed` arriving after `succeeded` (or the reverse) → `needs_review`, no state change.
-- Not found, `refund.succeeded`: refund was issued in the provider dashboard. Create a `Refund` (`source = provider`, `succeeded`, no lines, no restock) if `refunded_minor + amount <= amount_paid_minor`; otherwise set `needs_review`.
+- Not found, `refund.succeeded`: refund was issued in the provider dashboard. Create a `Refund` (`source = provider`, `succeeded`, no lines, no restock) if the amount fits within what is still refundable, counting pending as well as succeeded refunds: `Σ amount of refunds in (pending, succeeded) + amount <= amount_paid_minor`. Otherwise set `needs_review` and create nothing.
 - Not found, `refund.failed`: `ignored`.
 
 ### 5.6 Refunds
@@ -178,7 +179,7 @@ Celery settings: `task_acks_late = True`, `task_reject_on_worker_lost = True`, `
 | `payments.process_webhook_event` | webhook endpoint, manual retry | Retryable errors (`OrderNotFoundYet`, `OperationalError`/deadlock/serialisation failure): `self.retry` with exponential backoff 2^n × 5 s capped at 10 min, `max_retries = 6`; each attempt increments `attempts` and stores `last_error` in a separate small transaction. After retries are exhausted, or on any non-retryable exception, the event is marked `failed` and the error is logged. The business transaction is all-or-nothing per attempt |
 | `payments.submit_refund` | refund creation | Loads refund; if not `pending` or `provider_refund_id` already set, return. `ProviderTransientError` → retry with backoff, `max_retries = 5`; the same idempotency key is sent on every attempt. `ProviderPermanentError` or exhausted retries → refund `failed` with reason (under order lock) |
 | `orders.expire_reservations` | beat, every minute | Selects ids of `pending_payment` orders with `reservation_expires_at <= now` (batch 200), then expires each in its own transaction, re-checking status and expiry under the order lock; one order's failure is logged and does not stop the batch |
-| `payments.requeue_stale_events` | beat, every 5 minutes | Re-enqueues events still `received` 5 minutes after `received_at` (covers a lost broker message) |
+| `payments.requeue_stale_events` | beat, every 5 minutes | Re-enqueues events still `received` 5 minutes after `received_at`, and re-enqueues `submit_refund` for refunds still `pending` with no `provider_refund_id` 5 minutes after creation. Both cover a lost broker message; both target tasks are idempotent, so a redundant enqueue has no effect |
 
 ## 8. Edge cases
 
@@ -217,6 +218,9 @@ Celery settings: `task_acks_late = True`, `task_reject_on_worker_lost = True`, `
 33. Anonymous order read with a wrong token → `404`.
 34. Product price change after checkout does not change the order total or refund amounts.
 35. Cancelling an order twice, or cancelling while it is being paid: one transition wins; stock released at most once.
+36. A dashboard-issued `refund.succeeded` arriving while a staff refund is still pending, where the two together exceed the amount paid → `needs_review`, no provider-sourced refund is recorded, and the pending refund is unaffected.
+37. A refund whose `submit_refund` message was never delivered to the broker is picked up by the requeue task and submitted; a refund that already has a `provider_refund_id`, or is no longer `pending`, is not re-enqueued.
+38. A second `payment.succeeded` (new event id) for an expired or cancelled order whose earlier late payment was already recorded and refunded is `ignored`: no stock is taken and no second refund is created, even if stock has since returned.
 
 ## 9. Non-goals
 
@@ -244,7 +248,7 @@ Integration (`pytest.mark.django_db`; concurrency tests with `transaction=True` 
 - Webhook endpoint: each rejection path stores nothing; duplicate delivery; unknown type.
 - Event processing: every branch of 5.5, including the out-of-order and late-payment cases, double processing, and retry exhaustion marking `failed`.
 - Expiry: releases stock once; skips orders paid in the meantime; race with payment.
-- Refunds: over-refund prevention (sequential and concurrent), restock on success only, failed refund frees capacity, provider-sourced refund, `submit_refund` retry behaviour with a provider fake that fails transiently, permanent failure.
+- Refunds: over-refund prevention (sequential and concurrent), restock on success only, failed refund frees capacity, provider-sourced refund (including one that collides with a pending refund), `submit_refund` retry behaviour with a provider fake that fails transiently, permanent failure, requeue of unsubmitted refunds.
 - Permissions matrix for staff roles and anonymous access; order token access.
 
 ## 12. Commit plan

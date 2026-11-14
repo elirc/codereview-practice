@@ -82,6 +82,7 @@ Every server action and route handler calls `requireUser()` and the policy funct
 - Authors may save revisions on their own posts in any status except `archived`. While `in_review` or `scheduled`, an author's saves are allowed and do not change status or what is scheduled.
 - Publish takes `revisionId` (must belong to the post; `invalid_revision`) and `expectedVersion`. Sets `publishedRevisionId`, `publishedAt = now`, `firstPublishedAt` only if null, clears schedule fields.
 - Schedule takes `revisionId`, `scheduledFor` (must be `>= now + 60 s`, `schedule_in_past` otherwise; max one year ahead) and `expectedVersion`. The revision is pinned in `scheduledRevisionId`; later saves do not change it. Re-scheduling replaces both fields. A currently published post stays publicly visible with its old revision while `scheduled`.
+- Publish and schedule both require that every media id the revision refers to (its cover and each `media:<uuid>` in its body, extracted again from the revision at that moment) still exists; otherwise `invalid_media_reference` with the missing ids, and nothing changes. This matters because media referenced only by drafts may be deleted after the revision was saved.
 - Unpublish and archive clear `publishedRevisionId`, `publishedAt` and schedule fields; `firstPublishedAt` is kept.
 - Slug change: allowed per section 3. If the post has ever been published (`firstPublishedAt` set), the old slug is inserted into `slug_redirects`; the public route for an old slug issues a permanent redirect to the current slug. Changing back to a slug that redirects to the same post removes that redirect row.
 - All transitions run in a transaction that locks the post row and checks `expectedVersion` and the current status under the lock; illegal transition → `invalid_state`.
@@ -93,6 +94,7 @@ Every server action and route handler calls `requireUser()` and the policy funct
 - Requires `Authorization: Bearer <CRON_SECRET>` compared in constant time (`crypto.timingSafeEqual` on equal-length buffers); otherwise `401`. Not callable via session.
 - Loop: in a transaction, select up to 20 posts `WHERE status = 'scheduled' AND scheduled_for <= now ORDER BY scheduled_for FOR UPDATE SKIP LOCKED`; for each, publish `scheduledRevisionId` exactly as a manual publish would (with `publishedAt = now`, not `scheduledFor`), commit, then invalidate caches for those posts. Repeat until no rows or 200 posts handled in this call.
 - Responds `{ published: [postId…] }`. Overlapping calls (two scheduler instances, slow run) never publish a post twice and never block each other.
+- The media check of 5.2 applies to the pinned revision. A due post that fails it is not published: it stays `scheduled`, is logged, is left out of the rest of that call, and does not prevent the other due posts in the batch from publishing. It is tried again on every later tick until an editor re-schedules, cancels or publishes it.
 - A post whose schedule was cancelled or changed to the future before the tick is not selected. A failure on one batch rolls back that batch only; the next tick retries. Cache invalidation happens only after commit.
 - The scheduler script logs non-2xx responses and network errors and keeps ticking; it does not overlap its own requests (waits for the previous response before the next tick).
 
@@ -183,6 +185,8 @@ Only the scheduled-publish tick (5.3). Failure semantics: at-least-once ticks, e
 30. Body referencing `media:<uuid>` that does not exist → save rejected.
 31. Deleting a never-published own post as author removes its revisions; as author on a once-published post → `forbidden`.
 32. Archive of a published post removes it from the public list and page, with invalidation.
+33. Publishing or scheduling a revision whose body or cover refers to media that has since been deleted → `invalid_media_reference`; the post's status, version and public content are unchanged.
+34. A scheduled post whose pinned revision lost its media between scheduling and the tick stays `scheduled`; other due posts in the same cron call are still published and invalidated.
 
 ## 9. Non-goals
 
@@ -213,7 +217,8 @@ Integration (Postgres; `next/cache` mocked to record `revalidateTag`/`revalidate
 - Save/restore numbering and version conflicts, including concurrent saves; no-op save.
 - Each server action called as each role (direct invocation with a stubbed session) — asserts both the result and that state is unchanged on refusal.
 - Publish / schedule / cancel / unpublish / archive transitions and their exact invalidation tag sets; no invalidation on draft saves.
-- Cron handler: auth, due selection, pinned revision, concurrent invocations, rescheduled-away post, catch-up of several overdue posts.
+- Cron handler: auth, due selection, pinned revision, concurrent invocations, rescheduled-away post, catch-up of several overdue posts, a due post with deleted media skipped while others publish.
+- Publish and schedule refused for a revision with deleted media.
 - Slug change redirects and tag invalidation; slug uniqueness against redirects.
 - Upload route: size boundary (streamed), type rejection, key shape, DB failure cleans up object.
 - Media GET authorisation (draft-only vs published), headers; delete rules.

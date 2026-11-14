@@ -53,6 +53,8 @@ A request for an appointment the caller may not view returns `404 not_found`. Ro
 - **Appointment**: `id`, `providerId`, `patientId`, `startsAt`, `endsAt` (timestamptz), `status` (`BOOKED` | `CANCELLED` | `COMPLETED` | `NO_SHOW`), `reason?` (max 500), `bookedByUserId`, `cancelledAt?`, `cancelledByUserId?`, `cancelReason?`, `lateCancel` (bool), `rescheduledFromId?`, `idempotencyKey?`, `createdAt`.
 - **Reminder**: `id`, `appointmentId`, `kind` (`T24H` | `T2H`), `scheduledFor`, `status` (`PENDING` | `SENDING` | `SENT` | `SKIPPED` | `FAILED`), `attempts`, `claimedAt?`, `sentAt?`, `lastError?`. Unique `(appointmentId, kind)`.
 
+- **AppointmentNotification** (table `appointment_notifications`): `id`, `appointmentId`, `kind` (`CANCELLATION` | `RESCHEDULED`), `status` (same values as Reminder), `attempts`, `claimedAt?`, `sentAt?`, `lastError?`, `createdAt`. Unique `(appointmentId, kind)`. A `RESCHEDULED` row belongs to the new appointment.
+
 Database invariants (written as raw SQL in the Prisma migration; requires `CREATE EXTENSION btree_gist`):
 
 - `CHECK (ends_at > starts_at)`.
@@ -106,12 +108,12 @@ Idempotency: when a key is supplied and an appointment already exists for `(pati
 - Patient: allowed when `startsAt - now >= 24 h` (exactly 24 h is allowed), else `422 cancellation_window_closed`.
 - Staff/admin: allowed any time before `startsAt`; `lateCancel = true` when `startsAt - now < 24 h`. After `startsAt`, cancellation is refused (`422 already_started`); use `NO_SHOW`.
 - The update is conditional on `status = 'BOOKED'`; zero rows updated means a concurrent change, returned as `409 invalid_state`.
-- Pending reminders for the appointment become `SKIPPED` in the same transaction. A cancellation email is sent to the patient through the queue (job `email.cancellation`, `singletonKey` = appointment id).
+- Pending reminders for the appointment become `SKIPPED` in the same transaction. A `CANCELLATION` row is inserted into `appointment_notifications` in that transaction too; the worker sends the cancellation email from it (section 7). Nothing is enqueued from the request.
 - A cancelled slot is immediately bookable again.
 
 ### 5.5 Reschedule and completion
 
-- Reschedule is one transaction: cancel the old appointment (as in 5.4, without sending the cancellation email), then validate and insert the new one as in 5.3 (same provider or a different provider in the same clinic) with `rescheduledFromId` set. Because the old row is cancelled first, it does not count in the new booking's patient-overlap and daily-limit checks. If anything fails, the whole transaction rolls back and the old appointment and its reminders are untouched. One "rescheduled" email is sent after commit.
+- Reschedule is one transaction: cancel the old appointment (as in 5.4, without sending the cancellation email), then validate and insert the new one as in 5.3 (same provider or a different provider in the same clinic) with `rescheduledFromId` set. Because the old row is cancelled first, it does not count in the new booking's patient-overlap and daily-limit checks. If anything fails, the whole transaction rolls back and the old appointment and its reminders are untouched. The transaction inserts one `RESCHEDULED` row into `appointment_notifications` for the new appointment (and no `CANCELLATION` row for the old one), so the patient gets a single "rescheduled" email.
 - The patient's 24 h rule applies to the old appointment. Lead time applies to the new slot.
 - `COMPLETED` / `NO_SHOW` can be set only from `BOOKED` and only when `now >= startsAt`. These states are terminal.
 
@@ -155,11 +157,13 @@ Worker process starts pg-boss, creates queues, registers handlers and a cron sch
 |---|---|---|
 | `reminders.dispatch` | cron, every minute | Selects up to 100 `PENDING` reminders with `scheduledFor <= now`, ordered by `scheduledFor`, `FOR UPDATE SKIP LOCKED`; sets them to `SENDING` with `claimedAt = now`; enqueues one `reminders.send` per row with `singletonKey` = reminder id. Also resets `SENDING` rows whose `claimedAt` is older than 10 minutes back to `PENDING` |
 | `reminders.send` | from dispatch | Loads reminder + appointment. If the reminder is not `SENDING`, exit. If the appointment is not `BOOKED`, or `scheduledFor` is more than 30 minutes in the past, or `now >= startsAt`: mark `SKIPPED`. Otherwise send; on success mark `SENT` with `sentAt` using a conditional update on `status = 'SENDING'` |
-| `email.cancellation` | on cancel | Sends once; pg-boss retry (limit 3, backoff) |
+| `email.cancellation`, `email.rescheduled` | from dispatch | The same dispatch run also claims `PENDING` rows of `appointment_notifications` (`FOR UPDATE SKIP LOCKED`, set `SENDING`, reset claims older than 10 minutes) and enqueues one job per row on the queue for its kind. The handler exits unless the row is `SENDING`, sends the email (the rescheduled email names the previous time via `rescheduledFromId`), and marks it `SENT` with a conditional update. These emails are not subject to the staleness rule |
 
 Failure semantics for `reminders.send`: on a mailer error, increment `attempts`, store `lastError`, set status back to `PENDING` if `attempts < 5` else `FAILED`. The handler does not throw for mailer errors (state is in the table); it throws only for unexpected errors so pg-boss retries. Delivery is at-least-once: a crash after the provider accepted the email and before `SENT` is written can produce a duplicate after the 10-minute reset. This is accepted and documented in the README.
 
-The web process only writes `Reminder` rows; it uses pg-boss solely to send `email.cancellation`, after the transaction commits.
+Mailer failures for cancellation and rescheduled emails are recorded on the notification row exactly as for reminders (back to `PENDING` while `attempts < 5`, then `FAILED`).
+
+The web process never talks to pg-boss. It only writes `Reminder` and `AppointmentNotification` rows inside the transaction that changes the appointment, so a committed booking, cancellation or reschedule always has its emails recorded, and a rolled-back one has none.
 
 ## 8. Edge cases
 
@@ -187,6 +191,8 @@ The web process only writes `Reminder` rows; it uses pg-boss solely to send `ema
 22. A patient requesting another patient's appointment id gets `404`, identical to a non-existent id.
 23. Slot range query crossing a DST change returns each day computed with that day's offset.
 24. Invalid IANA zone at registration or clinic creation is rejected with `validation_failed`.
+25. A cancellation that commits while the worker and queue are down still produces its email once the worker is back; a cancellation that rolls back produces none.
+26. A reschedule produces exactly one email (rescheduled, for the new appointment) and no cancellation email for the old one.
 
 ## 9. Non-goals
 
@@ -219,6 +225,7 @@ Integration (Postgres):
 - Permission matrix: each role against appointment read, cancel, availability management; `404` for foreign appointment ids.
 - Day view query boundaries.
 - Dispatch + send handlers: sent, skipped on cancelled, skipped when stale, retry then `FAILED` after five attempts, stuck `SENDING` reset.
+- Appointment notifications: row written with cancel and with reschedule (one row, new appointment), none on rollback or failed reschedule; dispatch and send for both kinds; retry then `FAILED`.
 
 ## 12. Commit plan
 

@@ -69,7 +69,7 @@ Shifts for a series are stored rows, created for a rolling horizon of 60 days (o
 
 - On series create/update and in the `materialize` job: compute occurrences in the horizon, apply exceptions, and `INSERT … ON CONFLICT (seriesId, occurrenceDate) DO NOTHING`; then set `materializedThrough`. Re-running creates nothing new.
 - Occurrences with a `cancelled` exception are never inserted (or, if already present, are cancelled per 5.4).
-- Series edit ("this and following", effective from date E ≥ today): 
+- Series edit ("this and following", effective from date E). E must lie within the materialisation horizon, `today <= E <= today + 60` (org-zone dates); anything else is `422 invalid_effective_date`. The edit first materialises the series' current pattern through the horizon and then applies the changes from E, in one transaction. A series holds one pattern at a time, so this ordering is what guarantees that every stored date before E follows the old pattern and every date generated later (on or after E, including beyond the horizon) follows the new one.
   - Field changes (title, location, time, duration, capacity) are applied to that series' future shifts with `occurrenceDate >= E`, `status = 'scheduled'`, `detached = false`, and `startsAt > now`. Detached shifts keep their overrides.
   - If the recurrence pattern changes, shifts with `occurrenceDate >= E` no longer in the pattern are cancelled (5.4), and missing ones are inserted.
   - Lowering capacity below a shift's confirmed count does not remove anyone; the shift is shown as over capacity and takes no new signups.
@@ -237,6 +237,8 @@ Failure modes that must be handled: worker crash mid-dispatch (lock expiry), cra
 40. Export date range uses org-local days: a shift at 23:30 local on the `to` date is included; one at 00:00 the next day is not.
 41. Volunteer invoking a manage action directly (crafted POST) → 403; requesting another user's signup id → 404.
 42. Invite token reuse or expiry → rejected; setting a password invalidates the token.
+43. Series edit with an effective date before today or more than 60 days ahead → `invalid_effective_date`, nothing changed.
+44. Weekly Monday series edited to Wednesdays effective three weeks from now: the Mondays of the next three weeks remain scheduled, later Mondays inside the horizon are cancelled, Wednesdays are created from the effective date, and occurrences materialised on later days are Wednesdays only.
 
 ## 9. Non-goals
 
@@ -262,7 +264,7 @@ Unit:
 - Backoff schedule; quiet-hours next-08:00 computation including across a DST change.
 
 Integration (temp SQLite file):
-- Materialisation idempotence; series edit effective date; pattern change cancellations; detached shifts preserved.
+- Materialisation idempotence; series edit effective date including the allowed range and old-pattern dates before it; pattern change cancellations; detached shifts preserved.
 - Sign-up: capacity, waitlist ordering, overlap rule, cut-offs at boundaries, re-signup.
 - Concurrent sign-ups for the last spot from two processes/threads.
 - Cancel and promotion rules; capacity increase/decrease.

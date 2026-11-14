@@ -58,11 +58,11 @@ Definitions: `available = capacity − sold_count − held_count`. A hold is **l
 ### 5.1 Capacity and holds
 
 - Every change to `sold_count`/`held_count` happens inside a transaction that holds a row lock on the tier (`tier.with_lock` / `lock!`), re-reading counts under the lock.
-- Lock order, everywhere: tier → hold → promo codes (ascending id) → waitlist entries. An operation touching several tiers locks them in ascending id order.
+- Lock order, everywhere: user → tier → hold → promo codes (ascending id) → waitlist entries. An operation touching several tiers locks them in ascending id order. The user row lock is taken by the two operations that check the per-event cap (`Holds::Create`, `Waitlist::Join`), as their first statement, so that cap checks for one user run one at a time even when they concern different tiers.
 - `Holds::Create(user, tier, quantity)`:
   1. Event `published`, `now < sales_close_at`; else `sales_closed`.
   2. `1 <= quantity <= per_order_limit`; else `quantity_invalid`.
-  3. Per-user per-event cap: tickets in the user's `paid` orders for the event (valid tickets) + quantities of the user's live holds on the event's tiers (excluding a hold being replaced) + `quantity` ≤ 8; else `event_limit_exceeded`.
+  3. Per-user per-event cap: tickets in the user's `paid` orders for the event (valid tickets) + quantities of the user's live holds on the event's tiers (excluding a hold being replaced) + quantities of the user's `waiting` waitlist entries on the event's tiers + `quantity` ≤ 8; else `event_limit_exceeded`. `offered` entries are counted through their live hold. Because waiting quantity is already counted, a waitlist offer (waiting → held) and a checkout (held → sold) never change the total, and the cap is not re-checked at those points.
   4. If the tier has any `waiting` or `offered` waitlist entry, direct holds are refused with `waitlist_active` (freed tickets go to the waitlist).
   5. If the user already has an active hold on the tier it is replaced: under the lock, release the old quantity and take the new one as a single change; if the new quantity does not fit, the old hold is kept unchanged and `insufficient_capacity` is returned with `available`.
   6. Requires `available >= quantity`; `held_count += quantity`; hold `active`, `expires_at = now + 10.minutes`; enqueue `ExpireHoldJob` at `expires_at`.
@@ -97,7 +97,7 @@ A second submission of the same checkout form after success finds the hold `conv
 
 ### 5.4 Waitlist
 
-- `Waitlist::Join(user, tier, quantity)`: allowed only when event is on sale and `available < quantity` or the tier has a non-empty waitlist; otherwise `tickets_available` (user should hold directly). The per-event cap (5.1 step 3) applies counting the requested quantity. One open entry per user per tier.
+- `Waitlist::Join(user, tier, quantity)`: allowed only when event is on sale and `available < quantity` or the tier has a non-empty waitlist; otherwise `tickets_available` (user should hold directly). The per-event cap (5.1 step 3) applies with the same formula, counting the requested quantity, under the same user row lock. One open entry per user per tier.
 - `Waitlist::Promote(tier)` under tier lock: loop over `waiting` entries in FIFO order:
   - If the event is no longer on sale, stop.
   - If `available >= entry.quantity`: create a hold (`source: waitlist`, `expires_at = now + 30.minutes`), `held_count += quantity`, entry → `offered` with `offered_at`, `offer_expires_at`; enqueue `ExpireHoldJob`; send offer mail after commit; continue with the next entry.
@@ -179,13 +179,15 @@ Jobs are enqueued after the surrounding transaction commits (`enqueue_after_tran
 27. Two `PromoteWaitlistJob`s for one tier concurrently do not double-offer an entry or exceed capacity.
 28. Offered hold expires → entry `expired`, next entry offered.
 29. User with an offer leaves the waitlist → hold released, next entry offered.
-30. Per-event cap counts live holds and paid tickets across tiers; an expired-by-time hold does not count.
+30. Per-event cap counts live holds, waiting waitlist entries and paid tickets across tiers; an expired-by-time hold does not count.
 31. Refund frees capacity and triggers promotion; second refund attempt changes nothing.
 32. Lowering capacity below committed is refused; raising it triggers promotion.
 33. Sales closed (`now >= sales_close_at`) or event cancelled: holds, waitlist joins and promotion all stop; existing live holds can still check out until they expire unless the event is cancelled.
 34. Event cancel is resumable: re-running after a failure midway refunds only orders still `paid`.
 35. Tier price edited while a hold exists: checkout uses the hold's stored unit price.
 36. Customer requesting another user's `/holds/:id` or `/orders/:number` gets 404; organiser cannot manage another organiser's event.
+37. One user holding on two tiers of the same event at the same moment (for example 6 and 6): exactly one request succeeds, the other gets `event_limit_exceeded`.
+38. A user waiting for 4 on one tier can hold at most 4 more on the event's other tiers; two waitlist joins totalling more than 8 are refused. When the waiting entry is later offered and checked out, the user's total for the event is still within 8.
 
 ## 9. Non-goals
 
@@ -212,6 +214,7 @@ Models/services (Minitest, `travel_to`):
 
 Concurrency (threads, non-transactional tests):
 - N concurrent holds for limited capacity.
+- One user's concurrent holds on two tiers that together exceed the per-event cap.
 - Concurrent checkout vs expire on the same hold.
 - Concurrent checkouts consuming the last promo redemption.
 - Concurrent promotions for one tier.

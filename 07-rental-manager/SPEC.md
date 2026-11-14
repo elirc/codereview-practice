@@ -93,7 +93,7 @@ Rent changes: not supported in place. To change rent, end the lease and create a
 
 ### 5.4 Posting rent (job `post-rent`)
 
-For as-of date D (default: today), for each `active` lease, in its own transaction with the lease row locked:
+For as-of date D (default: today), for each `active` or `ended` lease, in its own transaction with the lease row locked. Ended leases are included because a lease can be ended before the charge date of its final month, or before the job has run for that month; its schedule stops at the month of `end_date`, so nothing is posted beyond it.
 - For every period P from the lease's first period up to and including the month of D: if the charge date of P is `<= D` and no ledger entry exists with key `rent:<lease>:<P>`, post it with `entry_date` = charge date (not D), memo stating the period and, when prorated, the day count.
 - This catches up any number of missed days or months in one run, and running it twice for the same D posts nothing new.
 - A reversed rent charge is **not** re-posted (the key exists). To re-bill, the manager posts an `other_charge`.
@@ -197,6 +197,7 @@ Path ids are parsed and validated (UUID or int64) before any query; malformed �
 34. Amount input `12.345`, `-5`, `0`, `1e3`, `1,000.00`, or empty → validation error; `1000` and `1000.5` parse to 100000 and 100050 cents.
 35. One lease failing during a job (e.g. constraint error) does not prevent other leases from being processed; run status is `partial` with the error recorded.
 36. Manager reversing an entry older than 60 days → forbidden; admin allowed.
+37. A lease ended on the 10th, before that month's rent was posted (due day 15): the next `post-rent` run posts the prorated final month (10 days), dated the 15th, even though the lease is already `ended`; no later period is ever posted for it.
 
 ## 9. Non-goals
 
@@ -224,7 +225,7 @@ Unit (table-driven, no DB):
 Integration (Postgres):
 - Ledger posting idempotency by key (sequential and concurrent goroutines).
 - Reversal rules including concurrent double reversal; append-only trigger.
-- `post-rent`: catch-up, re-run no-op, activation catch-up, no posting past end month.
+- `post-rent`: catch-up, re-run no-op, activation catch-up, no posting past end month, final prorated month posted for a lease that was ended before its charge date.
 - `assess-late-fees`: each decision branch end-to-end; late run dates the fee correctly; no re-assessment.
 - Advisory-lock single runner (two concurrent runs).
 - Per-lease failure isolation and `partial` status.

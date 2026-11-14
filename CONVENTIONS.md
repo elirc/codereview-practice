@@ -32,6 +32,7 @@ Do not install packages, download files, run package managers, start databases, 
 - Write the comments a good team would write: brief "why" notes where a decision is not obvious from the code, doc comments on public functions where the stack expects them, and nothing else.
 - Do not narrate the hard parts. No comments such as "this lock prevents double-booking", "half-open interval so adjacent slots don't overlap", "important: check tenant here", "idempotency!", or banner comments around tricky sections. The reader is practising finding these; the code should look like ordinary production code.
 - A neutral "why" is fine: `// Postgres reports exclusion violations as 23P01` is acceptable; `// catch the race condition where two patients book at once` is not.
+- Doc comments say what a function does and what it returns. They do not say which failure, attack or race the function guards against, and they do not describe the locking, deduplication or authorisation design. "Loads an appointment the caller may see" is fine; "…so foreign ids are indistinguishable from missing ones" and "holds a share lock until commit so the row cannot be deleted" are not.
 - No references to the SPEC's edge-case numbers in source code or test names. Test names describe behaviour.
 - No mention of AI, builders, specs-for-review, or planted bugs anywhere in the project.
 
@@ -47,6 +48,7 @@ Do not install packages, download files, run package managers, start databases, 
 { "error": { "code": "slot_taken", "message": "Human readable sentence.", "details": {}, "requestId": "..." } }
 ```
 
+- The four keys `code`, `message`, `details` and `requestId` are literal in every project. They are exempt from the per-language key casing in section 7, so Python, Ruby and Go projects also emit `requestId`.
 - `code` is a stable `snake_case` identifier from the SPEC; `details` is optional structured data; validation failures use `code: "validation_failed"` with `details.fields: [{ "path": "...", "message": "..." }]`.
 - Status mapping: `400` malformed or schema-invalid input; `401` not authenticated; `403` authenticated but not allowed; `404` not found, and also used where the SPEC says existence must not be revealed; `409` state or concurrency conflict; `413`/`415` for upload limits and types; `422` well-formed input that breaks a business rule; `429` rate limited; `500` unexpected.
 - One central place maps domain errors to responses. Handlers do not build error JSON ad hoc. Unexpected errors are logged with the stack trace and returned as a generic `internal_error`; internals are never leaked to the client.
@@ -84,7 +86,10 @@ Jobs: install, lint/format check, type check (where the stack has one), migrate,
 ## 6. Security baseline
 
 - Passwords hashed with the algorithm named in the SPEC; never logged or returned.
-- Session cookies: `HttpOnly`, `SameSite=Lax`, `Secure` when `NODE_ENV`/equivalent is production. Session tokens are random (at least 128 bits), stored hashed server-side where the SPEC says sessions live in the database.
+- Session cookies: `HttpOnly`, `SameSite=Lax`, `Secure` when `NODE_ENV`/equivalent is production. Session tokens are random (at least 128 bits) and stored hashed (SHA-256) in the database in projects 01, 02, 03, 06 and 08. The exceptions follow their framework's standard mechanism:
+  - 04 uses DRF token authentication (`rest_framework.authtoken`), which stores the token itself.
+  - 05 uses the Rails 8 authentication shape: a `sessions` row per login, identified by its id in a signed, permanent cookie; there is no separate bearer token to hash.
+  - 07 uses scs with `pgxstore`, which keys the `sessions` table by the raw session token.
 - Authentication and authorisation are checked on the server for every request and every server action, in the handler or service that performs the work. UI hiding is not a control.
 - SQL only through parameterised queries or the ORM/query builder. No string-concatenated SQL from user input.
 - Output is escaped by the template engine; any raw HTML rendering is sanitised as the SPEC states.
@@ -108,7 +113,7 @@ Jobs: install, lint/format check, type check (where the stack has one), migrate,
 
 ## 9. Size and style
 
-- Target 3,000–7,000 lines of source per project (application code, tests, migrations, templates; not counting generated-looking artefacts or seed data). If you are heading over, cut UI polish and breadth, not domain rules or tests.
+- Target 3,000–7,000 lines of source per project: application code, migrations and templates. Tests, generated-looking artefacts and seed data do not count towards the target. If you are heading over, cut UI polish and breadth, not domain rules or tests.
 - UI is functional and plain: forms, tables, clear error states. No design system, no animation, minimal CSS (one stylesheet, or Tailwind only if the SPEC names it).
 - Idiomatic for the stack: follow the framework's standard layout and naming; thin handlers/controllers, domain logic in services or models as the stack prefers; no invented frameworks, no generic repository layers the stack does not need, no dead abstractions.
 - Lint and format configuration is committed (ESLint + Prettier, Ruff, RuboCop with the Rails Omakase config, `gofmt` + `go vet` + staticcheck) and the code conforms to it.
