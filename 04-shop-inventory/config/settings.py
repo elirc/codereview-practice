@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_structlog",
     "core",
+    "catalog",
+    "inventory",
 ]
 
 MIDDLEWARE = [
