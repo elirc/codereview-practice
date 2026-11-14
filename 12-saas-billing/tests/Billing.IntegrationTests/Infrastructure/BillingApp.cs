@@ -1,4 +1,5 @@
 using Billing.Core.Data;
+using Billing.Core.Payments;
 using Billing.Core.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -19,6 +20,8 @@ public sealed class BillingApp : IAsyncLifetime
     public ManualTimeProvider Clock { get; } = new(DefaultNow);
 
     public BillingFactory Factory => _factory ?? throw new InvalidOperationException("The test host has not started.");
+
+    public FakeGateway Gateway => Factory.Services.GetRequiredService<FakeGateway>();
 
     public async Task InitializeAsync()
     {
@@ -43,6 +46,7 @@ public sealed class BillingApp : IAsyncLifetime
     public async Task ResetAsync()
     {
         Clock.Set(DefaultNow);
+        Gateway.Reset();
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
         var tables = await db.Database

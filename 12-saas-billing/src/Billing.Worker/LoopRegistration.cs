@@ -13,6 +13,11 @@ public static class LoopRegistration
             services.AddHostedService<BillingRunLoop>();
         }
 
+        if (settings.WorkerLoops.Contains("payments"))
+        {
+            services.AddHostedService<PaymentLoop>();
+        }
+
         return services;
     }
 }

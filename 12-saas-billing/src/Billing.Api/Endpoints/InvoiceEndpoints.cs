@@ -20,6 +20,7 @@ public static class InvoiceEndpoints
         ops.MapPut("/{id:guid}/lines", ReplaceLines).Validate<ReplaceInvoiceLinesRequest>();
         ops.MapPost("/{id:guid}/finalize", FinalizeInvoice);
         ops.MapPost("/{id:guid}/void", VoidInvoice);
+        ops.MapPost("/{id:guid}/pay", RetryPayment);
     }
 
     private static async Task<IResult> List(
@@ -58,4 +59,7 @@ public static class InvoiceEndpoints
 
     private static async Task<IResult> VoidInvoice(Guid id, InvoiceService invoices, CancellationToken ct) =>
         Results.Ok(await invoices.VoidAsync(id, ct));
+
+    private static async Task<IResult> RetryPayment(Guid id, PaymentService payments, CancellationToken ct) =>
+        Results.Ok(await payments.RetryNowAsync(id, ct));
 }

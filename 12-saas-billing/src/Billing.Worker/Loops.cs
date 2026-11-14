@@ -9,3 +9,9 @@ public sealed class BillingRunLoop(IServiceScopeFactory scopes, TimeProvider clo
 {
     protected override TimeSpan Interval => TimeSpan.FromSeconds(60);
 }
+
+public sealed class PaymentLoop(IServiceScopeFactory scopes, TimeProvider clock, ILogger<PaymentLoop> logger)
+    : LoopService<PaymentRun>(scopes, clock, logger)
+{
+    protected override TimeSpan Interval => TimeSpan.FromSeconds(30);
+}

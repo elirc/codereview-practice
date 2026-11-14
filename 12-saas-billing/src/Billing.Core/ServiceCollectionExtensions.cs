@@ -1,4 +1,5 @@
 using Billing.Core.Data;
+using Billing.Core.Payments;
 using Billing.Core.Services;
 using Billing.Core.Views;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SubscriptionLifecycle>();
         services.AddScoped<SubscriptionBiller>();
         services.AddScoped<BillingRun>();
+        services.AddScoped<InvoiceSettlement>();
+        services.AddScoped<InvoiceCollector>();
+        services.AddScoped<PaymentRun>();
+        services.AddScoped<PaymentService>();
+        services.TryAddSingleton<FakeGateway>();
+        services.TryAddSingleton<IPaymentGateway>(sp => sp.GetRequiredService<FakeGateway>());
 
         return services;
     }
