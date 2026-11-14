@@ -34,3 +34,8 @@ func OfferExpiry(svc *service.Service) runner.Loop {
 func ReservationExpiry(svc *service.Service) runner.Loop {
 	return loop("reservation-expiry", 2*time.Second, svc.ExpireReservations)
 }
+
+// Surge recomputes zone surge multipliers.
+func Surge(svc *service.Service) runner.Loop {
+	return loop("surge", 30*time.Second, svc.RunSurge)
+}

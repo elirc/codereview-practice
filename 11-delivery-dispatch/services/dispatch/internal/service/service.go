@@ -119,7 +119,3 @@ func notFoundIfNoRows(err error) error {
 	}
 	return err
 }
-
-func timePtr(t time.Time) *time.Time {
-	return &t
-}

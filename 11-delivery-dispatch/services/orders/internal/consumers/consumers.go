@@ -59,6 +59,24 @@ func onDeliveryEvent(svc *service.Service) inbox.Handler {
 	}
 }
 
+type surgeUpdatedData struct {
+	ZoneID        string `json:"zone_id"`
+	MultiplierBps int32  `json:"multiplier_bps"`
+}
+
+func onSurgeUpdated(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		var d surgeUpdatedData
+		if err := env.DecodeData(&d); err != nil {
+			return err
+		}
+		if d.ZoneID == "" || d.ZoneID != env.AggregateID || d.MultiplierBps <= 0 {
+			return fmt.Errorf("%w: %s needs zone_id and a positive multiplier_bps", errInvalidData, env.Type)
+		}
+		return svc.ApplySurge(ctx, tx, d.ZoneID, d.MultiplierBps, env.Sequence)
+	}
+}
+
 // DispatchHandlers returns the handlers of the orders-on-DISPATCH consumer.
 func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 	h := onDeliveryEvent(svc)
@@ -70,5 +88,6 @@ func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 		domain.EventDeliveryFailed:         h,
 		domain.EventDeliveryCancelled:      h,
 		domain.EventDeliveryCancelRejected: h,
+		"surge.updated":                    onSurgeUpdated(svc),
 	}
 }

@@ -36,6 +36,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/deliveries/{id}/pickup", h.wrap(h.deliveryAction(h.svc.Pickup)))
 	r.Post("/deliveries/{id}/deliver", h.wrap(h.deliveryAction(h.svc.Deliver)))
 	r.Post("/deliveries/{id}/abandon", h.wrap(h.deliveryAction(h.svc.Abandon)))
+	r.Get("/zones/{zone_id}/surge", h.wrap(h.zoneSurge))
 }
 
 func (h *Handler) wrap(fn httpx.HandlerFunc) http.HandlerFunc {
