@@ -27,6 +27,11 @@ func New(svc *service.Service, currency string, logger *slog.Logger) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/restaurants", h.wrap(h.listRestaurants))
 	r.Post("/quotes", h.wrap(h.createQuote))
+	r.Post("/orders", h.wrap(h.placeOrder))
+	r.Get("/orders", h.wrap(h.listOrders))
+	r.Get("/orders/{id}", h.wrap(h.getOrder))
+	r.Post("/orders/{id}/confirm", h.wrap(h.confirmOrder))
+	r.Post("/orders/{id}/reject", h.wrap(h.rejectOrder))
 }
 
 func (h *Handler) wrap(fn httpx.HandlerFunc) http.HandlerFunc {

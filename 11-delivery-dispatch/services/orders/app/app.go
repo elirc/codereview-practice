@@ -22,6 +22,7 @@ import (
 	"deliverydispatch/pkg/outbox"
 	"deliverydispatch/pkg/runner"
 	"deliverydispatch/services/orders/internal/httpapi"
+	"deliverydispatch/services/orders/internal/loops"
 	"deliverydispatch/services/orders/internal/service"
 )
 
@@ -81,6 +82,7 @@ func (a *App) Processors() map[natsx.Stream]*inbox.Processor {
 // Loops returns the service's periodic loops.
 func (a *App) Loops() []runner.Loop {
 	return []runner.Loop{
+		loops.ConfirmSweeper(a.Service),
 		{Name: "purge", Interval: time.Hour, RunOnce: a.purge},
 	}
 }
