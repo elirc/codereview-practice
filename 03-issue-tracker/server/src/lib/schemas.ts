@@ -13,8 +13,9 @@ export function StrictObject<T extends TProperties>(properties: T) {
 
 export const EmptyBody = StrictObject({});
 
+// Null comes first so Ajv's type coercion never turns null into an empty string.
 export function Nullable<T extends TSchema>(schema: T) {
-  return Type.Union([schema, Type.Null()]);
+  return Type.Union([Type.Null(), schema]);
 }
 
 export const UserSummary = Type.Object({ id: Type.String(), name: Type.String() });

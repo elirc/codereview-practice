@@ -7,6 +7,7 @@ import type { Database } from './db/index.js';
 import type { Clock } from './lib/clock.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { issueRoutes } from './modules/issues/routes.js';
 import { labelRoutes } from './modules/labels/routes.js';
 import { memberRoutes } from './modules/members/routes.js';
 import { orgCreationRoutes, orgRoutes } from './modules/orgs/routes.js';
@@ -69,6 +70,7 @@ export async function buildApp(deps: AppDeps) {
             await tenant.register(memberRoutes);
             await tenant.register(projectRoutes);
             await tenant.register(labelRoutes);
+            await tenant.register(issueRoutes);
           },
           { prefix: '/orgs/:orgSlug' },
         );

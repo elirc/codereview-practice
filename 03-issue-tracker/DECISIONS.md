@@ -41,3 +41,14 @@ may do subject to the last-owner rule.
 The spec names no code for a project key that is already used in the org. It returns
 `409 project_key_taken`, mirroring `slug_taken`. Archiving an already archived project is a no-op
 that keeps the original `archivedAt`; there is no unarchive.
+
+## What "read-only" covers for archived projects
+
+Issues in an archived project stay readable. Every write to them is refused with
+`422 project_archived`: PATCH (as specified), label replacement, deletion, and comment create,
+edit and delete. Moving an issue into an archived project is refused the same way.
+
+## Label ids in request bodies
+
+`labelIds` must not contain duplicates (`400`, via `uniqueItems`) and may hold at most 20 ids.
+Unknown and foreign ids both give `422 invalid_reference` with `details.field = "labelIds"`.
