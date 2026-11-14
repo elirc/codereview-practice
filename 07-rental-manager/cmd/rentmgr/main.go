@@ -32,6 +32,7 @@ func commands() map[string]command {
 	return map[string]command{
 		"migrate": {summary: "apply database migrations: migrate [up|down|status]", run: runMigrate},
 		"run-job": {summary: "run one job now: run-job <post-rent|assess-late-fees> [--as-of YYYY-MM-DD]", run: runJob},
+		"seed":    {summary: "create demo data and the seed accounts (idempotent)", run: runSeed},
 		"serve":   {summary: "run the web server", run: runServe},
 		"worker":  {summary: "run the background job worker (every 15 minutes)", run: runWorker},
 	}
