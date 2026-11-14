@@ -74,3 +74,18 @@ func (s *Service) earnings(ctx context.Context, id uuid.UUID) (Earnings, error) 
 	}
 	return Earnings{CourierID: id, TotalMinor: total, Items: items}, nil
 }
+
+// HandleCancelled detaches the named courier from a cancelled delivery and,
+// when the courier had been assigned, records their compensation.
+func (s *Service) HandleCancelled(ctx context.Context, tx pgx.Tx, deliveryID uuid.UUID, courierID uuid.NullUUID, courierWasAssigned bool, compensationMinor int64) error {
+	if !courierID.Valid {
+		return nil
+	}
+	if err := s.ReleaseCourier(ctx, tx, deliveryID, courierID.UUID); err != nil {
+		return err
+	}
+	if !courierWasAssigned {
+		return nil
+	}
+	return s.recordEarning(ctx, s.q.WithTx(tx), courierID.UUID, deliveryID, domain.EarningCompensation, compensationMinor)
+}

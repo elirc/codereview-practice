@@ -72,6 +72,26 @@ func onDelivered(svc *service.Service) inbox.Handler {
 	}
 }
 
+type cancelledEvent struct {
+	DeliveryID         uuid.UUID     `json:"delivery_id"`
+	CourierID          uuid.NullUUID `json:"courier_id"`
+	CourierWasAssigned bool          `json:"courier_was_assigned"`
+	CompensationMinor  int64         `json:"compensation_minor"`
+}
+
+func onCancelled(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		var d cancelledEvent
+		if err := env.DecodeData(&d); err != nil {
+			return err
+		}
+		if d.DeliveryID == uuid.Nil || d.CompensationMinor < 0 {
+			return fmt.Errorf("%w: %s needs delivery_id", errInvalidData, env.Type)
+		}
+		return svc.HandleCancelled(ctx, tx, d.DeliveryID, d.CourierID, d.CourierWasAssigned, d.CompensationMinor)
+	}
+}
+
 // DispatchHandlers returns the handlers of the couriers-on-DISPATCH consumer.
 func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 	return map[string]inbox.Handler{
@@ -79,5 +99,6 @@ func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 		"delivery.courier_released":  onRelease(svc),
 		"delivery.unassigned":        onRelease(svc),
 		"delivery.delivered":         onDelivered(svc),
+		"delivery.cancelled":         onCancelled(svc),
 	}
 }

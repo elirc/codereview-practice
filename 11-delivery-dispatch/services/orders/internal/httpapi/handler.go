@@ -32,6 +32,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/orders/{id}", h.wrap(h.getOrder))
 	r.Post("/orders/{id}/confirm", h.wrap(h.confirmOrder))
 	r.Post("/orders/{id}/reject", h.wrap(h.rejectOrder))
+	r.Post("/orders/{id}/cancel", h.wrap(h.cancelOrder))
 }
 
 func (h *Handler) wrap(fn httpx.HandlerFunc) http.HandlerFunc {

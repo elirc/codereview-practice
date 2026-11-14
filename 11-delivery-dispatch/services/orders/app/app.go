@@ -90,6 +90,7 @@ func (a *App) Processors() map[natsx.Stream]*inbox.Processor {
 func (a *App) Loops() []runner.Loop {
 	return []runner.Loop{
 		loops.ConfirmSweeper(a.Service),
+		loops.CancelRetry(a.Service),
 		{Name: "purge", Interval: time.Hour, RunOnce: a.purge},
 	}
 }

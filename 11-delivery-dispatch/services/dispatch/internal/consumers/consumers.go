@@ -177,10 +177,29 @@ func onReservationRejected(svc *service.Service) inbox.Handler {
 	}
 }
 
+type orderCancelRequested struct {
+	OrderID     uuid.UUID `json:"order_id"`
+	RequestedBy string    `json:"requested_by"`
+}
+
+func onOrderCancelRequested(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		var d orderCancelRequested
+		if err := env.DecodeData(&d); err != nil {
+			return err
+		}
+		if d.OrderID == uuid.Nil {
+			return invalid(env.Type, "order_id")
+		}
+		return svc.HandleCancelRequested(ctx, tx, d.OrderID)
+	}
+}
+
 // OrdersHandlers returns the handlers of the dispatch-on-ORDERS consumer.
 func OrdersHandlers(svc *service.Service) map[string]inbox.Handler {
 	return map[string]inbox.Handler{
-		"order.confirmed": onOrderConfirmed(svc),
+		"order.confirmed":        onOrderConfirmed(svc),
+		"order.cancel_requested": onOrderCancelRequested(svc),
 	}
 }
 

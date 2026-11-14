@@ -20,3 +20,15 @@ func ConfirmSweeper(svc *service.Service) runner.Loop {
 		},
 	}
 }
+
+// CancelRetry sends unanswered cancel requests again.
+func CancelRetry(svc *service.Service) runner.Loop {
+	return runner.Loop{
+		Name:     "cancel-retry",
+		Interval: 30 * time.Second,
+		RunOnce: func(ctx context.Context, now time.Time) error {
+			_, err := svc.RetryCancelRequests(ctx, now)
+			return err
+		},
+	}
+}

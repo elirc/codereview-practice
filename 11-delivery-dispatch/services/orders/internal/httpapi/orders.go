@@ -185,3 +185,38 @@ func (h *Handler) confirmOrder(w http.ResponseWriter, r *http.Request) error {
 func (h *Handler) rejectOrder(w http.ResponseWriter, r *http.Request) error {
 	return h.transition(w, r, h.svc.Reject)
 }
+
+type cancelRequest struct {
+	Reason *string `json:"reason"`
+}
+
+func (h *Handler) cancelOrder(w http.ResponseWriter, r *http.Request) error {
+	id, err := httpx.ParseUUID("id", chi.URLParam(r, "id"))
+	if err != nil {
+		return err
+	}
+	var body cancelRequest
+	if _, err := httpx.DecodeOptionalJSON(w, r, &body); err != nil {
+		return err
+	}
+	var note *string
+	if body.Reason != nil {
+		n := strings.TrimSpace(*body.Reason)
+		if len(n) > 500 {
+			return apperr.Validation([]apperr.FieldError{{Path: "reason", Message: "must be at most 500 characters"}})
+		}
+		if n != "" {
+			note = &n
+		}
+	}
+	res, err := h.svc.Cancel(r.Context(), id, note)
+	if err != nil {
+		return err
+	}
+	status := http.StatusOK
+	if res.Pending {
+		status = http.StatusAccepted
+	}
+	httpx.WriteJSON(w, status, h.orderResponse(res.Order, nil))
+	return nil
+}

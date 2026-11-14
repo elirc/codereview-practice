@@ -63,10 +63,12 @@ func onDeliveryEvent(svc *service.Service) inbox.Handler {
 func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 	h := onDeliveryEvent(svc)
 	return map[string]inbox.Handler{
-		domain.EventDeliveryAssigned:   h,
-		domain.EventDeliveryUnassigned: h,
-		domain.EventDeliveryPickedUp:   h,
-		domain.EventDeliveryDelivered:  h,
-		domain.EventDeliveryFailed:     h,
+		domain.EventDeliveryAssigned:       h,
+		domain.EventDeliveryUnassigned:     h,
+		domain.EventDeliveryPickedUp:       h,
+		domain.EventDeliveryDelivered:      h,
+		domain.EventDeliveryFailed:         h,
+		domain.EventDeliveryCancelled:      h,
+		domain.EventDeliveryCancelRejected: h,
 	}
 }
