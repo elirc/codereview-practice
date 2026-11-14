@@ -34,10 +34,7 @@ function hasSameContent(revision: Revision, content: RevisionContent): boolean {
   );
 }
 
-/**
- * Returns the media ids referenced by the body and cover, locking those rows with
- * `FOR KEY SHARE`. Throws `invalid_media_reference` if any of them does not exist.
- */
+/** Returns the media ids referenced by the body and cover; throws if any does not exist. */
 export async function lockReferencedMedia(
   tx: Executor,
   content: Pick<RevisionContent, "body" | "coverMediaId">,

@@ -1,7 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { POSTS_LIST_TAG, postSlugTag, postTag } from "./tags";
 
-/** Drops every cached public read that can show this post. Call only after the change commits. */
+/** Revalidates the post's tag, the given slug tags and the post list tag. */
 export function invalidatePost({ id, slugs }: { id: string; slugs: string[] }): void {
   revalidateTag(postTag(id));
   for (const slug of new Set(slugs)) revalidateTag(postSlugTag(slug));

@@ -6,7 +6,7 @@ function isControlCharacter(char: string): boolean {
   return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
 }
 
-/** Reduces a client-supplied filename to a safe display name. Never used for storage keys. */
+/** The last path segment of a filename, NFC-normalised, without control characters. */
 export function sanitizeFilename(raw: string): string {
   const segments = raw.split(/[/\\]/);
   const last = (segments[segments.length - 1] ?? "").normalize("NFC");

@@ -4,13 +4,13 @@ import type { Executor } from "@/db/client";
 import { posts, revisions, users, type Post } from "@/db/schema";
 import { DomainError, notFoundError } from "./errors";
 
-/** Loads a post with `FOR UPDATE`, so the caller's transaction owns the row until commit. */
+/** Loads a post row with `FOR UPDATE`. */
 export async function lockPost(tx: Executor, postId: string): Promise<Post | null> {
   const [post] = await tx.select().from(posts).where(eq(posts.id, postId)).for("update");
   return post ?? null;
 }
 
-/** Locks the post and checks the actor's permission against the locked state. */
+/** Loads the post with `lockPost` and checks the actor's permission on it. */
 export async function lockPostFor(
   tx: Executor,
   actor: Actor,

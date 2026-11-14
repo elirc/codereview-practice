@@ -17,7 +17,7 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: cms-minio
@@ -29,7 +29,7 @@ services:
       - miniodata:/data
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2024-11-17T19-35-25Z
     depends_on:
       - minio
     entrypoint: >

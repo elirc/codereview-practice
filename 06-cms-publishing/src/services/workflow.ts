@@ -68,7 +68,7 @@ async function transition(
   });
 }
 
-/** Checks the revision belongs to the post and that the media it references still exists. */
+/** Checks the revision belongs to the post and that its referenced media exists. */
 async function assertRevisionOfPost(tx: Executor, post: Post, revisionId: string): Promise<void> {
   const [revision] = await tx
     .select({ body: revisions.body, coverMediaId: revisions.coverMediaId })

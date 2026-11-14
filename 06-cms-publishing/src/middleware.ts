@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
   const requestId = normalizeRequestId(request.headers.get(REQUEST_ID_HEADER));
   const { pathname } = request.nextUrl;
 
-  // Convenience redirect only; every page, action and route checks the session itself.
+  // Send visitors without a session cookie to the login page.
   if (
     pathname.startsWith("/admin") &&
     pathname !== "/admin/login" &&

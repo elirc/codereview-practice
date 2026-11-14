@@ -1,9 +1,6 @@
 import { forbiddenError } from "@/services/errors";
 
-/**
- * Rejects browser requests whose Origin does not match the host they were sent to.
- * Server actions get the same check from Next.js; route handlers that change state call this.
- */
+/** Throws `forbidden` when the request's Origin header does not match its host. */
 export function assertSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
   if (!origin) return;
