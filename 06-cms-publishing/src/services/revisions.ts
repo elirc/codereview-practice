@@ -34,8 +34,14 @@ function hasSameContent(revision: Revision, content: RevisionContent): boolean {
   );
 }
 
-/** Verifies every referenced media row exists and holds a share lock on them until commit. */
-async function lockReferencedMedia(tx: Executor, content: RevisionContent): Promise<string[]> {
+/**
+ * Returns the media ids referenced by the body and cover, locking those rows with
+ * `FOR KEY SHARE`. Throws `invalid_media_reference` if any of them does not exist.
+ */
+export async function lockReferencedMedia(
+  tx: Executor,
+  content: Pick<RevisionContent, "body" | "coverMediaId">,
+): Promise<string[]> {
   const ids = extractMediaIds(content.body, content.coverMediaId);
   if (ids.length === 0) return ids;
 

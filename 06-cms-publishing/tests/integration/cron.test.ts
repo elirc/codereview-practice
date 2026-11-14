@@ -1,6 +1,10 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { cancelSchedule, schedulePost } from "@/actions/workflow";
 import { POST } from "@/app/api/internal/cron/publish/route";
+import { db } from "@/db/client";
+import { media } from "@/db/schema";
+import * as files from "../fixtures/files";
 import { clearRevalidations, revalidatedTags } from "./support/fake-next-cache";
 import {
   FIXED_NOW,
@@ -11,6 +15,7 @@ import {
   signInAs,
   type TestUser,
 } from "./support/fixtures";
+import { storeFile } from "./support/media";
 import { addRevision, getPost, makePost } from "./support/records";
 
 const SECRET = process.env.CRON_SECRET!;
@@ -176,5 +181,30 @@ describe("cron publish", () => {
       expect(revalidatedTags.filter((tag) => tag === `post:${id}`)).toHaveLength(1);
       expect((await getPost(id)).version).toBe(3);
     }
+  });
+
+  it("leaves a post scheduled when its pinned revision refers to missing media", async () => {
+    const { author } = await actors();
+    const stored = await storeFile(author.id, files.png());
+    const broken = await makePost(author, "broken-media", "Broken");
+    const saved = await addRevision(author, broken.id, { body: `![x](media:${stored.id})` });
+    expectOk(
+      await schedulePost({
+        postId: broken.id,
+        revisionId: saved.revision.id,
+        expectedVersion: saved.post.version,
+        scheduledFor: secondsAfter(FIXED_NOW, 60).toISOString(),
+      }),
+    );
+    const healthy = await scheduledPost(author, "healthy", 90);
+    await db.delete(media).where(eq(media.id, stored.id));
+    setNow(secondsAfter(FIXED_NOW, 300));
+
+    const { status, body } = await tick();
+
+    expect(status).toBe(200);
+    expect(body.published).toEqual([healthy.post.id]);
+    expect((await getPost(broken.id)).status).toBe("scheduled");
+    expect((await getPost(healthy.post.id)).status).toBe("published");
   });
 });

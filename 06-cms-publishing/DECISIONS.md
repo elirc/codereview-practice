@@ -16,7 +16,7 @@ Points where the spec was open or ambiguous, and what was chosen.
 
 7. **Restore always creates a revision.** The no-op rule is stated for saves; restoring a revision whose content equals the latest still creates a new revision, as an explicit record of the restore. Restores validate media references like saves.
 
-8. **Cover media is not a foreign key.** Revisions are immutable and admins may delete media referenced only by drafts, so `revisions.cover_media_id` has no FK; `revision_media` (with `ON DELETE CASCADE`) carries the reference. A restore of a revision whose media was deleted is rejected with `invalid_media_reference`.
+8. **Cover media is not a foreign key.** Revisions are immutable and admins may delete media referenced only by drafts, so `revisions.cover_media_id` has no FK; `revision_media` (with `ON DELETE CASCADE`) carries the reference. A restore, publish or schedule of a revision whose media was deleted is rejected with `invalid_media_reference`. If the pinned revision of an already scheduled post loses its media, the scheduler logs a warning and leaves that post scheduled; the rest of the batch is still published.
 
 9. **Slug uniqueness across posts and redirects** is enforced in the service under transaction-scoped advisory locks on the slugs involved, in addition to the unique index on `posts.slug` and the primary key on `slug_redirects.old_slug`.
 

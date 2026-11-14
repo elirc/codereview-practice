@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { deleteMedia } from "@/actions/media";
 import { changeSlug, deletePost, saveRevision } from "@/actions/posts";
 import {
   archivePost,
@@ -19,6 +20,8 @@ import {
   setNow,
   signInAs,
 } from "./support/fixtures";
+import * as files from "../fixtures/files";
+import { storeFile } from "./support/media";
 import { addRevision, getPost, makePost, snapshotPost } from "./support/records";
 
 async function setup() {
@@ -328,5 +331,39 @@ describe("deletePost", () => {
     await signInAs(editor);
     expect(errorCode(await deletePost({ postId: post.id, expectedVersion: 1 }))).toBe("forbidden");
     expect(await getPost(post.id)).toBeDefined();
+  });
+});
+
+describe("revisions that refer to deleted media", () => {
+  async function revisionWithDeletedMedia() {
+    const { author, editor, post } = await setup();
+    const admin = await createTestUser("admin");
+    const stored = await storeFile(author.id, files.png());
+    await addRevision(author, post.id, { body: `![pic](media:${stored.id})` });
+    await signInAs(admin);
+    expectOk(await deleteMedia({ mediaId: stored.id }));
+    await signInAs(editor);
+    return { post, mediaId: stored.id };
+  }
+
+  it("refuses to publish the revision", async () => {
+    const { post, mediaId } = await revisionWithDeletedMedia();
+    const before = await snapshotPost(post.id);
+
+    const result = await publishLatest(post.id);
+
+    expect(errorCode(result)).toBe("invalid_media_reference");
+    expect(result.ok ? null : result.error.details).toEqual({ missing: [mediaId] });
+    expect(await snapshotPost(post.id)).toEqual(before);
+  });
+
+  it("refuses to schedule the revision", async () => {
+    const { post } = await revisionWithDeletedMedia();
+    const before = await snapshotPost(post.id);
+
+    const result = await scheduleLatest(post.id, secondsAfter(FIXED_NOW, 3600));
+
+    expect(errorCode(result)).toBe("invalid_media_reference");
+    expect(await snapshotPost(post.id)).toEqual(before);
   });
 });

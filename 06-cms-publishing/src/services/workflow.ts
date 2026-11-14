@@ -1,10 +1,11 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Actor, PostPermission } from "@/auth/policy";
 import { db, type Executor } from "@/db/client";
-import { media, posts, revisionMedia, revisions, type NewPost, type Post } from "@/db/schema";
+import { posts, revisions, type NewPost, type Post } from "@/db/schema";
 import { DomainError } from "./errors";
 import { assertExpectedVersion, lockPostFor } from "./post-guards";
 import type { PublicChange } from "./posts";
+import { lockReferencedMedia } from "./revisions";
 import { nextStatus, type WorkflowAction } from "./workflow-rules";
 
 export const MIN_SCHEDULE_LEAD_MS = 60_000;
@@ -67,28 +68,16 @@ async function transition(
   });
 }
 
-/** Checks the revision belongs to the post and share-locks the media it references. */
+/** Checks the revision belongs to the post and that the media it references still exists. */
 async function assertRevisionOfPost(tx: Executor, post: Post, revisionId: string): Promise<void> {
   const [revision] = await tx
-    .select({ id: revisions.id })
+    .select({ body: revisions.body, coverMediaId: revisions.coverMediaId })
     .from(revisions)
     .where(and(eq(revisions.id, revisionId), eq(revisions.postId, post.id)));
   if (!revision) {
     throw new DomainError("invalid_revision", "That revision does not belong to this post.");
   }
-  await tx
-    .select({ id: media.id })
-    .from(media)
-    .where(
-      inArray(
-        media.id,
-        tx
-          .select({ id: revisionMedia.mediaId })
-          .from(revisionMedia)
-          .where(eq(revisionMedia.revisionId, revisionId)),
-      ),
-    )
-    .for("key share");
+  await lockReferencedMedia(tx, revision);
 }
 
 function publicationFields(post: Post, revisionId: string, now: Date): Partial<NewPost> {
