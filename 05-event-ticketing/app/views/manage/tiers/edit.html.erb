@@ -4,7 +4,7 @@
 
 <p class="muted">
   Sold <%= @tier.sold_count %>, held <%= @tier.held_count %>.
-  Price changes apply to holds placed after saving.
+  Capacity cannot go below <%= @tier.committed %>. Price changes apply to holds placed after saving.
 </p>
 
 <%= render "form", event: @event, tier: @tier %>

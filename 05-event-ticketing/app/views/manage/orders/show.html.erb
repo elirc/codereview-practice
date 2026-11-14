@@ -1,0 +1,43 @@
+<% content_for :title, @order.number %>
+
+<p><%= link_to "All orders", manage_event_orders_path(@event) %></p>
+
+<h1>Order <%= @order.number %> <span class="badge"><%= @order.status %></span></h1>
+
+<p><%= @order.user.name %> &lt;<%= @order.user.email_address %>&gt;</p>
+
+<table>
+  <tbody>
+    <tr><th>Subtotal</th><td><%= format_cents(@order.subtotal_cents) %></td></tr>
+    <% @order.promo_redemptions.each do |redemption| %>
+      <tr><th>Code <%= redemption.promo_code.code %></th><td>−<%= format_cents(redemption.amount_cents) %></td></tr>
+    <% end %>
+    <tr><th>Total</th><td><%= format_cents(@order.total_cents) %></td></tr>
+    <tr><th>Payment reference</th><td><%= @order.payment_reference || "none (free order)" %></td></tr>
+    <% if @order.refunded? %>
+      <tr><th>Refunded</th><td><%= format_in_zone(@order.refunded_at, @event.time_zone) %></td></tr>
+    <% end %>
+  </tbody>
+</table>
+
+<h2>Tickets</h2>
+
+<table>
+  <thead>
+    <tr><th>Tier</th><th>Code</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <% @order.tickets.each do |ticket| %>
+      <tr>
+        <td><%= ticket.ticket_tier.name %></td>
+        <td><code><%= ticket.code %></code></td>
+        <td><%= ticket.status %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+
+<% if @order.paid? %>
+  <%= button_to "Refund in full", refund_manage_event_order_path(@event, @order),
+        data: { turbo_confirm: "Refund #{format_cents(@order.total_cents)} and void these tickets?" } %>
+<% end %>

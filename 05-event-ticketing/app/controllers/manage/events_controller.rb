@@ -49,6 +49,11 @@ module Manage
       redirect_to manage_event_path(@event), notice: "Event published."
     end
 
+    def cancel
+      Events::Cancel.request(@event)
+      redirect_to manage_event_path(@event), notice: "Event cancelled. Holds are being released and orders refunded."
+    end
+
     private
       def set_managed_event
         @event = manageable_events.find(params[:id])

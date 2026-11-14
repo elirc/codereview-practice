@@ -16,17 +16,24 @@
   <%= link_to "Public page", event_path(@event) %>
   | <%= link_to "Promo codes", manage_event_promo_codes_path(@event) %>
   | <%= link_to "Waitlist", manage_event_waitlist_entries_path(@event) %>
+  | <%= link_to "Orders and attendees", manage_event_orders_path(@event) %>
   <% unless @event.cancelled? %>
     | <%= link_to "Edit", edit_manage_event_path(@event) %>
   <% end %>
 </p>
 
-<% if @event.draft? %>
-  <div class="inline-form">
+<div class="inline-form">
+  <% if @event.draft? %>
     <%= button_to "Publish", publish_manage_event_path(@event) %>
     <%= button_to "Delete draft", manage_event_path(@event), method: :delete %>
-  </div>
-<% end %>
+  <% end %>
+  <% if @event.published? %>
+    <%= button_to "Cancel event", cancel_manage_event_path(@event),
+          data: { turbo_confirm: "Cancel this event and refund every order?" } %>
+  <% elsif @event.cancelled? %>
+    <%= button_to "Resume cancellation", cancel_manage_event_path(@event) %>
+  <% end %>
+</div>
 
 <h2>Ticket tiers</h2>
 

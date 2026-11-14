@@ -22,7 +22,9 @@ module Manage
     end
 
     def update
-      if @tier.update(tier_params)
+      @tier = Tiers::Update.call(@tier, tier_params)
+
+      if @tier.errors.empty?
         redirect_to manage_event_path(@event), notice: "Tier updated."
       else
         render :edit, status: :unprocessable_entity

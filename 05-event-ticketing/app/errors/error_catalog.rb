@@ -25,7 +25,10 @@ module ErrorCatalog
     waitlist_active: [ 422, "Tickets for this tier go to the waitlist first. Join the waitlist instead." ],
     tickets_available: [ 422, "Tickets are available, so hold them directly instead of joining the waitlist." ],
     already_waitlisted: [ 409, "You are already on the waitlist for this tier." ],
-    waitlist_entry_closed: [ 409, "That waitlist entry is no longer open." ]
+    waitlist_entry_closed: [ 409, "That waitlist entry is no longer open." ],
+    already_refunded: [ 409, "This order has already been refunded." ],
+    refund_failed: [ 422, "The payment provider could not refund this order. Nothing was changed." ],
+    capacity_below_committed: [ 422, "Capacity cannot be lower than the tickets already sold and held." ]
   }.freeze
 
   def self.status_for(code)

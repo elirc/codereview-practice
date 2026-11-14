@@ -27,6 +27,11 @@ module TicketingHelpers
     quantities.map { |quantity| place_hold(create_customer("Filler"), tier, quantity) }
   end
 
+  def purchase(user, tier, quantity, gateway:, now: NOW)
+    hold = place_hold(user, tier, quantity, now:)
+    Checkout::Complete.call(hold:, user:, payment_token: "tok_visa", gateway:, now: now + 1.minute)
+  end
+
   def join_waitlist(user, tier, quantity, now: NOW)
     Waitlist::Join.call(user:, tier:, quantity:, now:)
   end
