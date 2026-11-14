@@ -134,6 +134,7 @@ CELERY_TASK_IGNORE_RESULT = True
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_BEAT_SCHEDULE = {
     "expire-reservations": {"task": "orders.expire_reservations", "schedule": 60.0},
+    "requeue-stale-events": {"task": "payments.requeue_stale_events", "schedule": 300.0},
 }
 
 DJANGO_STRUCTLOG_CELERY_ENABLED = True

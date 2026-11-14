@@ -81,3 +81,10 @@ it understands: an element without `=`, an empty value, a repeated or non-numeri
 `v1` at all rejects the request. Elements with other scheme names (for example `v0`) are
 ignored. Signatures are compared exactly as lowercase hex, which is what the signer produces.
 The timestamp is signed exactly as it appears in the header.
+
+## Manual retry of a failed webhook event
+
+`POST /webhook-events/{id}/retry/` re-enqueues processing and responds `202` with the event; the
+event keeps its `failed` status until the task processes it. Retrying an event in any other
+status is `409 invalid_state`. Processing treats `failed` like `received`, and processing is
+idempotent, so a double retry has no extra effect.

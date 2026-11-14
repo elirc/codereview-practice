@@ -5,7 +5,7 @@ from celery import shared_task
 
 from core import clock
 
-from .services import events, refunds
+from .services import events, refunds, webhooks
 
 logger = structlog.get_logger(__name__)
 
@@ -52,3 +52,16 @@ def process_webhook_event(self, event_id: str) -> None:
         log.warning("webhook_event_retrying", countdown=retry.countdown, error=str(retry.error))
         raise self.retry(exc=retry.error, countdown=retry.countdown)
     log.info("webhook_event_processing_finished")
+
+
+@shared_task(bind=True, name="payments.requeue_stale_events")
+def requeue_stale_events(self) -> int:
+    log = logger.bind(task_id=self.request.id, attempt=self.request.retries + 1)
+    log.info("requeue_stale_events_started")
+    try:
+        requeued = webhooks.requeue_stale_events(now=clock.now())
+    except Exception:
+        log.exception("requeue_stale_events_failed")
+        raise
+    log.info("requeue_stale_events_finished", requeued=requeued)
+    return requeued

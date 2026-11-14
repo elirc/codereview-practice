@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Refund, RefundLine
+from .models import Refund, RefundLine, WebhookEvent
 
 MAX_REFUND_MINOR = 10**12
 MAX_EVENT_TIMESTAMP = 253402300799
@@ -78,3 +78,25 @@ class WebhookEnvelopeSerializer(serializers.Serializer):
     type = serializers.CharField(max_length=100)
     created = serializers.IntegerField(min_value=0, max_value=MAX_EVENT_TIMESTAMP)
     data = serializers.DictField()
+
+
+class WebhookEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WebhookEvent
+        fields = [
+            "id",
+            "provider_event_id",
+            "type",
+            "status",
+            "attempts",
+            "last_error",
+            "provider_created_at",
+            "received_at",
+            "processed_at",
+            "payload",
+        ]
+
+
+class WebhookEventFilterSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=WebhookEvent.Status.choices, required=False)
+    type = serializers.CharField(max_length=100, required=False)

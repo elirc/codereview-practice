@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
@@ -8,11 +10,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import clock, idempotency
-from core.permissions import CLERK, IsStaffMember, role_of
+from core.errors import NotFound
+from core.permissions import CLERK, IsManager, IsStaffMember, role_of
 from orders.models import Order
 
-from .models import Refund
-from .serializers import RefundCreateSerializer, RefundSerializer
+from .models import Refund, WebhookEvent
+from .serializers import (
+    RefundCreateSerializer,
+    RefundSerializer,
+    WebhookEventFilterSerializer,
+    WebhookEventSerializer,
+)
 from .services import refunds, webhooks
 
 
@@ -74,3 +82,41 @@ class PaymentWebhookView(APIView):
             now=clock.now(),
         )
         return Response({"status": outcome})
+
+
+def _event_id(raw: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(raw)
+    except ValueError as exc:
+        raise NotFound() from exc
+
+
+class WebhookEventListView(generics.ListAPIView):
+    permission_classes = [IsStaffMember]
+    serializer_class = WebhookEventSerializer
+
+    def get_queryset(self) -> QuerySet[WebhookEvent]:
+        filters = WebhookEventFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        queryset = WebhookEvent.objects.order_by("-received_at")
+        if "status" in filters.validated_data:
+            queryset = queryset.filter(status=filters.validated_data["status"])
+        if "type" in filters.validated_data:
+            queryset = queryset.filter(type=filters.validated_data["type"])
+        return queryset
+
+
+class WebhookEventDetailView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def get(self, request: Request, event_id: str) -> Response:
+        event = get_object_or_404(WebhookEvent, pk=_event_id(event_id))
+        return Response(WebhookEventSerializer(event).data)
+
+
+class WebhookEventRetryView(APIView):
+    permission_classes = [IsManager]
+
+    def post(self, request: Request, event_id: str) -> Response:
+        event = webhooks.retry_failed_event(_event_id(event_id))
+        return Response(WebhookEventSerializer(event).data, status=status.HTTP_202_ACCEPTED)

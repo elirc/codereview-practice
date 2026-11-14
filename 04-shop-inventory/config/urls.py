@@ -13,3 +13,6 @@ urlpatterns = [
     path("api/", include("payments.urls")),
     path("webhooks/payments/", PaymentWebhookView.as_view(), name="payment-webhook"),
 ]
+
+handler404 = "core.views.not_found"
+handler500 = "core.views.server_error"
