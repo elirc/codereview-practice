@@ -6,7 +6,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use common::fake::{claimed, fake_env, FakeStore};
 use common::registry;
-use engine_core::outcome::FailureKind;
 use serde_json::{json, Value};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -70,7 +69,7 @@ async fn no_new_claims_after_shutdown_starts() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_job_that_stops_when_cancelled_reports_its_cancellation() {
+async fn a_job_that_stops_when_cancelled_is_released() {
     let store = Arc::new(FakeStore::default());
     let job = claimed("sleep", json!({ "ms": 600_000 }), 60);
     store.push(job.clone());
@@ -82,11 +81,9 @@ async fn a_job_that_stops_when_cancelled_reports_its_cancellation() {
     assert_eq!(stopping.elapsed(), Duration::from_secs(30));
 
     let state = store.state();
-    assert_eq!(
-        state.failed,
-        vec![(job.id, FailureKind::Cancelled, "cancelled".to_string())]
-    );
-    assert!(state.released.is_empty());
+    assert_eq!(state.released, vec![job.id]);
+    assert!(state.failed.is_empty());
+    assert!(state.completed.is_empty());
 }
 
 struct Deaf;

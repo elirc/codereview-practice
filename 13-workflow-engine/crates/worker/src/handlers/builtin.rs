@@ -47,7 +47,6 @@ impl Handler for SleepHandler {
 enum FailMode {
     Retryable,
     Permanent,
-    Panic,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,7 +55,7 @@ struct FailPayload {
     succeed_on_attempt: Option<i32>,
 }
 
-/// Fails as `payload.mode` says (`retryable`, `permanent` or `panic`) until the attempt
+/// Fails as `payload.mode` says (`retryable` or `permanent`) until the attempt
 /// number reaches `payload.succeed_on_attempt`, then succeeds.
 pub struct FailHandler;
 
@@ -78,7 +77,6 @@ impl Handler for FailHandler {
                 "failed permanently on attempt {}",
                 ctx.attempt
             ))),
-            FailMode::Panic => panic!("fail handler asked to panic on attempt {}", ctx.attempt),
         }
     }
 }

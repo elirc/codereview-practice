@@ -40,6 +40,27 @@ pub enum RunOutcome {
     Abandoned,
     /// The handler finished but its outcome could not be recorded.
     NotReported,
+    /// The handler stopped because the worker is shutting down; the claim is still held.
+    Stopped,
+}
+
+/// When a job was claimed and the worker that claimed it.
+#[derive(Debug, Clone)]
+pub struct ClaimContext {
+    /// Taken just before the claim request was sent.
+    pub claimed_at: Instant,
+    /// Fires when the worker stops its running jobs.
+    pub worker_stop: CancellationToken,
+}
+
+impl ClaimContext {
+    /// Returns a context for a job claimed now by a worker that is not stopping.
+    pub fn now() -> Self {
+        Self {
+            claimed_at: Instant::now(),
+            worker_stop: CancellationToken::new(),
+        }
+    }
 }
 
 enum Report {
@@ -77,12 +98,22 @@ pub fn abandon_after(lease_seconds: i32, lease_safety_ms: i64) -> Duration {
     Duration::from_millis(u64::try_from(keep_ms).unwrap_or(0))
 }
 
-/// Runs a claimed job to completion and records its outcome. `cancel` is handed to the
-/// handler and fires when cancellation is requested or the run is stopped.
+/// Runs a job claimed just now; see [`run_claimed`].
 pub async fn run_job(
     env: Arc<RunnerEnv>,
     job: ClaimedJob,
     cancel: CancellationToken,
+) -> RunOutcome {
+    run_claimed(env, job, cancel, ClaimContext::now()).await
+}
+
+/// Runs a claimed job to completion and records its outcome. `cancel` is handed to the
+/// handler and fires when cancellation is requested or the run is stopped.
+pub async fn run_claimed(
+    env: Arc<RunnerEnv>,
+    job: ClaimedJob,
+    cancel: CancellationToken,
+    claim_ctx: ClaimContext,
 ) -> RunOutcome {
     let span = tracing::info_span!(
         "job",
@@ -91,11 +122,16 @@ pub async fn run_job(
         worker_id = %env.worker_id,
         kind = %job.kind,
     );
-    execute(env, job, cancel).instrument(span).await
+    execute(env, job, cancel, claim_ctx).instrument(span).await
 }
 
-async fn execute(env: Arc<RunnerEnv>, job: ClaimedJob, cancel: CancellationToken) -> RunOutcome {
-    let started = Instant::now();
+async fn execute(
+    env: Arc<RunnerEnv>,
+    job: ClaimedJob,
+    cancel: CancellationToken,
+    claim_ctx: ClaimContext,
+) -> RunOutcome {
+    let started = claim_ctx.claimed_at;
     tracing::info!(queue = %job.queue, "job started");
     let claim = job.claim_ref();
     let Some(handler) = env.registry.get(&job.kind) else {
@@ -119,6 +155,13 @@ async fn execute(env: Arc<RunnerEnv>, job: ClaimedJob, cancel: CancellationToken
     };
     let mut task = AbortOnDrop(tokio::spawn(async move { handler.run(ctx).await }));
     match supervise(&env, &claim, job.lease_seconds, &mut task, &cancel, started).await {
+        Supervised::Finished { joined, .. }
+            if claim_ctx.worker_stop.is_cancelled()
+                && matches!(joined, Ok(Err(HandlerError::Cancelled))) =>
+        {
+            tracing::info!("handler stopped for shutdown");
+            RunOutcome::Stopped
+        }
         Supervised::Finished { joined, deadline } => {
             report_outcome(&env, &claim, report_for(joined), deadline).await
         }

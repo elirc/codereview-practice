@@ -9,10 +9,11 @@ use engine_store::claim::ClaimRef;
 use engine_store::StoreError;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::runner::{run_job, RunOutcome, RunnerEnv};
+use crate::runner::{run_claimed, ClaimContext, RunOutcome, RunnerEnv};
 
 /// How long running handlers get after their tokens are cancelled at shutdown.
 pub const CANCEL_WAIT: Duration = Duration::from_secs(5);
@@ -51,8 +52,8 @@ impl Worker {
     }
 
     /// Claims and runs jobs until `shutdown` is cancelled, then stops: running jobs get the
-    /// grace period to finish, then their tokens are cancelled, and claims still held after
-    /// a further [`CANCEL_WAIT`] are released.
+    /// grace period to finish, then their tokens are cancelled, and after at most a further
+    /// [`CANCEL_WAIT`] the claims still held are released.
     pub async fn run(self, shutdown: CancellationToken) {
         let slots = Arc::new(Semaphore::new(self.settings.concurrency));
         let mut tasks: JoinSet<RunOutcome> = JoinSet::new();
@@ -95,8 +96,9 @@ impl Worker {
                 break;
             }
             let queue = &queues[(rotation + offset) % queues.len()];
-            let now = self.env.clock.now();
             let limit = i64::try_from(free).unwrap_or(i64::MAX);
+            let claimed_at = Instant::now();
+            let now = self.env.clock.now();
             let jobs = match self
                 .env
                 .store
@@ -120,9 +122,15 @@ impl Worker {
                 let env = self.env.clone();
                 let held = self.held.clone();
                 let cancel = self.hard_stop.child_token();
+                let claim_ctx = ClaimContext {
+                    claimed_at,
+                    worker_stop: self.hard_stop.clone(),
+                };
                 tasks.spawn(async move {
-                    let outcome = run_job(env, job, cancel).await;
-                    lock(&held).remove(&job_id);
+                    let outcome = run_claimed(env, job, cancel, claim_ctx).await;
+                    if outcome != RunOutcome::Stopped {
+                        lock(&held).remove(&job_id);
+                    }
                     drop(permit);
                     outcome
                 });

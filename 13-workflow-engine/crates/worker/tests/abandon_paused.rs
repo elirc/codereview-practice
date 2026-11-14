@@ -9,14 +9,13 @@ use engine_core::state::JobState;
 use serde_json::json;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
-use wfe_worker::runner::{run_job, RunOutcome};
+use wfe_worker::runner::{run_claimed, run_job, ClaimContext, RunOutcome};
 
 #[tokio::test(start_paused = true)]
 async fn failing_heartbeats_stop_the_handler_before_the_lease_ends() {
     let store = Arc::new(FakeStore::default());
     store.state().heartbeat_fails = true;
     let env = fake_env(store.clone(), registry());
-    // Lease 6 s: heartbeats every 2 s, claim given up 2 s before the lease would end.
     let job = claimed("sleep", json!({ "ms": 600_000 }), 6);
     let cancel = CancellationToken::new();
 
@@ -37,7 +36,6 @@ async fn a_successful_heartbeat_restarts_the_allowance() {
     let store = Arc::new(FakeStore::default());
     store.state().fail_next_heartbeats = 1;
     let env = fake_env(store.clone(), registry());
-    // Lease 9 s: heartbeats at 3 s (fails) and 6 s (succeeds); the job needs 8 s.
     let job = claimed("sleep", json!({ "ms": 8_000 }), 9);
 
     let outcome = run_job(env, job.clone(), CancellationToken::new()).await;
@@ -77,4 +75,23 @@ async fn report_failures_are_retried_until_the_claim_would_expire() {
     assert!(started.elapsed() <= Duration::from_secs(4));
     assert!(started.elapsed() >= Duration::from_secs(2));
     assert!(store.state().completed.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn time_spent_claiming_counts_against_the_lease() {
+    let store = Arc::new(FakeStore::default());
+    store.state().heartbeat_fails = true;
+    let env = fake_env(store.clone(), registry());
+    let job = claimed("sleep", json!({ "ms": 600_000 }), 6);
+    let claim_ctx = ClaimContext {
+        claimed_at: Instant::now(),
+        worker_stop: CancellationToken::new(),
+    };
+    tokio::time::advance(Duration::from_secs(3)).await;
+
+    let started = Instant::now();
+    let outcome = run_claimed(env, job, CancellationToken::new(), claim_ctx).await;
+    assert_eq!(outcome, RunOutcome::Abandoned);
+    assert_eq!(started.elapsed(), Duration::from_secs(1));
+    assert!(store.state().failed.is_empty());
 }
