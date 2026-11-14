@@ -17,13 +17,10 @@ declare module 'fastify' {
 }
 
 export function registerTenantContext(app: FastifyInstance): void {
-  app.decorateRequest('tenant', null);
+  app.decorateRequest('tenant', null as unknown as TenantContext);
 }
 
-/**
- * preHandler for everything under /orgs/:orgSlug. A missing org and an org the caller does
- * not belong to produce the same 404.
- */
+/** preHandler for routes under /orgs/:orgSlug; sets `request.tenant`. */
 export async function resolveTenant(request: FastifyRequest): Promise<void> {
   const user = currentUser(request);
   const { orgSlug } = request.params as { orgSlug: string };

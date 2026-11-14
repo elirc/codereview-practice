@@ -51,10 +51,7 @@ async function loadMember(deps: Deps, orgId: string, userId: string): Promise<Me
   return toMember(row);
 }
 
-/**
- * Runs a membership change with the org's owner rows locked, using the caller's role as it
- * is once the lock is held rather than as it was when the request arrived.
- */
+/** Runs `work` in a transaction after locking the org's owner rows. */
 async function withOwnersLocked<T>(
   deps: Deps,
   tenant: TenantContext,

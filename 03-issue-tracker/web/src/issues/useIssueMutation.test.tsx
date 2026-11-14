@@ -161,4 +161,44 @@ describe('useIssueMutation', () => {
     await waitFor(() => expect(read().detail?.version).toBe(3));
     expect(read().detail).toMatchObject({ status: 'todo', priority: 4 });
   });
+
+  it('keeps the newer version when a queued edit fails after an earlier one saved', async () => {
+    const first = deferred<IssueDetail>();
+    vi.spyOn(endpoints, 'patchIssue')
+      .mockReturnValueOnce(first.promise)
+      .mockRejectedValueOnce(new ApiError(500, 'internal_error', 'Something went wrong.'));
+    const { result, read } = setup();
+
+    act(() => {
+      result.current.mutate(edit({ status: 'todo' }));
+      result.current.mutate(edit({ priority: 4 }));
+    });
+    await act(async () => {
+      first.resolve(makeIssue({ status: 'todo', version: 2 }));
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(read().detail).toMatchObject({ status: 'todo', priority: 2, version: 2 });
+    expect(read().all).toMatchObject({ status: 'todo', priority: 2, version: 2 });
+  });
+
+  const WEB_5 = { projectKey: 'WEB', number: 5, identifier: 'WEB-5' };
+
+  it('sends an edit queued behind a move to the issue's new location', async () => {
+    const moved = deferred<IssueDetail>();
+    const patch = vi
+      .spyOn(endpoints, 'patchIssue')
+      .mockReturnValueOnce(moved.promise)
+      .mockResolvedValueOnce(makeIssue({ ...WEB_5, status: 'done', version: 3 }));
+    const { result } = setup();
+
+    act(() => {
+      result.current.mutate({ kind: 'patch', patch: { projectKey: 'WEB' }, preview: {} });
+      result.current.mutate(edit({ status: 'done' }));
+    });
+    await act(async () => {
+      moved.resolve(makeIssue({ ...WEB_5, version: 2 }));
+    });
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(2));
+    expect(patch).toHaveBeenLastCalledWith(SLUG, 'WEB', 5, { status: 'done', version: 2 });
+  });
 });

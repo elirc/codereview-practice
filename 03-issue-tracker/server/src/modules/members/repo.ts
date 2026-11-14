@@ -93,7 +93,7 @@ export async function lockMembership(
   return row?.role;
 }
 
-/** Role of a member who could be assigned an issue, holding a share lock until commit. */
+/** The member's role, locked FOR SHARE. */
 export async function lockAssignableMember(
   orgId: string,
   userId: string,

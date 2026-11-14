@@ -35,13 +35,16 @@ export function useIssueMutation(
   const listsKey = queryKeys.issueLists(orgSlug);
   const mutationKey = mutationKeys.issue(orgSlug, issue.id);
 
-  // Previews never touch `version`, so this is the last version the server confirmed.
-  const cachedVersion = (): number => {
-    const detail = queryClient.getQueryData<IssueDetail>(detailKey);
-    if (detail) return detail.version;
+  // Previews never set version, projectKey or number, so these are the server's latest.
+  const latest = (): Pick<IssueSummary, 'projectKey' | 'number' | 'version'> => {
+    const details = queryClient.getQueriesData<IssueDetail>({
+      queryKey: queryKeys.issueDetails(orgSlug),
+    });
+    const detail = details.map(([, data]) => data).find((data) => data?.id === issue.id);
+    if (detail) return detail;
     for (const [, data] of queryClient.getQueriesData<IssueListData>({ queryKey: listsKey })) {
       const found = findInList(data, issue.id);
-      if (found) return found.version;
+      if (found) return found;
     }
     throw new Error('The issue is not loaded.');
   };
@@ -63,16 +66,10 @@ export function useIssueMutation(
     mutationKey,
     scope: { id: mutationKey.join(':') },
     mutationFn: (edit) => {
-      const version = cachedVersion();
+      const { projectKey, number, version } = latest();
       return edit.kind === 'labels'
-        ? endpoints.putLabels(orgSlug, issue.projectKey, issue.number, {
-            version,
-            labelIds: edit.labelIds,
-          })
-        : endpoints.patchIssue(orgSlug, issue.projectKey, issue.number, {
-            ...edit.patch,
-            version,
-          });
+        ? endpoints.putLabels(orgSlug, projectKey, number, { version, labelIds: edit.labelIds })
+        : endpoints.patchIssue(orgSlug, projectKey, number, { ...edit.patch, version });
     },
     onMutate: async (edit) => {
       await Promise.all([
@@ -97,10 +94,29 @@ export function useIssueMutation(
       }
       return { detail, lists };
     },
-    onError: (error, _edit, snapshot) => {
+    onError: (error, edit, snapshot) => {
       if (snapshot) {
-        if (snapshot.detail) queryClient.setQueryData(detailKey, snapshot.detail);
-        for (const [key, data] of snapshot.lists) queryClient.setQueryData(key, data);
+        // Only this edit's fields: an earlier edit may have been saved since the snapshot.
+        const fields = Object.keys(edit.preview);
+        const revert = <T extends IssueSummary>(current: T, before: T | undefined): T => {
+          if (!before) return current;
+          const restored: Record<string, unknown> = { ...current };
+          for (const field of fields) {
+            if (field in before) restored[field] = (before as Record<string, unknown>)[field];
+          }
+          return restored as T;
+        };
+        if (snapshot.detail) {
+          queryClient.setQueryData<IssueDetail>(detailKey, (current) =>
+            current ? revert(current, snapshot.detail) : snapshot.detail,
+          );
+        }
+        for (const [key, data] of snapshot.lists) {
+          const before = findInList(data, issue.id);
+          queryClient.setQueryData<IssueListData>(key, (current) =>
+            current ? mapListIssue(current, issue.id, (item) => revert(item, before)) : data,
+          );
+        }
       }
       const current = error instanceof ApiError ? error.details?.current : undefined;
       if (error instanceof ApiError && error.code === 'version_conflict' && current) {

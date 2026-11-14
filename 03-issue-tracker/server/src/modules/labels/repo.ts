@@ -30,10 +30,7 @@ export async function findLabel(
     .executeTakeFirst();
 }
 
-/**
- * Returns which of `labelIds` exist in the org, share-locking them so they cannot be deleted
- * before the caller's transaction commits.
- */
+/** Returns the ids from `labelIds` that exist in the org, locked FOR SHARE. */
 export async function lockLabelIds(
   orgId: string,
   labelIds: string[],
