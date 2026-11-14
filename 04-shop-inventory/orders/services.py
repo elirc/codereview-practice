@@ -128,19 +128,28 @@ def release_unpaid_order(
             return None
         if only_if_due and order.reservation_expires_at > now:
             return None
-        lines = list(order.lines.all())
-        stock = lock_stock(line.product_id for line in lines)
-        for line in lines:
-            apply_movement(
-                stock[line.product_id],
-                kind=StockMovement.Kind.RELEASE,
-                reserved_delta=-line.quantity,
-                order=order,
-                actor=actor,
-            )
-        order.status = to_status
-        order.save(update_fields=["status", "updated_at"])
+        _release_reservation(order, to_status=to_status, actor=actor)
     return order
+
+
+def _release_reservation(
+    order: Order,
+    *,
+    to_status: str,
+    actor: AbstractBaseUser | None = None,
+) -> None:
+    lines = list(order.lines.all())
+    stock = lock_stock(line.product_id for line in lines)
+    for line in lines:
+        apply_movement(
+            stock[line.product_id],
+            kind=StockMovement.Kind.RELEASE,
+            reserved_delta=-line.quantity,
+            order=order,
+            actor=actor,
+        )
+    order.status = to_status
+    order.save(update_fields=["status", "updated_at"])
 
 
 def cancel_order(order_id: uuid.UUID, *, now: datetime, actor: AbstractBaseUser) -> Order:
@@ -177,21 +186,22 @@ def expire_order(order_id: uuid.UUID, *, now: datetime) -> bool:
 
 def expire_due_orders(*, now: datetime, batch_size: int = 200) -> int:
     """Expire up to ``batch_size`` overdue pending orders, each in its own transaction."""
-    due_ids = list(
+    due = list(
         Order.objects.filter(
             status=Order.Status.PENDING_PAYMENT,
             reservation_expires_at__lte=now,
         )
         .order_by("reservation_expires_at")
-        .values_list("id", flat=True)[:batch_size]
+        .prefetch_related("lines")[:batch_size]
     )
     expired = 0
-    for order_id in due_ids:
+    for order in due:
         try:
-            if expire_order(order_id, now=now):
-                expired += 1
+            with transaction.atomic():
+                _release_reservation(order, to_status=Order.Status.EXPIRED)
+            expired += 1
         except Exception:
-            logger.exception("order_expiry_failed", order_id=str(order_id))
+            logger.exception("order_expiry_failed", order_id=str(order.pk))
     return expired
 
 

@@ -8,8 +8,8 @@ from typing import Any
 import structlog
 from django.db import DataError, IntegrityError, transaction
 
+from core import jobs
 from core.errors import InvalidState, NotFound, flatten_errors
-from core.jobs import enqueue_on_commit
 
 from ..client import PaymentsClient
 from ..exceptions import InvalidPayload
@@ -37,11 +37,11 @@ def receive_webhook(*, body: bytes, signature_header: str | None, now: datetime)
                 provider_created_at=datetime.fromtimestamp(envelope["created"], tz=UTC),
                 received_at=now,
             )
-            enqueue_on_commit(PROCESS_TASK, str(event.id))
+            _queue_processing(event)
     except IntegrityError:
         existing = WebhookEvent.objects.get(provider_event_id=envelope["id"])
         if existing.status in (WebhookEvent.Status.RECEIVED, WebhookEvent.Status.FAILED):
-            enqueue_on_commit(PROCESS_TASK, str(existing.id))
+            _queue_processing(existing)
         logger.info("webhook_duplicate", provider_event_id=envelope["id"], status=existing.status)
         return DUPLICATE
     except DataError as exc:
@@ -57,7 +57,7 @@ def retry_failed_event(event_id: uuid.UUID) -> WebhookEvent:
             raise NotFound()
         if event.status != WebhookEvent.Status.FAILED:
             raise InvalidState("Only failed events can be retried.")
-        enqueue_on_commit(PROCESS_TASK, str(event.id))
+        _queue_processing(event)
     logger.info("webhook_retry_requested", provider_event_id=event.provider_event_id)
     return event
 
@@ -73,8 +73,13 @@ def requeue_stale_events(*, now: datetime) -> int:
         .values_list("id", flat=True)
     )
     for event_id in stale_ids:
-        enqueue_on_commit(PROCESS_TASK, str(event_id))
+        jobs.enqueue_on_commit(PROCESS_TASK, str(event_id))
     return len(stale_ids)
+
+
+def _queue_processing(event: WebhookEvent) -> None:
+    logger.debug("webhook_processing_queued", provider_event_id=event.provider_event_id)
+    jobs.publish(PROCESS_TASK, str(event.id))
 
 
 def _reject_constant(value: str) -> Any:

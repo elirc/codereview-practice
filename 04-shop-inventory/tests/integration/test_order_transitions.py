@@ -139,14 +139,14 @@ def test_one_failing_order_does_not_stop_the_batch(monkeypatch):
     product = stocked_product(on_hand=10)
     broken = create_order((product, 1), now=NOW - timedelta(hours=2))
     healthy = create_order((product, 1), now=NOW - timedelta(hours=1))
-    original = services.expire_order
+    original = services._release_reservation
 
-    def flaky_expire(order_id, *, now):
-        if order_id == broken.pk:
+    def flaky_release(order, **kwargs):
+        if order.pk == broken.pk:
             raise RuntimeError("boom")
-        return original(order_id, now=now)
+        return original(order, **kwargs)
 
-    monkeypatch.setattr(services, "expire_order", flaky_expire)
+    monkeypatch.setattr(services, "_release_reservation", flaky_release)
 
     assert services.expire_due_orders(now=NOW) == 1
     assert Order.objects.get(pk=healthy.pk).status == Order.Status.EXPIRED

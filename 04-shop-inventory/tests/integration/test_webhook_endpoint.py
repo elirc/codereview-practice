@@ -161,6 +161,7 @@ def test_redelivery_after_processing_enqueues_nothing(
     delivery = signed(event_payload("payment.succeeded", order, event_id="evt_1"))
     deliver(*delivery)
     events.process_event(WebhookEvent.objects.get().pk, now=NOW)
+    published.clear()
 
     with django_capture_on_commit_callbacks(execute=True):
         response = deliver(*delivery)
@@ -178,6 +179,7 @@ def test_redelivery_of_a_failed_event_requeues_it(
     delivery = signed(event_payload("payment.succeeded", order, event_id="evt_1"))
     deliver(*delivery)
     WebhookEvent.objects.update(status=WebhookEvent.Status.FAILED)
+    published.clear()
 
     with django_capture_on_commit_callbacks(execute=True):
         deliver(*delivery)
