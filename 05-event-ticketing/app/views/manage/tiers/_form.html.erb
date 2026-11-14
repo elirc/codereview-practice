@@ -1,0 +1,30 @@
+<%= form_with model: tier, url: tier.new_record? ? manage_event_tiers_path(event) : manage_event_tier_path(event, tier) do |form| %>
+  <%= render "shared/form_errors", record: tier %>
+
+  <div class="field">
+    <%= form.label :name %>
+    <%= form.text_field :name, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :price_cents, "Price (cents)" %>
+    <%= form.number_field :price_cents, min: 0, step: 1, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :capacity %>
+    <%= form.number_field :capacity, min: 0, step: 1, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :per_order_limit %>
+    <%= form.number_field :per_order_limit, min: 1, step: 1, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :position %>
+    <%= form.number_field :position, step: 1 %>
+  </div>
+
+  <%= form.submit %>
+<% end %>

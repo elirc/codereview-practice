@@ -1,0 +1,24 @@
+<% content_for :title, "Users" %>
+
+<h1>Users</h1>
+
+<table>
+  <thead>
+    <tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr>
+  </thead>
+  <tbody>
+    <% @users.each do |user| %>
+      <tr id="<%= dom_id(user) %>">
+        <td><%= user.name %></td>
+        <td><%= user.email_address %></td>
+        <td>
+          <%= form_with model: user, url: admin_user_path(user), class: "inline-form" do |form| %>
+            <%= form.select :role, User.roles.keys %>
+            <%= form.submit "Save" %>
+          <% end %>
+        </td>
+        <td><%= user.created_at.utc.to_date %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

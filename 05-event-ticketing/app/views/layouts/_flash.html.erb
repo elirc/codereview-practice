@@ -1,0 +1,8 @@
+<div id="flash">
+  <% if notice.present? %>
+    <p class="flash notice"><%= notice %></p>
+  <% end %>
+  <% if alert.present? %>
+    <p class="flash alert" data-error-code="<%= flash[:error_code] %>"><%= alert %></p>
+  <% end %>
+</div>

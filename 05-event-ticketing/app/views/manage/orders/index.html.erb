@@ -1,0 +1,23 @@
+<% content_for :title, "Orders and attendees" %>
+
+<p><%= link_to @event.title, manage_event_path(@event) %></p>
+
+<h1>Orders and attendees</h1>
+
+<table>
+  <thead>
+    <tr><th>Order</th><th>Attendee</th><th>Tickets</th><th>Total</th><th>Status</th><th>Placed</th></tr>
+  </thead>
+  <tbody>
+    <% @orders.each do |order| %>
+      <tr>
+        <td><%= link_to order.number, manage_event_order_path(@event, order) %></td>
+        <td><%= order.user.name %> &lt;<%= order.user.email_address %>&gt;</td>
+        <td><%= order.tickets.to_a.count(&:status_valid?) %> / <%= order.tickets.size %></td>
+        <td><%= format_cents(order.total_cents) %></td>
+        <td><span class="badge"><%= order.status %></span></td>
+        <td><%= format_in_zone(order.created_at, @event.time_zone) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

@@ -1,0 +1,41 @@
+<% content_for :title, "Promo codes" %>
+
+<p><%= link_to @event.title, manage_event_path(@event) %></p>
+
+<h1>Promo codes</h1>
+
+<% unless @event.cancelled? %>
+  <p><%= link_to "New promo code", new_manage_event_promo_code_path(@event) %></p>
+<% end %>
+
+<table>
+  <thead>
+    <tr>
+      <th>Code</th><th>Discount</th><th>Stackable</th><th>Redeemed</th><th>Per user</th>
+      <th>Window</th><th>Tiers</th><th>Active</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @promo_codes.each do |promo_code| %>
+      <tr>
+        <td><code><%= promo_code.code %></code></td>
+        <td><%= promo_discount_label(promo_code) %></td>
+        <td><%= promo_code.stackable? ? "yes" : "no" %></td>
+        <td><%= promo_code.redemptions_count %><%= " / #{promo_code.max_redemptions}" if promo_code.max_redemptions %></td>
+        <td><%= promo_code.per_user_limit %></td>
+        <td>
+          <%= promo_code.starts_at ? format_in_zone(promo_code.starts_at, @event.time_zone) : "any time" %>
+          →
+          <%= promo_code.ends_at ? format_in_zone(promo_code.ends_at, @event.time_zone) : "no end" %>
+        </td>
+        <td><%= promo_code.ticket_tiers.any? ? promo_code.ticket_tiers.map(&:name).join(", ") : "all tiers" %></td>
+        <td><%= promo_code.active? ? "yes" : "no" %></td>
+        <td>
+          <% unless @event.cancelled? %>
+            <%= link_to "Edit", edit_manage_event_promo_code_path(@event, promo_code) %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

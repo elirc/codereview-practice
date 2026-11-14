@@ -1,0 +1,8 @@
+Hi <%= @entry.user.name %>,
+
+<%= @hold.quantity %> × <%= @tier.name %> for <%= @event.title %> are now held for you.
+
+Complete your purchase before <%= format_in_zone(@hold.expires_at, @event.time_zone) %>:
+<%= hold_url(@hold) %>
+
+If you do not check out in time, the tickets are offered to the next person on the waitlist.

@@ -1,0 +1,7 @@
+<% content_for :title, "New promo code" %>
+
+<h1>New promo code for <%= @event.title %></h1>
+
+<%= render "form", event: @event, promo_code: @promo_code %>
+
+<p><%= link_to "Back", manage_event_promo_codes_path(@event) %></p>

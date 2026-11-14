@@ -1,0 +1,12 @@
+<% content_for :title, "Edit #{@tier.name}" %>
+
+<h1>Edit <%= @tier.name %></h1>
+
+<p class="muted">
+  Sold <%= @tier.sold_count %>, held <%= @tier.held_count %>.
+  Capacity cannot go below <%= @tier.committed %>. Price changes apply to holds placed after saving.
+</p>
+
+<%= render "form", event: @event, tier: @tier %>
+
+<p><%= link_to "Back", manage_event_path(@event) %></p>

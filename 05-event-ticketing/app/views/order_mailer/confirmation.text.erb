@@ -1,0 +1,17 @@
+Hi <%= @order.user.name %>,
+
+Thanks for your order <%= @order.number %> for <%= @event.title %>.
+
+When:  <%= format_in_zone(@event.starts_at, @event.time_zone) %>
+Where: <%= @event.venue %>
+
+Tickets:
+<% @tickets.each do |ticket| -%>
+  <%= ticket.ticket_tier.name %>: <%= ticket.code %>
+<% end -%>
+
+Subtotal: <%= format_cents(@order.subtotal_cents) %>
+Discount: <%= format_cents(@order.discount_cents) %>
+Total:    <%= format_cents(@order.total_cents) %>
+
+View your order: <%= order_url(@order) %>

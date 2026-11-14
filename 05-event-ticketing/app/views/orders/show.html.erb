@@ -1,0 +1,39 @@
+<% content_for :title, @order.number %>
+
+<p><%= link_to "My orders", orders_path %></p>
+
+<h1>Order <%= @order.number %> <span class="badge"><%= @order.status %></span></h1>
+
+<p>
+  <%= link_to @order.event.title, event_path(@order.event) %><br>
+  <%= format_in_zone(@order.event.starts_at, @order.event.time_zone) %> at <%= @order.event.venue %>
+</p>
+
+<table>
+  <tbody>
+    <tr><th>Subtotal</th><td><%= format_cents(@order.subtotal_cents) %></td></tr>
+    <tr><th>Discount</th><td><%= format_cents(@order.discount_cents) %></td></tr>
+    <tr><th>Total</th><td><strong><%= format_cents(@order.total_cents) %></strong></td></tr>
+  </tbody>
+</table>
+
+<% if @order.refunded? %>
+  <p class="muted">Refunded <%= format_in_zone(@order.refunded_at, @order.event.time_zone) %>. These tickets are no longer valid.</p>
+<% end %>
+
+<h2>Tickets</h2>
+
+<table>
+  <thead>
+    <tr><th>Tier</th><th>Code</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <% @order.tickets.each do |ticket| %>
+      <tr>
+        <td><%= ticket.ticket_tier.name %></td>
+        <td><code><%= ticket.code %></code></td>
+        <td><%= ticket.status %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

@@ -1,0 +1,9 @@
+Hi <%= @order.user.name %>,
+
+Your order <%= @order.number %> for <%= @event.title %> has been refunded.
+<%= format_cents(@order.total_cents) %> will be returned to your original payment method.
+
+The following tickets are no longer valid:
+<% @tickets.each do |ticket| -%>
+  <%= ticket.ticket_tier.name %>: <%= ticket.code %>
+<% end -%>

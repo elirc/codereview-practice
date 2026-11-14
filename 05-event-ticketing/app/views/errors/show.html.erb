@@ -1,0 +1,6 @@
+<% content_for :title, error.message %>
+
+<section class="error-page" data-error-code="<%= error.code %>">
+  <h1><%= error.message %></h1>
+  <p><%= link_to "Back to events", root_path %></p>
+</section>

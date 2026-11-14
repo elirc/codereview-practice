@@ -1,0 +1,32 @@
+<% content_for :title, @event.title %>
+
+<h1><%= @event.title %></h1>
+
+<% if @event.cancelled? %>
+  <p class="flash alert" data-error-code="event_cancelled">This event has been cancelled.</p>
+<% elsif @event.draft? %>
+  <p class="badge">Draft — only visible to organisers</p>
+<% end %>
+
+<p>
+  <%= format_in_zone(@event.starts_at, @event.time_zone) %> – <%= format_in_zone(@event.ends_at, @event.time_zone) %><br>
+  <%= @event.venue %>
+</p>
+
+<% if @event.description.present? %>
+  <%= simple_format(@event.description) %>
+<% end %>
+
+<h2>Tickets</h2>
+
+<% polling = @event.on_sale?(@now) ? { controller: "availability", availability_url_value: availability_api_event_path(@event) } : {} %>
+<%= tag.table data: polling do %>
+  <thead>
+    <tr><th>Tier</th><th>Price</th><th>Availability</th><th></th></tr>
+  </thead>
+  <tbody>
+    <% @availabilities.each do |availability| %>
+      <%= render "events/tier", availability:, entry: @my_entries[availability.tier.id] %>
+    <% end %>
+  </tbody>
+<% end %>

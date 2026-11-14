@@ -1,0 +1,6 @@
+Hi <%= @order.user.name %>,
+
+We're sorry: <%= @event.title %> (<%= format_in_zone(@event.starts_at, @event.time_zone) %>) has been cancelled.
+
+Your order <%= @order.number %> has been refunded in full.
+<%= format_cents(@order.total_cents) %> will be returned to your original payment method.

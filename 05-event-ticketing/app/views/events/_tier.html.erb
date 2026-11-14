@@ -1,0 +1,26 @@
+<% tier = availability.tier %>
+<tr id="<%= dom_id(tier) %>">
+  <td><%= tier.name %></td>
+  <td><%= format_cents(tier.price_cents) %></td>
+  <td data-tier-state="<%= availability.state %>" data-availability-tier-id="<%= tier.id %>"><%= tier_state_label(availability) %></td>
+  <td>
+    <% if entry&.offered? && entry.hold %>
+      Tickets are held for you. <%= link_to "Check out", hold_path(entry.hold) %>
+    <% elsif entry&.waiting? %>
+      You are number <%= entry.position %> on the waitlist.
+      <%= button_to "Leave waitlist", waitlist_entry_path(entry), method: :delete, form_class: "inline-form" %>
+    <% elsif !authenticated? && (availability.holdable? || availability.waitlist_open?) %>
+      <%= link_to "Sign in to buy", new_session_path %>
+    <% elsif availability.holdable? %>
+      <%= form_with url: tier_holds_path(tier), class: "inline-form" do |form| %>
+        <%= form.number_field :quantity, value: 1, min: 1, max: tier.per_order_limit, step: 1 %>
+        <%= form.submit "Hold tickets" %>
+      <% end %>
+    <% elsif availability.waitlist_open? %>
+      <%= form_with url: tier_waitlist_entries_path(tier), class: "inline-form" do |form| %>
+        <%= form.number_field :quantity, value: 1, min: 1, max: tier.per_order_limit, step: 1 %>
+        <%= form.submit "Join waitlist" %>
+      <% end %>
+    <% end %>
+  </td>
+</tr>

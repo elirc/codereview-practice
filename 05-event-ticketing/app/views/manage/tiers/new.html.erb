@@ -1,0 +1,7 @@
+<% content_for :title, "New tier" %>
+
+<h1>New tier for <%= @event.title %></h1>
+
+<%= render "form", event: @event, tier: @tier %>
+
+<p><%= link_to "Back", manage_event_path(@event) %></p>
