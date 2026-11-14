@@ -2,6 +2,7 @@ using Billing.Core.Data;
 using Billing.Core.Payments;
 using Billing.Core.Services;
 using Billing.Core.Views;
+using Billing.Core.Webhooks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +48,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CreditNoteService>();
         services.AddScoped<RefundProcessor>();
         services.AddScoped<RefundRun>();
+        services.AddScoped<WebhookEndpointService>();
+        services.AddScoped<WebhookDeliveryService>();
+        services.AddScoped<WebhookSender>();
+        services.AddScoped<WebhookFanOut>();
+        services.AddScoped<WebhookDispatcher>();
+        services.AddScoped<PurgeRun>();
+        services.AddHttpClient(WebhookSender.ClientName, client => client.Timeout = WebhookSender.RequestTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         services.TryAddSingleton<FakeGateway>();
         services.TryAddSingleton<IPaymentGateway>(sp => sp.GetRequiredService<FakeGateway>());
 

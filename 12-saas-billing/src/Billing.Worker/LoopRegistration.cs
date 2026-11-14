@@ -23,6 +23,21 @@ public static class LoopRegistration
             services.AddHostedService<RefundLoop>();
         }
 
+        if (settings.WorkerLoops.Contains("webhook-fanout"))
+        {
+            services.AddHostedService<WebhookFanOutLoop>();
+        }
+
+        if (settings.WorkerLoops.Contains("webhook-delivery"))
+        {
+            services.AddHostedService<WebhookDeliveryLoop>();
+        }
+
+        if (settings.WorkerLoops.Contains("purge"))
+        {
+            services.AddHostedService<PurgeLoop>();
+        }
+
         return services;
     }
 }

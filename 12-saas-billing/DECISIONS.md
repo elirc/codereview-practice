@@ -28,3 +28,8 @@ Points the spec leaves open, the choice made, and why.
 - **Credit-note year.** The `CN-<year>` counter uses the year of the customer's current civil date, like invoice numbers use the issue date.
 - **Failed refunds.** After the fifth failed try the refund is `failed` and `invoice.refundedMinor` drops by its total, as the spec says; the credit note itself and the credited amounts on the invoice lines stay as issued, since credit notes are immutable.
 - **Refund calls inside the note's transaction.** The refund loop calls the gateway while it holds the credit note row lock; the credit note id is the refund's idempotency key, so a retried call cannot refund twice.
+- **Webhook permissions.** `billing_ops` may list endpoints (secrets are never listed) and list and retry deliveries; creating, changing and rotating endpoints is `admin` only.
+- **Endpoints created later.** Fan-out skips endpoints whose `createdAt` is after the event's `createdAt`, so an endpoint added later never receives earlier events even when fan-out runs after it was added.
+- **Fan-out with several workers.** Fan-out locks the lowest unfanned event with a blocking `FOR UPDATE`, so events are fanned out one at a time in `sequence` order whatever the number of workers.
+- **Deliveries to a disabled endpoint.** A claimed delivery is not sent when it is no longer pending or its endpoint has been disabled in the meantime; it keeps the status it has.
+- **Signature key.** `v1` is the HMAC-SHA256 keyed with the UTF-8 bytes of the whole secret string, `whsec_` prefix included.

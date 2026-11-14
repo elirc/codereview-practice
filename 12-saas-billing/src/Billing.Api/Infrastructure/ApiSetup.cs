@@ -35,6 +35,7 @@ public static class ApiSetup
         v1.MapSubscriptionEndpoints();
         v1.MapUsageEndpoints();
         v1.MapCreditEndpoints();
+        v1.MapWebhookEndpoints();
 
         app.MapFallback(_ => throw DomainException.NotFound("The requested resource"));
         return app;

@@ -1,6 +1,7 @@
 using Billing.Core.Data;
 using Billing.Core.Payments;
 using Billing.Core.Services;
+using Billing.Core.Webhooks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -22,6 +23,8 @@ public sealed class BillingApp : IAsyncLifetime
     public BillingFactory Factory => _factory ?? throw new InvalidOperationException("The test host has not started.");
 
     public FakeGateway Gateway => Factory.Services.GetRequiredService<FakeGateway>();
+
+    public RecordingWebhookHandler Webhooks { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -47,6 +50,7 @@ public sealed class BillingApp : IAsyncLifetime
     {
         Clock.Set(DefaultNow);
         Gateway.Reset();
+        Webhooks.Reset();
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
         var tables = await db.Database
@@ -121,6 +125,9 @@ public sealed class BillingFactory(string databaseUrl, BillingApp app) : WebAppl
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(app.Clock);
+            services.AddHttpClient(WebhookSender.ClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => app.Webhooks)
+                .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
         });
     }
 }
