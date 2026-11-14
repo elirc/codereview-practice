@@ -1,6 +1,9 @@
 <nav>
-  <strong>Event Ticketing</strong>
+  <strong><%= link_to "Event Ticketing", root_path %></strong>
   <% if authenticated? %>
+    <% if current_user.manager? %>
+      <%= link_to "Manage", manage_events_path %>
+    <% end %>
     <span class="muted"><%= current_user.name %> (<%= current_user.role %>)</span>
     <%= button_to "Sign out", session_path, method: :delete %>
   <% else %>

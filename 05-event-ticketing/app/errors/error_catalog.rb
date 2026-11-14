@@ -6,7 +6,9 @@ module ErrorCatalog
     forbidden: [ 403, "You are not allowed to do that." ],
     not_found: [ 404, "We couldn't find that." ],
     rate_limited: [ 429, "Too many requests. Try again later." ],
-    internal_error: [ 500, "Something went wrong on our side." ]
+    internal_error: [ 500, "Something went wrong on our side." ],
+    event_not_draft: [ 409, "Only draft events can be changed that way." ],
+    event_cancelled: [ 409, "This event has been cancelled." ]
   }.freeze
 
   def self.status_for(code)

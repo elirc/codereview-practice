@@ -2,6 +2,8 @@ class User < ApplicationRecord
   has_secure_password
 
   has_many :sessions, dependent: :destroy
+  has_many :organized_events, class_name: "Event", foreign_key: :organizer_id,
+    inverse_of: :organizer, dependent: :restrict_with_exception
 
   enum :role, { customer: "customer", organizer: "organizer", admin: "admin" }, default: :customer, validate: true
 

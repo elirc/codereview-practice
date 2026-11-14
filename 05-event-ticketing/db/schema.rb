@@ -10,9 +10,27 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_14_090200) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_14_090400) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "organizer_id", null: false
+    t.string "title", null: false
+    t.text "description"
+    t.string "venue", null: false
+    t.string "time_zone", null: false
+    t.datetime "starts_at", null: false
+    t.datetime "ends_at", null: false
+    t.datetime "sales_close_at", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organizer_id"], name: "index_events_on_organizer_id"
+    t.index ["status", "starts_at"], name: "index_events_on_status_and_starts_at"
+    t.check_constraint "(ends_at > starts_at)", name: "events_ends_after_start"
+    t.check_constraint "((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'cancelled'::character varying])::text[]))", name: "events_status_valid"
+  end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
@@ -144,6 +162,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090200) do
     t.index ["key", "value"], name: "index_solid_queue_semaphores_on_key_and_value"
   end
 
+  create_table "ticket_tiers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "event_id", null: false
+    t.string "name", null: false
+    t.integer "price_cents", null: false
+    t.integer "capacity", null: false
+    t.integer "sold_count", default: 0, null: false
+    t.integer "held_count", default: 0, null: false
+    t.integer "per_order_limit", default: 6, null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id", "position"], name: "index_ticket_tiers_on_event_id_and_position"
+    t.check_constraint "(capacity >= 0)", name: "ticket_tiers_capacity_nonnegative"
+    t.check_constraint "((sold_count + held_count) <= capacity)", name: "ticket_tiers_committed_within_capacity"
+    t.check_constraint "(held_count >= 0)", name: "ticket_tiers_held_count_nonnegative"
+    t.check_constraint "(per_order_limit > 0)", name: "ticket_tiers_per_order_limit_positive"
+    t.check_constraint "(price_cents >= 0)", name: "ticket_tiers_price_nonnegative"
+    t.check_constraint "(sold_count >= 0)", name: "ticket_tiers_sold_count_nonnegative"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "email_address", null: false
     t.string "password_digest", null: false
@@ -155,6 +193,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090200) do
     t.check_constraint "((role)::text = ANY ((ARRAY['customer'::character varying, 'organizer'::character varying, 'admin'::character varying])::text[]))", name: "users_role_valid"
   end
 
+  add_foreign_key "events", "users", column: "organizer_id"
   add_foreign_key "sessions", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -162,4 +201,5 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090200) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "ticket_tiers", "events"
 end

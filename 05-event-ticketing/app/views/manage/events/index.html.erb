@@ -1,0 +1,21 @@
+<% content_for :title, "Manage events" %>
+
+<h1>Manage events</h1>
+
+<p><%= link_to "New event", new_manage_event_path %></p>
+
+<table>
+  <thead>
+    <tr><th>Event</th><th>Status</th><th>Starts</th><th>Organiser</th></tr>
+  </thead>
+  <tbody>
+    <% @events.each do |event| %>
+      <tr>
+        <td><%= link_to event.title, manage_event_path(event) %></td>
+        <td><span class="badge"><%= event.status %></span></td>
+        <td><%= format_in_zone(event.starts_at, event.time_zone) %></td>
+        <td><%= event.organizer.name %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

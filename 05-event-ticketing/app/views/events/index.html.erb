@@ -1,0 +1,26 @@
+<% content_for :title, "Upcoming events" %>
+
+<h1>Upcoming events</h1>
+
+<% if @events.empty? %>
+  <p class="muted">No events are on sale right now.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr><th>Event</th><th>When</th><th>Where</th><th>From</th></tr>
+    </thead>
+    <tbody>
+      <% @events.each do |event| %>
+        <tr>
+          <td><%= link_to event.title, event_path(event) %></td>
+          <td><%= format_in_zone(event.starts_at, event.time_zone) %></td>
+          <td><%= event.venue %></td>
+          <td>
+            <% cheapest = event.ticket_tiers.map(&:price_cents).min %>
+            <%= cheapest ? format_cents(cheapest) : "-" %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

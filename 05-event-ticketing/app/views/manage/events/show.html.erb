@@ -1,0 +1,57 @@
+<% content_for :title, @event.title %>
+
+<p><%= link_to "All events", manage_events_path %></p>
+
+<h1><%= @event.title %> <span class="badge"><%= @event.status %></span></h1>
+
+<dl>
+  <dt>Venue</dt><dd><%= @event.venue %></dd>
+  <dt>Time zone</dt><dd><%= @event.time_zone %></dd>
+  <dt>Starts</dt><dd><%= format_in_zone(@event.starts_at, @event.time_zone) %></dd>
+  <dt>Ends</dt><dd><%= format_in_zone(@event.ends_at, @event.time_zone) %></dd>
+  <dt>Sales close</dt><dd><%= format_in_zone(@event.sales_close_at, @event.time_zone) %></dd>
+</dl>
+
+<p>
+  <%= link_to "Public page", event_path(@event) %>
+  <% unless @event.cancelled? %>
+    | <%= link_to "Edit", edit_manage_event_path(@event) %>
+  <% end %>
+</p>
+
+<% if @event.draft? %>
+  <div class="inline-form">
+    <%= button_to "Publish", publish_manage_event_path(@event) %>
+    <%= button_to "Delete draft", manage_event_path(@event), method: :delete %>
+  </div>
+<% end %>
+
+<h2>Ticket tiers</h2>
+
+<table>
+  <thead>
+    <tr><th>Tier</th><th>Price</th><th>Capacity</th><th>Sold</th><th>Held</th><th>Available</th><th>Per order</th><th></th></tr>
+  </thead>
+  <tbody>
+    <% @tiers.each do |tier| %>
+      <tr>
+        <td><%= tier.name %></td>
+        <td><%= format_cents(tier.price_cents) %></td>
+        <td><%= tier.capacity %></td>
+        <td><%= tier.sold_count %></td>
+        <td><%= tier.held_count %></td>
+        <td><%= tier.available %></td>
+        <td><%= tier.per_order_limit %></td>
+        <td>
+          <% unless @event.cancelled? %>
+            <%= link_to "Edit", edit_manage_event_tier_path(@event, tier) %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+
+<% unless @event.cancelled? %>
+  <p><%= link_to "Add tier", new_manage_event_tier_path(@event) %></p>
+<% end %>

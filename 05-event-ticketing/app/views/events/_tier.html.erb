@@ -1,0 +1,6 @@
+<tr id="<%= dom_id(tier) %>">
+  <td><%= tier.name %></td>
+  <td><%= format_cents(tier.price_cents) %></td>
+  <td><%= tier.available.positive? ? "#{tier.available} available" : "Sold out" %></td>
+  <td></td>
+</tr>

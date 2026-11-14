@@ -31,7 +31,7 @@ module ErrorHandling
     end
 
     def error_fallback_location
-      "/"
+      root_path
     end
 
     def integer_param(key, source = params)

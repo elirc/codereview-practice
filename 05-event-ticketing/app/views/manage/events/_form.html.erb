@@ -1,0 +1,42 @@
+<%= form_with model: event, url: event.new_record? ? manage_events_path : manage_event_path(event) do |form| %>
+  <%= render "shared/form_errors", record: event %>
+
+  <div class="field">
+    <%= form.label :title %>
+    <%= form.text_field :title, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :venue %>
+    <%= form.text_field :venue, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :description %>
+    <%= form.text_area :description, rows: 5 %>
+  </div>
+
+  <div class="field">
+    <%= form.label :time_zone %>
+    <%= form.select :time_zone, Event.time_zone_options, include_blank: true %>
+    <p class="muted">Times below are entered in this zone.</p>
+  </div>
+
+  <div class="field">
+    <%= form.label :starts_at_local, "Starts" %>
+    <%= form.datetime_local_field :starts_at_local, value: event.starts_at_local, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :ends_at_local, "Ends" %>
+    <%= form.datetime_local_field :ends_at_local, value: event.ends_at_local, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :sales_close_at_local, "Sales close" %>
+    <%= form.datetime_local_field :sales_close_at_local, value: event.sales_close_at_local %>
+    <p class="muted">Leave blank to close sales when the event starts.</p>
+  </div>
+
+  <%= form.submit %>
+<% end %>
