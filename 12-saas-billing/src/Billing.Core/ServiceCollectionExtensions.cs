@@ -1,5 +1,6 @@
 using Billing.Core.Data;
 using Billing.Core.Services;
+using Billing.Core.Views;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ApiKeyService>();
         services.AddScoped<CustomerService>();
         services.AddScoped<CatalogService>();
+        services.AddScoped<ViewLoader>();
+        services.AddScoped<EventRecorder>();
+        services.AddScoped<CreditLedger>();
+        services.AddScoped<DocumentNumberer>();
+        services.AddScoped<InvoiceFinalizer>();
+        services.AddScoped<InvoiceService>();
 
         return services;
     }

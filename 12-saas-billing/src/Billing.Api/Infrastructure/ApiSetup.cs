@@ -30,6 +30,7 @@ public static class ApiSetup
         v1.MapApiKeyEndpoints();
         v1.MapCustomerEndpoints();
         v1.MapCatalogEndpoints();
+        v1.MapInvoiceEndpoints();
 
         app.MapFallback(_ => throw DomainException.NotFound("The requested resource"));
         return app;
