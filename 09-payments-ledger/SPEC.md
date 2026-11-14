@@ -45,7 +45,7 @@ An API key has one role. A `merchant` key is bound to one `ownerId`.
 | Read entries, settlements, statements, reconciliation report, trial balance | no | no | yes | yes |
 | Manage API keys | no | no | yes | no |
 
-A merchant key asking for an account, hold or entry that is not its own gets `404 not_found`, the same as a missing id. Role failures on an endpoint the role may never use are `403 forbidden`.
+A merchant key asking for an account, balance, posting list or hold that is not its own gets `404 not_found`, the same as a missing id. Role failures on an endpoint the role may never use are `403 forbidden`; that includes `GET /entries/{id}` for `service` and `merchant` keys, which read entries only through the postings of their accounts.
 
 ## 4. Domain model
 
@@ -90,7 +90,11 @@ Balances are never recomputed from postings on the write path, and never written
 
 Every `POST` requires `Idempotency-Key` (8–128 visible ASCII chars), else `400 idempotency_key_required`. The fingerprint is SHA-256 over method, path template with path variables substituted, and the canonical JSON of the validated body (keys sorted, no insignificant whitespace; for the statement upload, the SHA-256 of the raw bytes plus the query string).
 
-Flow, inside the operation's transaction: insert the key row with `ON CONFLICT DO NOTHING`. If inserted, run the operation inside a savepoint. On success store status and body and commit. On a `DomainException` with status `403`, `404`, `409` or `422`, roll back to the savepoint, store that error response on the key row, and commit. On anything else roll the whole transaction back, so no key row remains. If the insert found an existing row: a different fingerprint is `422 idempotency_key_reused`; the same fingerprint returns the stored status and body with header `Idempotent-Replay: true`. Body validation (`400`) and authentication happen before the key is touched. Keys are scoped to the API key that sent them. A purge job removes rows older than 7 days.
+Flow, inside the operation's transaction: insert the key row with `ON CONFLICT DO NOTHING`. If inserted, run the operation inside a savepoint. On success store status and body and commit. On a `DomainException` with status `403`, `404`, `409` or `422`, roll back to the savepoint, store that error response on the key row, and commit. On anything else roll the whole transaction back, so no key row remains. If the insert found an existing row: a different fingerprint is `422 idempotency_key_reused`; the same fingerprint returns the stored status and body with header `Idempotent-Replay: true`. Body validation (`400`) and authentication happen before the key is touched. Keys are scoped to the API key that sent them. A purge job removes rows older than 7 days, whatever their state.
+
+Two endpoints differ. `POST /settlements` commits once per merchant, so its key row is committed as `in_progress` before the run and completed with the response afterwards; a repeat while the run is going is `409 invalid_state` (not stored), and a failure that is not a `DomainException` deletes the key. `POST /api-keys` stores its response without the `key` field: the secret is returned once by the live response and never kept, so a replay returns the key's metadata only.
+
+Request bodies are read strictly: an absent or null value for a required number or boolean is `400 validation_failed`, never a default.
 
 ### 5.3 Transfers and withdrawals
 
@@ -207,7 +211,7 @@ Prefix `/v1`. `camelCase` JSON. Lists use `?after=<cursor>&limit=` (default 50, 
 | `POST /statement-lines/{id}/resolve` | 5.11 |
 | `GET /reconciliation/report?from=&to=` | 5.11 |
 | `GET /trial-balance` | 5.12 |
-| `POST /api-keys`, `DELETE /api-keys/{id}` | Key value returned once |
+| `POST /api-keys`, `DELETE /api-keys/{id}` | Key value returned once and not stored (5.2) |
 | `GET /outbox/stats` | operator: unpublished count, oldest unpublished age |
 
 Error codes beyond those named above: `validation_failed`, `unauthenticated`, `forbidden`, `not_found`, `invalid_state`, `internal_error`.
@@ -236,7 +240,7 @@ All run in the `worker` profile on fixed delays; each has a `runOnce(now)` used 
 | Hold expiry | 30 s | Select ids of `active` holds with `expires_at <= now` (batch 200, no locks). Each hold is then processed in its own transaction that locks the hold row, re-checks `active` and `expires_at <= now`, and applies 5.4 and 5.5. One failure is logged and does not stop the batch |
 | Reconcile | 10 s | Ids of `pending` lines ordered by `(statementDate, lineNo)`, batch 500; each line in its own transaction per 5.11, re-checking `pending` under the lock. An unexpected error leaves the line `pending`, increments `attempts`; after 5 attempts the line becomes `unmatched` with the error as note |
 | Settlement trigger | cron `0 15 0 * * *` UTC | For yesterday and each supported currency, run 5.9. Also re-runs any batch still `processing` from earlier dates |
-| Idempotency purge | hourly | Deletes `completed` keys older than 7 days, 1,000 rows per pass |
+| Idempotency purge | hourly | Deletes keys older than 7 days, `completed` or still `in_progress`, 1,000 rows per pass |
 | Outbox purge | hourly | Deletes rows published more than `OUTBOX_RETENTION_HOURS` (default 72) ago |
 
 The API process never touches Kafka. If Kafka is down, API writes still succeed and the backlog shows in `/outbox/stats`.
@@ -293,6 +297,10 @@ The API process never touches Kafka. If Kafka is down, API writes still succeed 
 48. Relay crash after sending and before marking: the event is sent again with the same `eventId`.
 49. Two relay instances: for any account, `account.balance_changed` events are produced in increasing `sequence`.
 50. After any mix of the operations above, the trial balance reports zero sums and no drifting accounts.
+51. `GET /entries/{id}` with a `service` or `merchant` key is `403 forbidden`, whoever owns the entry's accounts.
+52. `POST /api-keys` replayed with the same `Idempotency-Key` returns the key's metadata without `key`; no stored row contains the secret.
+53. An `in_progress` idempotency key left by a settlement run that never finished is removed by the purge once it is 7 days old.
+54. `PUT /owners/{id}/limits/{currency}` with `{}`, or `POST /fx/rates` without `spreadBps`, is `400 validation_failed`.
 
 ## 9. Non-goals
 

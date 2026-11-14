@@ -16,7 +16,7 @@ Conventions pointer: doc comments and comments say what a function does and retu
 | CRDT | `yjs` 13.6.20, `y-protocols` 1.0.6 (`sync`, `awareness`), `lib0` 0.2.98 (`encoding`, `decoding`). Document content is one `Y.Text` named `content`. Garbage collection stays enabled (`doc.gc = true`) |
 | DB | PostgreSQL 16 (compose host port 5462), Kysely 0.27.5 with `pg` 8.13.1. Plain SQL migrations in `server/migrations/NNNN_name.sql` applied by a runner that records files in `schema_migrations`. Kysely table types hand-written in `server/src/db/types.ts` |
 | Pub/sub | Redis 7 (compose host port 6391), `ioredis` 5.4.1; one publishing connection and one subscribing connection per instance |
-| Logging | Fastify's pino logger; WebSocket logs carry `connectionId`, `docId`, `userId` |
+| Logging | Fastify's pino logger; WebSocket logs carry `connectionId`, `docId`, `userId`. Request logs record the path with the value of the `link` query parameter replaced, so a link token never appears in a log |
 | Tests | Vitest 2.1.8. Integration tests use real Postgres and Redis, `fastify.inject` for HTTP and real `ws` clients against servers listening on port 0. Multi-instance tests start two app instances in one process. Tests wait on promises resolved by received frames, never on timers |
 | Frontend | React 18.3.1, Vite 6.0.5, react-router-dom 6.28.1, `yjs`/`y-protocols`/`lib0` as above. Plain `<textarea>` editor; one stylesheet |
 | Auth | Email + password (`crypto.scrypt`), opaque session token in cookie `cd_session`, SHA-256 stored, 14-day expiry |
@@ -74,7 +74,7 @@ HTTP: no access to a document → `404 not_found`; access with too low a role �
 - **DocVersion**: `id`, `docId`, `seq`, `state` (bytea), `kind` (`auto` | `named` | `pre_restore`), `label?` (1–100, required for `named`), `createdBy?`, `createdAt`.
 - **CommentThread**: `id`, `docId`, `anchorStart`, `anchorEnd` (bytea, encoded Yjs relative positions), `quotedText` (max 200), `status` (`open` | `resolved`), `createdBy`, `resolvedBy?`, `resolvedAt?`, `createdAt`. **Comment**: `id`, `threadId`, `authorId`, `body` (1–4000, plain text), `createdAt`, `editedAt?`, `deletedAt?`.
 
-Checks: `head_seq >= snapshot_seq >= 0`; `doc_updates.seq > 0`; octet length of `update` bounded by the limit in 5.3; partial unique index on `doc_versions (doc_id, seq) WHERE kind = 'auto'`.
+Checks: `head_seq >= snapshot_seq >= 0`; `doc_updates.seq > 0`; octet length of `update` bounded by `MAX_DOC_BYTES` (5.5); partial unique index on `doc_versions (doc_id, seq) WHERE kind = 'auto'`.
 
 ## 5. Domain rules
 
@@ -92,7 +92,7 @@ Close codes: `4400` malformed or disallowed frame, `4401` session ended, `4403` 
 
 ### 5.2 Connecting
 
-On `upgrade`, before the handshake completes: check `Origin`; resolve the session cookie (a missing or expired session means anonymous); resolve the effective role (section 3) including the `link` query token. No access, unknown document or trashed document → plain HTTP `404` response on the socket and no upgrade. More than `MAX_CONNECTIONS_PER_USER_PER_DOC` (default 8) on this instance for one user → HTTP `429`.
+On `upgrade`, before the handshake completes: check `Origin`; resolve the session cookie (a missing or expired session means anonymous); resolve the effective role (section 3) including the `link` query token. No access, unknown document or trashed document → plain HTTP `404` response on the socket and no upgrade. More than `MAX_CONNECTIONS_PER_USER_PER_DOC` (default 8) on this instance for one user → HTTP `429`. Anonymous connections are not counted per user; they share one per-document limit on each instance, `MAX_ANONYMOUS_CONNECTIONS_PER_DOC` (default 50), with the same `429`.
 
 After the upgrade the server joins the connection to the document's room (5.4), then sends, in order: `hello`; for roles `editor` and `owner` a SyncStep1 with the room's state vector; and the current awareness states. It answers a client's SyncStep1 with a SyncStep2 containing what the client lacks. Read-only connections (`viewer`, `commenter`) are never sent a SyncStep1.
 
@@ -108,10 +108,10 @@ Every inbound frame, in this order:
 4. **Sync frames**:
    - SyncStep1: reply with SyncStep2. Allowed for every role.
    - SyncStep2 or Update from a read-only connection → `4403`, whatever the payload.
-   - SyncStep2 or Update from an editor: payload over `MAX_UPDATE_BYTES` (262,144) → `4413`. The payload must parse with `Y.decodeUpdate`; failure → `4400`. An update with no structs and no deletions is dropped without further work. Otherwise it goes to the append path (5.5).
-5. **Awareness frames**: anonymous connections may not send them (`4403`). The update is decoded entry by entry (client id, clock, JSON state). Every entry must use the single awareness client id this connection first announced; another id → `4403`. State JSON over 2,048 bytes, or not an object or `null` → `4400`. The server replaces `state.user` with `{ id, name }` of the authenticated user (keeping only a `color` string of at most 16 chars and a `cursor` object with integer `anchor` and `head` from the client), re-encodes, applies it to the room's `Awareness`, sends it to the room's other local connections and publishes it on the bus. Awareness is never persisted.
+   - SyncStep2 or Update from an editor: payload over `MAX_UPDATE_BYTES` (262,144) → `4413`; this limit is for inbound frames only, and updates the server writes itself (5.8) are bounded by the document cap. The payload must parse with `Y.decodeUpdate` and apply cleanly to an empty `Y.Doc`; failure of either → `4400`, and nothing is stored. An update with no structs and no deletions is dropped without further work. Otherwise it goes to the append path (5.5).
+5. **Awareness frames**: anonymous connections may not send them (`4403`). The update is decoded entry by entry (client id, clock, JSON state). Every entry must use the single awareness client id this connection first announced; another id → `4403`. If another connection in the room on this instance already holds the announced id: when it belongs to the same user (a client that reconnected before its old socket closed) the id moves to the new connection and the old one is closed with `1000`; when it belongs to another user the new connection is closed `4403`. State JSON over 2,048 bytes, or not an object or `null` → `4400`. The server replaces `state.user` with `{ id, name }` of the authenticated user (keeping only a `color` string of at most 16 chars and a `cursor` object with integer `anchor` and `head` from the client), re-encodes, applies it to the room's `Awareness`, sends it to the room's other local connections and publishes it on the bus. Awareness is never persisted.
 
-When a connection closes for any reason, its awareness state is removed and the removal is broadcast and published.
+When a connection closes for any reason, its awareness state is removed and the removal is broadcast and published, unless its client id has moved to another connection.
 
 ### 5.4 Rooms and multi-instance fan-out
 
@@ -119,9 +119,9 @@ A **room** is an instance's in-memory state for one open document: a `Y.Doc`, an
 
 - **Opening**: concurrent first connections share one load. The room subscribes to the document's Redis channel first, then loads in a single `REPEATABLE READ` read-only transaction: the snapshot with the greatest `uptoSeq` (if any) and all updates with `seq > uptoSeq` in order. `appliedSeq` is the greatest seq read (or the snapshot's). Bus messages that arrived during the load are integrated afterwards.
 - **Integrating `(seq, update)`** (same routine for local appends, bus messages and catch-up rows): `seq <= appliedSeq` → ignore. `seq = appliedSeq + 1` → apply, advance, then drain the buffer while it continues contiguously. Otherwise buffer it and run a catch-up.
-- **Catch-up**: in one `REPEATABLE READ` read-only transaction read `docs.snapshot_seq`; if it is greater than `appliedSeq`, read that snapshot and apply its state and set `appliedSeq` to it; then read updates with `seq > appliedSeq` in order and integrate them. A catch-up also runs for every open room when the subscriber connection becomes ready again after a disconnect, and every `CATCHUP_INTERVAL_MS` (default 10,000) for rooms whose `docs.head_seq` (one query for all open rooms) is ahead of `appliedSeq`.
+- **Catch-up**: in one `REPEATABLE READ` read-only transaction read `docs.snapshot_seq`; if it is greater than `appliedSeq`, read that snapshot and apply its state and set `appliedSeq` to it; then read updates with `seq > appliedSeq` in order and integrate them. A stored update that fails to apply is logged and skipped, and `appliedSeq` moves past it; every other place that rebuilds a document from snapshot and log (versions, restore, comments, compaction) skips it in the same way, so all of them produce the same state. A catch-up also runs for every open room when the subscriber connection becomes ready again after a disconnect, and every `CATCHUP_INTERVAL_MS` (default 10,000) for rooms whose `docs.head_seq` (one query for all open rooms) is ahead of `appliedSeq`.
 - **Broadcast**: the room listens to the `Y.Doc` `update` event and sends each resulting delta as a sync Update frame to every local connection except the one given as the transaction origin. Nothing else sends content to clients.
-- **Bus**: channel `doc:<docId>` carries JSON `{ kind, instanceId, … }` with kinds `update` (`seq`, `update` base64), `awareness` (`update` base64), `perm`, `meta` (`title`), `comments`, `trashed`. An instance ignores `update` and `awareness` messages carrying its own `instanceId`. Channel `control` carries `{ kind: "workspace_perm", workspaceId }` and `{ kind: "session_ended", sessionId }`.
+- **Bus**: channel `doc:<docId>` carries JSON `{ kind, instanceId, … }` with kinds `update` (`seq`, `update` base64), `awareness` (`update` base64), `perm`, `meta` (`title`), `comments`, `trashed`. An instance ignores every message carrying its own `instanceId`: the instance that makes a change applies it to its own rooms first (the update or awareness state, or the `perm`, `meta`, `comments` or `trashed` effect on its local connections) and then publishes, so its own clients are told even when Redis is unavailable. Channel `control` carries `{ kind: "workspace_perm", workspaceId }` and `{ kind: "session_ended", sessionId }`.
 - **Closing**: a room with no connections is destroyed after `ROOM_IDLE_MS` (default 30,000); it unsubscribes last. A connection arriving while it is closing gets a fresh room.
 - Awareness states received from other instances that are not refreshed for 30 s are dropped by the `Awareness` timeout, which covers an instance that died.
 
@@ -142,7 +142,7 @@ Server-generated updates (version restore, 5.8) use the same path with no origin
 
 ### 5.6 Permission changes while connected
 
-Every change that can alter someone's effective role bumps an epoch in the same transaction as the change: `docs.perm_epoch` for share create/update/delete, link create/revoke, `workspace_access` change, ownership transfer, trash and restore; `workspaces.perm_epoch` for member add/remove/role change, `allowExternalSharing` change and workspace transfer. After commit the service publishes `perm` on the document channel or `workspace_perm` on `control`. Logout deletes the session and publishes `session_ended`.
+Every change that can alter someone's effective role bumps an epoch in the same transaction as the change: `docs.perm_epoch` for share create/update/delete, link create/revoke, `workspace_access` change, ownership transfer, trash and restore; `workspaces.perm_epoch` for member add/remove/role change, `allowExternalSharing` change and workspace transfer. After commit the service re-evaluates the affected connections on its own instance, then publishes `perm` on the document channel or `workspace_perm` on `control`. Logout deletes the session, closes that session's sockets on its own instance and publishes `session_ended`.
 
 On such a message, and independently every `PERM_SWEEP_MS` (default 15,000) for all open rooms (comparing stored epochs with one query, and checking that the sessions of open connections still exist and are unexpired), the instance re-evaluates each affected connection from the database:
 
@@ -165,7 +165,7 @@ Candidates are picked with `FOR UPDATE SKIP LOCKED` one at a time so several wor
 
 - A version stores the full state at some `seq`. `named` versions are created by `POST /docs/:id/versions` (`{ label }`); the state is read from the database in one `REPEATABLE READ` transaction (snapshot + log) and `seq` is the head read there.
 - The worker creates an `auto` version for a document when `head_seq` is greater than the `seq` of its newest version and that version (or the document, if none) is at least `AUTO_VERSION_MINUTES` (default 10) old. It keeps the newest 50 `auto` versions per document; `named` and `pre_restore` versions are kept until the document is purged.
-- **Restore** (`POST /docs/:id/versions/:versionId/restore`): load the current state from the database into a temporary `Y.Doc` at head `H`; if the current text equals the version's text, return `200` with `changed: false` and write nothing. Otherwise compute the single replaced range between current and target text by common prefix and suffix over UTF-16 code units, never splitting a surrogate pair; apply delete + insert in one Yjs transaction; capture the resulting update. In one database transaction insert a `pre_restore` version (state at `H`) and append the update through 5.5 (attributed to the restoring user). The restored text is merged like any edit: concurrent edits by others survive where they do not overlap the replaced range.
+- **Restore** (`POST /docs/:id/versions/:versionId/restore`): load the current state from the database into a temporary `Y.Doc` at head `H`; if the current text equals the version's text, return `200` with `changed: false` and write nothing. Otherwise compute the single replaced range between current and target text by common prefix and suffix over UTF-16 code units, never splitting a surrogate pair; apply delete + insert in one Yjs transaction; capture the resulting update. In one database transaction insert a `pre_restore` version (state at `H`) and append the update through 5.5 (attributed to the restoring user). This update may be larger than `MAX_UPDATE_BYTES`; only the document cap applies, and a restore that would exceed it is `422 invalid_state` with nothing written. The restored text is merged like any edit: concurrent edits by others survive where they do not overlap the replaced range.
 - History is never rewritten; restoring adds to it. Version states are immutable.
 
 ### 5.9 Comments
@@ -175,7 +175,7 @@ Candidates are picked with `FOR UPDATE SKIP LOCKED` one at a time so several wor
 - `GET /docs/:id/threads` resolves every thread against current state and returns `range: { start, end }` and `detached`. A thread is `detached` when an anchor cannot be resolved or `start >= end` (its text was deleted); it is still returned with its `quotedText`. Threads are never deleted by edits.
 - Text inserted inside the range extends it; text inserted immediately before the first or after the last anchored character is outside it.
 - Replies: 1–4000 chars. A deleted comment keeps its row with `body` blanked and `deletedAt`; a thread whose first comment is deleted stays. Replying to a `resolved` thread reopens it.
-- Every comment mutation publishes `comments` on the document channel after commit; instances send `comments_changed` to the room and clients refetch. The UI also refetches on reconnect.
+- Every comment mutation, after commit, sends `comments_changed` to the room on its own instance and publishes `comments` on the document channel; other instances send `comments_changed` to their rooms and clients refetch. The UI also refetches on reconnect.
 
 ### 5.10 Trash
 
@@ -276,6 +276,12 @@ Shutdown (`SIGTERM`): stop accepting upgrades and HTTP requests, let every room'
 45. Sharing with a non-member when external sharing is off is `422`; turning the setting off removes existing external shares and disconnects those users.
 46. Transferring a document to a non-member is `422 not_a_member`; removing or demoting the workspace owner is `422 owner_required`.
 47. On `SIGTERM` updates already accepted are persisted before sockets close with `1001`.
+48. A client that reconnects with the same awareness client id while its previous socket is still registered is accepted; the previous socket is closed `1000` and the client's presence stays visible to others. The same id announced by a different user is closed `4403`.
+49. Restoring a version that replaces more than 262,144 bytes of text succeeds and stores one update; an inbound frame of that size is still closed `4413`.
+50. A request to `GET /docs/:id?link=<token>` is logged without the token.
+51. With Redis down, a title change, a comment, a permission change and a trash made through one instance reach the sockets connected to that instance at once.
+52. An update that decodes but cannot be applied is closed `4400` and not stored; a stored update that cannot be applied is skipped by open rooms and by versions, restore, comments and compaction alike.
+53. The 51st anonymous connection to one document on an instance is refused with `429`; signed-in users are unaffected.
 
 ## 9. Non-goals
 

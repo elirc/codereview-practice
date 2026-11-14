@@ -42,7 +42,7 @@ Money is `long` minor units with the customer's ISO-4217 currency (2-decimal cur
 | Manage webhook endpoints; read and retry deliveries | no | no | yes (read, retry) | yes |
 | Manage API keys | no | no | no | yes |
 
-`401 unauthenticated` without a valid key; `403 forbidden` for a role outside the row. There is no per-customer scoping: every key acts for the one business.
+`401 unauthenticated` without a valid key; `403 forbidden` for a role outside the row. The role is checked before the request body is read or validated, so a key that may not use an endpoint gets `403` whatever it sends, never `400`. There is no per-customer scoping: every key acts for the one business.
 
 ## 4. Domain model
 
@@ -63,7 +63,7 @@ Money is `long` minor units with the customer's ISO-4217 currency (2-decimal cur
 - **WebhookEndpoint**: `id`, `url`, `secret`, `previousSecret?`, `previousSecretExpiresAt?`, `eventTypes` (text array; `*` for all), `status` (`enabled` | `disabled`), `createdAt`. **WebhookEvent**: `id`, `sequence` (bigint identity), `type`, `objectType`, `objectId`, `body` (text, the serialised envelope), `createdAt`, `fannedOutAt?`. **WebhookDelivery**: `id`, `eventId`, `endpointId`, `objectId`, `sequence`, `status` (`pending` | `succeeded` | `failed`), `attempts`, `nextAttemptAt`, `lastStatusCode?`, `lastError?`, `deliveredAt?`; unique `(eventId, endpointId)`.
 - **IdempotencyRecord**: `keyId`, `key`, `requestHash`, `responseStatus`, `responseBody`, `createdAt`; unique `(keyId, key)`. **ApiKey**: `id`, `name`, `keyHash`, `role`, `revokedAt?`.
 
-Database invariants (in migrations): the indexes above; a trigger on `invoices` that rejects, for rows whose stored status is not `draft`, any update that changes a column other than `status`, `amount_paid_minor`, `credited_minor`, `refunded_minor`, `amount_remaining_minor`, `paid_at`, `decline_count`, `attempt_count`, `next_payment_attempt_at`, and any delete; a trigger on `invoice_lines` that rejects insert, delete, and any update other than to `credited_minor`/`credited_tax_minor`, when the parent invoice is not `draft`; checks `amount_remaining_minor >= 0`, `credited_minor <= amount_minor` on positive lines.
+Database invariants (in migrations): the indexes above; a trigger on `invoices` that rejects, for rows whose stored status is not `draft`, any update that changes a column other than `status`, `amount_paid_minor`, `credited_minor`, `refunded_minor`, `amount_remaining_minor`, `paid_at`, `decline_count`, `attempt_count`, `next_payment_attempt_at`, any update that sets `status` back to `draft`, and any delete; a trigger on `invoice_lines` that rejects insert, delete, and any update other than to `credited_minor`/`credited_tax_minor`, when the parent invoice is not `draft`; checks `amount_remaining_minor >= 0`, `credited_minor <= amount_minor` on positive lines.
 
 ## 5. Domain rules
 
@@ -103,7 +103,7 @@ Subscriptions named in the batch are locked `FOR SHARE` in id order, then per ev
 - unknown subscription or meter, or the meter is not sold by any plan of the product → `rejected: unknown_subscription` / `unknown_meter`;
 - `occurredAt > now + 5 min` → `in_future`; `occurredAt < now − USAGE_MAX_AGE_DAYS` (35) → `too_old`;
 - `occurredAt` before the start of period 0 (including the whole trial) → `before_billing_start`;
-- subscription `canceled` with `finalSealedAt` set, or `occurredAt >= startOfDay(endedOn)` → `subscription_ended`;
+- subscription `canceled` with `finalSealedAt` set, or `occurredAt >= startOfDay(endedOn)`, or `cancelAtPeriodEnd` set and `occurredAt >= startOfDay(currentPeriodEnd)` → `subscription_ended`;
 - an existing row with the same `(subscriptionId, eventKey)`: `duplicate` when `meterCode`, `quantity` and `occurredAt` are identical, otherwise `rejected: key_conflict`. Two events with the same key inside one batch follow the same rule against each other;
 - otherwise insert, `accepted`.
 
@@ -145,7 +145,7 @@ Rate for an invoice: the `TaxRate` for (`billToCountry`, `billToRegion`) valid o
 Let `recurring(plan, qty) = Σ flat amounts + per-seat unit × qty`.
 
 - **Trialing**: plan and quantity change at once; nothing is invoiced.
-- **Increase** (`recurring(new) > recurring(old)`): effective now. A `proration` invoice for `[today, currentPeriodEnd)`: for every advance item of the old configuration a `proration_credit` line of `−roundHalfUp(amount × R / D)`, and for every advance item of the new one a `proration_charge` line of `+roundHalfUp(amount × R / D)`; each line rounded on its own. Any meter the old plan sold and the new plan does not: its unbilled usage with `occurredAt < now` is sealed into the current period, rated with the old tiers and added as `usage` lines. The invoice is finalised in the same transaction; the subscription's plan and quantity, and the current period's `planId`, change regardless of whether the invoice is later paid. Pending changes are cleared.
+- **Increase** (`recurring(new) > recurring(old)`): effective now. A `proration` invoice for `[today, currentPeriodEnd)`: for every advance item of the old configuration a `proration_credit` line of `−roundHalfUp(amount × R / D)`, and for every advance item of the new one a `proration_charge` line of `+roundHalfUp(amount × R / D)`; each line rounded on its own. Any meter the old plan sold and the new plan does not: its unbilled usage with `occurredAt < now` is sealed into the current period, rated with the old tiers and added as `usage` lines. The invoice is finalised in the same transaction; the subscription's plan and quantity, and the current period's `planId`, change regardless of whether the invoice is later paid. Pending changes are cleared. Because each line is rounded on its own, the credits of several small items can exceed the charges by a minor unit or two; a proration invoice whose total would be negative is not created and the change is refused with `422 invoice_not_finalizable` (5.6), leaving the subscription as it was.
 - **Decrease** (`recurring(new) < recurring(old)`): stored as `pendingPlanId`/`pendingQuantity`, replacing any earlier pending change, applied at the next boundary. No credit.
 - **Equal**: effective now, no invoice.
 - A change made on the first day of a period has `R = D`; on the last day `R = 1`.
@@ -187,7 +187,7 @@ The payment loop claims `open` invoices with `next_payment_attempt_at <= now` (`
 - Each line must belong to the invoice and have a positive `amountMinor`; credit `<= line.amountMinor − line.creditedMinor` (`422 exceeds_creditable`). A line may appear once per note.
 - Line tax: `roundHalfAwayFromZero(amount × line.taxRateBps / 10000)`, except that a credit taking the line's whole remaining amount takes the line's whole remaining tax (`line.taxMinor − line.creditedTaxMinor`). `total = Σ amount + Σ tax`.
 - `open` invoice: disposition must be `reduce_due`; `total <= amountRemaining` (`422 exceeds_remaining`); `amountRemaining −= total`; at zero the invoice becomes `paid` and `invoice.paid` is emitted.
-- `paid` invoice: `credit_balance` adds `total` to the customer's balance with a `credit_note` transaction; `refund` requires `total <= amountPaid − refundedMinor` (`422 exceeds_refundable`), creates the note with `refundStatus = pending` and increases `refundedMinor`. The refund loop calls `Refund` with the credit note id as idempotency key against the invoice's succeeded charge; success → `succeeded`; a gateway error → retried on later passes up to 5 times, then `failed` and `refundedMinor` is reduced again.
+- `paid` invoice: `credit_balance` adds `total` to the customer's balance with a `credit_note` transaction; `refund` requires `total <= amountPaid − refundedMinor` (`422 exceeds_refundable`), creates the note with `refundStatus = pending` and increases `refundedMinor`. The refund loop calls `Refund` with the credit note id as idempotency key against the invoice's succeeded charge; success → `succeeded`; a gateway error → retried on later passes up to 5 times, then `failed`. On that final failure, in one transaction, `refundedMinor` is reduced by the note's total, `creditedMinor` on the invoice is reduced by the same total, and each credited line's `creditedMinor` and `creditedTaxMinor` are reduced by the note line's `amountMinor` and `taxMinor`, so the same amounts can be credited or refunded by a new note. The failed note itself is kept unchanged apart from its `refundStatus`, and `credit_note.refund_failed` is emitted.
 - Numbers come from the `credit_note` counter (`CN-<year>-<6 digits>`). Credit notes are immutable.
 - `POST /customers/{id}/credit-adjustments` `{ amountMinor (signed, non-zero), reason }` writes a `manual_adjustment`; the balance may not go below zero (`422 insufficient_credit`).
 
@@ -195,9 +195,9 @@ The payment loop claims `open` invoices with `next_payment_attempt_at <= now` (`
 
 - Every event below is written to `webhook_events` in the transaction of the change it reports. `body` is the envelope of CONVENTIONS §12.4 (`camelCase`), serialised once; `sequence` is the row's identity value; `data.object` is the API representation of the object at that moment.
 - **Fan-out loop**: events with `fannedOutAt` null, in `sequence` order, one transaction each: insert a `pending` delivery (`nextAttemptAt = now`) for every `enabled` endpoint whose `eventTypes` contains the type or `*`; set `fannedOutAt`. Endpoints created later do not receive earlier events.
-- **Delivery loop**: claims `pending` deliveries with `next_attempt_at <= now` for which no delivery to the same endpoint for the same `objectId` with a lower `sequence` is still `pending` (`SKIP LOCKED`, batch 50). Claiming sets `nextAttemptAt = now + 5 min` and commits; then the request is sent; then the outcome is stored in a second transaction.
+- **Delivery loop**: claims `pending` deliveries with `next_attempt_at <= now` whose endpoint is `enabled` and for which no delivery to the same endpoint for the same `objectId` with a lower `sequence` is still `pending` (`SKIP LOCKED`, batch 50). Claiming sets `nextAttemptAt = now + 5 min` and commits; then the request is sent; then the outcome is stored in a second transaction.
 - Request: `POST` the stored `body` bytes unchanged, `Content-Type: application/json`, 10 s timeout, no redirects. Headers: `Billing-Event-Id`, `Billing-Event-Type`, `Billing-Delivery-Attempt`, and `Billing-Signature: t=<unix seconds>,v1=<hex>`, where `v1 = HMAC-SHA256(secret, "<t>." + body)`. While `previousSecretExpiresAt > now` a second `v1` computed with `previousSecret` is appended. `t` comes from the injected clock at send time.
-- Outcome: `2xx` → `succeeded`. `410` → delivery `failed`, endpoint `disabled`, its other `pending` deliveries `failed`. Anything else (other status, timeout, connection error) → `attempts + 1`; next attempt after 1 min, 5 min, 30 min, 2 h, 6 h, 12 h, 24 h; the eighth failure makes the delivery `failed`.
+- Outcome: `2xx` → `succeeded`. `410` → delivery `failed`, endpoint `disabled`, its other `pending` deliveries `failed`. Pending deliveries of an endpoint disabled through the API are left `pending`, are not claimed, and are sent after it is enabled again. Anything else (other status, timeout, connection error) → `attempts + 1`; next attempt after 1 min, 5 min, 30 min, 2 h, 6 h, 12 h, 24 h; the eighth failure makes the delivery `failed`.
 - A `failed` delivery no longer holds back later events for the same object. `POST /webhook-deliveries/{id}/retry` puts a `failed` delivery back to `pending` with `attempts = 0`.
 - Secrets are generated by the server (32 random bytes, `whsec_` + base64url), returned only on create and rotate. Rotation keeps the old secret valid for 24 h. URLs must be `https` unless `WEBHOOK_ALLOW_HTTP=true`.
 
@@ -306,6 +306,12 @@ Each loop is a `BackgroundService` that calls a `RunOnceAsync(now)` on a scoped 
 48. Eight failed attempts mark a delivery `failed`; the next event for that object is then delivered; a manual retry delivers the failed one.
 49. An endpoint answering `410` is disabled and receives nothing further; an endpoint added later does not receive older events.
 50. An event whose transaction rolled back has no `webhook_events` row; a committed one is delivered even if the API process stops immediately after responding.
+51. After a refund has failed five times, a new credit note for the same lines and amounts is accepted; the failed note is still listed on the invoice.
+52. A subscription set to cancel at period end: an event with `occurredAt` at or after the period end's local midnight, sent before the boundary run, is rejected with `subscription_ended`; after `resume` the same event is accepted.
+53. `UPDATE invoices SET status = 'draft'` on a finalised invoice is rejected by the database.
+54. A delivery to an endpoint disabled with `PATCH` stays `pending` and is not attempted; it is delivered after the endpoint is enabled again.
+55. A `support` key posting a malformed body to `POST /invoices` gets `403`, not `400`.
+56. An increase from three items of 0.33 to one item of 1.00 halfway through the period (credits −0.51, charge +0.50) is refused with `422 invoice_not_finalizable` and changes nothing.
 
 ## 9. Non-goals
 

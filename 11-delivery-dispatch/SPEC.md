@@ -20,7 +20,7 @@ Conventions pointer: doc comments and comments say what a function does and retu
 | Auth | HS256 bearer tokens, `github.com/golang-jwt/jwt/v5` v5.2.1, verified in `pkg/auth` with `AUTH_JWT_SECRET`. Claims: `sub` (UUID), `role`, `restaurant_id?`, `exp`. Tokens are minted by `cmd/devtoken` and the seed; there is no identity service |
 | Ids | `github.com/google/uuid` v1.6.0 through an injected generator |
 | Logging | `log/slog` JSON; request id middleware; consumers log `event_id`, `type`, `delivery_count` |
-| Tests | `testing`, table-driven. Integration tests use real databases from `TEST_DATABASE_URL_ORDERS`/`_DISPATCH`/`_COURIERS` and skip when unset. Consumer handlers are tested by calling them with envelopes. `test/e2e` wires the three services in one process against real databases and NATS from `TEST_NATS_URL` |
+| Tests | `testing`, table-driven. Integration tests use real databases from `TEST_DATABASE_URL_ORDERS`/`_DISPATCH`/`_COURIERS` and skip when unset. Consumer handlers are tested by calling them with envelopes. `test/e2e` wires the three services in one process against real databases and NATS from `TEST_NATS_URL`; it deletes and recreates the three streams before each test, so compose runs a second server for tests only (`nats-test`, host port 6395, no volume) and `TEST_NATS_URL` points at it, never at the development server |
 | Lint | `gofmt`, `go vet`, staticcheck 2024.1.1 |
 
 Layout:
@@ -141,7 +141,7 @@ Courier status is derived, never stored: `busy` when `active_delivery_id` is set
 - `POST /couriers/me/shift/start` `{ zone_id }`: refused when suspended (`403 courier_suspended`); idempotent when already on shift in that zone; changing zone while on shift requires ending the shift first (`409 shift_active`).
 - `POST /couriers/me/shift/end`: refused with `409 active_delivery` while `active_delivery_id` is set.
 - Suspend (ops): sets `suspended`. The derived status becomes `offline` unless a delivery is active; an active delivery continues and is paid, and when it ends the courier is `offline`. Reinstating does not start a shift.
-- Any change that alters the derived status, zone or suspension increments `status_version` and emits `courier.status_changed` with the derived status.
+- Any change that alters the derived status, zone or suspension increments `status_version` and emits `courier.status_changed` with the derived status. Creating a courier emits it too (`offline`, `status_version` 1), and `couriers seed` emits it for every seeded courier with a new `status_version` on each run, so dispatch always learns a courier's vehicle from an event.
 - `POST /couriers/me/location` `{ lon, lat, recorded_at }`: `lon` in [−180, 180], `lat` in [−90, 90]; `recorded_at` more than 30 s ahead of now → `422 timestamp_in_future`; more than 5 min old → accepted and discarded. The stored position is replaced only when `recorded_at > position_at`. `courier.location_updated` is emitted (with `position_seq + 1`) only when the courier is on shift and either `published_at` is null, `recorded_at − published_at >= 10 s`, or the new point is at least 50 m from the published one. Response is `204` in every accepted case.
 
 ### 5.5 Courier projection (dispatch)
@@ -171,7 +171,7 @@ Courier actions (lock order everywhere: delivery row, then offer row, then couri
 ### 5.7 Reservation, pickup, delivery (dispatch ⇄ couriers)
 
 - couriers on `delivery.courier_requested`: lock the courier. If derived status is `available`: set `active_delivery_id`, bump `status_version`, emit `courier.reserved` and `courier.status_changed`. If `active_delivery_id` already equals this delivery: emit `courier.reserved` again. Otherwise emit `courier.reservation_rejected` with reason `offline`, `busy` or `suspended`.
-- dispatch on `courier.reserved`: if the delivery is `reserving` with that courier → `assigned`, compute `eta_minutes` (5.9), emit `delivery.assigned`. In any other case emit `delivery.courier_released` for that courier and delivery.
+- dispatch on `courier.reserved`: if the delivery is `reserving` with that courier and `now < reserve_deadline` → `assigned`, compute `eta_minutes` (5.9), emit `delivery.assigned`. If it is `reserving` with that courier at or after `reserve_deadline`, treat it as the timeout below. If it is already `assigned` or `picked_up` with that courier, do nothing. In every other case (another courier, or any other status) emit `delivery.courier_released` for the courier and delivery named in the event.
 - dispatch on `courier.reservation_rejected`: if `reserving` with that courier → `searching`, courier cleared, `next_offer_at = now`. Otherwise no-op.
 - Reservation sweeper: `reserving` deliveries with `reserve_deadline <= now` → `searching`, courier cleared, emit `delivery.courier_released`.
 - couriers on `delivery.courier_released`, `delivery.unassigned`, `delivery.cancelled`, `delivery.delivered`: if `active_delivery_id` equals the delivery, clear it, bump `status_version`, emit `courier.status_changed`; otherwise change nothing. `delivery.delivered` also records a `delivery` earning of `courier_payout_minor`; `delivery.cancelled` with `courier_was_assigned = true` and a `courier_id` records a `cancellation_compensation` earning of `compensation_minor`. Earnings are recorded for the named courier whether or not the courier was still attached, and at most once per `(courier, delivery, kind)`.
@@ -332,6 +332,9 @@ Retry and dead-letter behaviour for all consumers is in 5.10. Shutdown on `SIGTE
 47. Relay crash between publish and mark: the event is published again with the same id and has no second effect.
 48. Two instances of a service: one relay publishes at a time; offer loops do not offer one delivery twice.
 49. ETA when the courier arrives before the food is ready uses the wait; when the food is ready first it uses travel time.
+50. `courier.reserved` for a delivery already `assigned` to or `picked_up` by that courier changes nothing; the courier stays attached. The same event handled at or after `reserve_deadline` releases the courier and returns the delivery to `searching`.
+51. Running the end-to-end suite leaves the streams of the development NATS server untouched.
+52. A courier created by the seed is known to dispatch with its vehicle before its first shift.
 
 ## 9. Non-goals
 

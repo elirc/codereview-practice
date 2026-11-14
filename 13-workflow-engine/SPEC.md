@@ -85,9 +85,11 @@ A paused queue still accepts jobs.
 `claim(queue, kinds, worker_id, limit, now)` is one transaction per queue:
 
 1. Read the queue; `paused` → nothing. If the queue has `max_concurrency` or a rate limit, lock its row `FOR UPDATE`; otherwise take no queue lock.
-2. `allowance = limit`. With `max_concurrency`: `allowance = min(allowance, max_concurrency − running jobs in the queue)`. With a rate limit: refill `tokens = min(rate_burst × 1000, rate_tokens_milli + elapsed_ms × rate_limit_per_minute / 60)` where `elapsed_ms = max(0, now − rate_refilled_at)`; `allowance = min(allowance, tokens / 1000)`. `allowance <= 0` → nothing (the refill is still stored).
+2. `allowance = limit`. With `max_concurrency`: `allowance = min(allowance, max_concurrency − running jobs in the queue)`. With a rate limit: refill the bucket (below) and take `allowance = min(allowance, tokens / 1000)`. `allowance <= 0` → nothing (the refill is still stored).
 3. Select up to `allowance` jobs: `state = 'pending' AND run_at <= now AND kind = ANY(kinds) AND NOT cancel_requested`, ordered by `priority DESC, run_at, id`, `FOR UPDATE SKIP LOCKED`; update them to `running` with `attempt + 1`, `lease_epoch + 1`, `lease_owner = worker_id`, `lease_expires_at = now + lease_seconds`, `heartbeat_at = now`, `started_at = now`; insert a `JobAttempt` per job.
-4. With a rate limit: subtract `1000 × claimed` tokens and set `rate_refilled_at = max(rate_refilled_at, now)`.
+4. With a rate limit: subtract `1000 × claimed` tokens; `rate_refilled_at` stays as the refill left it.
+
+**Refill.** `elapsed_ms = now − rate_refilled_at`. When `elapsed_ms <= 0` nothing is added and `rate_refilled_at` does not move. Otherwise `added = floor(elapsed_ms × rate_limit_per_minute / 60)` milli-tokens. If `rate_tokens_milli + added >= rate_burst × 1000`, the bucket is full: `tokens = rate_burst × 1000` and `rate_refilled_at = now`. If not, `tokens = rate_tokens_milli + added` and `rate_refilled_at` advances by `ceil(added × 60 / rate_limit_per_minute)` ms, the time that produced those whole milli-tokens; the rest of the elapsed time counts toward the next refill. `rate_refilled_at` never moves backwards.
 
 A token is consumed when a job starts, including retries. Jobs of a kind no worker lists stay `pending`.
 
@@ -105,7 +107,7 @@ Handlers return `Ok(value)`, `Err(Retryable(msg))`, `Err(Permanent(msg))` or `Er
 - `Ok` → `succeeded`, `result` stored, even when `cancel_requested` is set. A result over the size limit is treated as `Permanent("result_too_large")`.
 - `Retryable`: `cancel_requested` → `cancelled`; `attempt >= max_attempts` → `dead` (`attempts_exhausted`); otherwise `pending`, `run_at = now + backoff(attempt)`.
 - `Permanent` → `dead` (`permanent_failure`), whatever attempts remain.
-- `Cancelled` → `cancelled` if `cancel_requested`, else handled as `Retryable("cancelled without request")`.
+- `Cancelled` → `cancelled` if `cancel_requested`, else handled as `Retryable("cancelled without request")`. This does not apply to a handler stopped by its own worker's shutdown (5.7).
 - `backoff(n)`: `raw = backoff_base_ms × 2^min(n − 1, 30)`; `jittered = raw × (0.8 + 0.4 × r)` with `r` in `[0, 1)` from the `JitterSource`; `delay = min(backoff_cap_ms, jittered)`; arithmetic saturates.
 
 Execution is at-least-once. Handlers receive `idempotency_key = <job id>` (stable across attempts) and must use it for external effects.
@@ -137,10 +139,10 @@ Fire times that passed while a schedule was paused are not caught up. Editing `c
 Configuration: `WORKER_QUEUES`, `WORKER_CONCURRENCY` (default 8), `POLL_INTERVAL_MS` (500), `SHUTDOWN_GRACE_SECONDS` (30), `LEASE_SAFETY_MS` (2000). `worker_id` is `<hostname>-<8 random hex>`.
 
 - **Loop**: while running, compute free slots, call `claim` on each configured queue in rotation for up to the free slots with the kinds of the registered handlers, spawn one task per job, sleep the poll interval when nothing was claimed.
-- **Per job**: a heartbeat task ticks every `lease_seconds / 3`. `LeaseLost` → cancel the token and mark the claim abandoned. `cancel_requested` → cancel the token. A heartbeat that fails with a database error is retried on the next tick; when the time since the last successful heartbeat reaches `lease_seconds × 1000 − LEASE_SAFETY_MS` on the monotonic clock, the worker cancels the token and abandons the claim.
+- **Per job**: a heartbeat task ticks every `lease_seconds / 3`. `LeaseLost` → cancel the token and mark the claim abandoned. `cancel_requested` → cancel the token. A heartbeat that fails with a database error is retried on the next tick; when the time since the last successful heartbeat reaches `lease_seconds × 1000 − LEASE_SAFETY_MS` on the monotonic clock, the worker cancels the token and abandons the claim. Both instants are taken immediately before the call is sent: the first deadline counts from just before the `claim` call that returned the job, and each later one from just before the heartbeat that succeeded.
 - **Reporting**: outcomes are written per 5.3/5.4. An abandoned claim is never reported. If the report fails with a database error it is retried with a short back-off until the abandonment deadline above, then dropped.
 - **Handlers** (`#[async_trait] trait Handler { async fn run(&self, ctx: JobContext) -> Result<Value, HandlerError>; }`, registered by kind): `noop` (returns the payload); `sleep` (`{ ms }`, stops early with `Cancelled` when the token fires); `fail` (`{ mode, succeed_on_attempt? }`); `http` (`{ method, url, headers?, body?, timeout_ms? }`; sends `Idempotency-Key`; connect errors, timeouts, `5xx`, `408` and `429` are `Retryable`; other `4xx` are `Permanent`; returns `{ status, body }` with the body cut at 65,536 bytes); `merge` (returns `payload.parents`).
-- **Shutdown** on `SIGTERM` or Ctrl-C: stop claiming at once; wait up to the grace period for running handlers and report those that finish; then cancel the remaining tokens and wait up to 5 s; then **release** every claim still held: `pending`, `run_at = now`, `attempt − 1`, lease cleared, attempt outcome `released` (conditioned as in 5.3); then exit.
+- **Shutdown** on `SIGTERM` or Ctrl-C: stop claiming at once; wait up to the grace period for running handlers and report those that finish; then cancel the remaining tokens and wait up to 5 s; then **release** every claim still held: `pending`, `run_at = now`, `attempt − 1`, lease cleared, attempt outcome `released` (conditioned as in 5.3); then exit. A handler that returns `Cancelled` after the worker cancelled its token for shutdown is not reported per 5.4; its claim stays held and is released like one whose handler did not stop. A released job with `cancel_requested` becomes `cancelled` (attempt outcome `cancelled`, attempt count still restored) instead of `pending`.
 
 ### 5.8 Workflows
 
@@ -176,11 +178,11 @@ Prefix `/api`, `snake_case` JSON, cursor pagination (`?after=&limit=`, default 5
 
 | Method & path | Notes |
 |---|---|
-| `GET/POST /queues`, `GET/PATCH /queues/{name}` | |
+| `GET/POST /queues`, `GET/PATCH /queues/{name}` | Creating a queue whose name exists is `409 invalid_state` |
 | `POST /queues/{name}/pause`, `/resume`, `GET /queues/{name}/stats` | Stats: counts by state, oldest `pending` `run_at`, tokens available |
 | `POST /jobs`, `GET /jobs/{id}`, `GET /jobs?queue=&state=&kind=` | Detail includes attempts |
 | `POST /jobs/{id}/cancel`, `/requeue` | 5.5 |
-| `GET/POST /schedules`, `GET/PATCH/DELETE /schedules/{id}`, `POST /schedules/{id}/pause`, `/resume` | 5.6; deleting a schedule leaves its jobs |
+| `GET/POST /schedules`, `GET/PATCH/DELETE /schedules/{id}`, `POST /schedules/{id}/pause`, `/resume` | 5.6; deleting a schedule leaves its jobs; a schedule name that exists is `409 invalid_state` |
 | `POST /workflow-definitions`, `GET /workflow-definitions/{name}` | all versions |
 | `POST /workflow-runs`, `GET /workflow-runs/{id}`, `GET /workflow-runs?state=` | Detail lists steps with state, job id and output |
 | `POST /workflow-runs/{id}/cancel`, `/retry` | 5.8 |
@@ -258,6 +260,11 @@ Server shutdown: stop accepting requests, let in-flight requests and the current
 47. A payload of 65,537 bytes is `413`; a result over the limit kills the job with `permanent_failure`.
 48. A submitter token enqueues only to its queues, cannot start a workflow that touches another queue, and gets `404` for jobs elsewhere.
 49. Purge leaves the jobs of a still-running run in place even when they finished long ago.
+50. Rate limit 1/min, empty bucket, polled every 500 ms by several workers: one job starts each minute; the time between polls is not lost.
+51. Worker `SIGTERM` with a handler that stops with `Cancelled` when its token is cancelled after the grace: the claim is released with the attempt count restored, no failure is recorded, and a job on its last attempt is not `dead`.
+52. A claim released at shutdown for a job with `cancel_requested` ends `cancelled`.
+53. A `claim` call that takes 3 s to return a job with a 10 s lease: with no successful heartbeat the worker abandons the claim 8 s after the call was sent, not 8 s after it returned.
+54. Creating a queue or a schedule with a name that already exists is `409 invalid_state`.
 
 ## 9. Non-goals
 
