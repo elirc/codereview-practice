@@ -1,0 +1,31 @@
+<% content_for :title, "Sign up" %>
+
+<h1>Create an account</h1>
+
+<%= form_with model: @user, url: registration_path do |form| %>
+  <%= render "shared/form_errors", record: @user %>
+
+  <div class="field">
+    <%= form.label :name %>
+    <%= form.text_field :name, required: true, autofocus: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :email_address %>
+    <%= form.email_field :email_address, required: true, autocomplete: "username" %>
+  </div>
+
+  <div class="field">
+    <%= form.label :password %>
+    <%= form.password_field :password, required: true, autocomplete: "new-password", maxlength: 72 %>
+  </div>
+
+  <div class="field">
+    <%= form.label :password_confirmation %>
+    <%= form.password_field :password_confirmation, required: true, autocomplete: "new-password", maxlength: 72 %>
+  </div>
+
+  <%= form.submit "Sign up" %>
+<% end %>
+
+<p>Already registered? <%= link_to "Sign in", new_session_path %></p>

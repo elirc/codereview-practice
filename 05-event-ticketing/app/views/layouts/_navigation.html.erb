@@ -1,3 +1,10 @@
 <nav>
   <strong>Event Ticketing</strong>
+  <% if authenticated? %>
+    <span class="muted"><%= current_user.name %> (<%= current_user.role %>)</span>
+    <%= button_to "Sign out", session_path, method: :delete %>
+  <% else %>
+    <%= link_to "Sign in", new_session_path %>
+    <%= link_to "Sign up", new_registration_path %>
+  <% end %>
 </nav>
