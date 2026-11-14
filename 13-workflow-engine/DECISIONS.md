@@ -13,3 +13,9 @@ Short records of places where the spec left a choice open.
 - **Queue lists on non-submitter tokens.** Only submitter tokens are limited to queues, so creating
   a viewer, operator or admin token with a non-empty `queues` list is rejected with
   `400 validation_failed` instead of silently ignoring the list.
+- **Token bucket remainder.** Applying the refill formula literally and then setting
+  `rate_refilled_at = max(rate_refilled_at, now)` throws away the fractional milli-tokens on every
+  claim, so a low rate (for example 1 per minute) polled by several workers would never refill.
+  The refill advances `rate_refilled_at` only by the time that produced whole milli-tokens, and
+  moves it to `now` once the bucket is full. It never moves backwards, and a `now` earlier than
+  `rate_refilled_at` adds nothing.

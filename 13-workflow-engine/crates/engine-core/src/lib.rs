@@ -9,5 +9,6 @@ pub mod clock;
 pub mod limits;
 pub mod names;
 pub mod outcome;
+pub mod rate;
 pub mod secrets;
 pub mod state;
