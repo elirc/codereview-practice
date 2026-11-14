@@ -7,9 +7,12 @@ import type { Database } from './db/index.js';
 import type { Clock } from './lib/clock.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
-import { registerSessionAuth } from './plugins/auth.js';
+import { memberRoutes } from './modules/members/routes.js';
+import { orgCreationRoutes, orgRoutes } from './modules/orgs/routes.js';
+import { registerSessionAuth, requireUser } from './plugins/auth.js';
 import { registerCsrfProtection } from './plugins/csrf.js';
 import { registerErrorHandling } from './plugins/error-handler.js';
+import { registerTenantContext, resolveTenant } from './plugins/tenant.js';
 
 export interface AppDeps {
   config: Config;
@@ -46,6 +49,7 @@ export async function buildApp(deps: AppDeps) {
   });
   registerCsrfProtection(base, deps.config.appOrigin);
   registerSessionAuth(base);
+  registerTenantContext(base);
   registerErrorHandling(base);
 
   const app = base.withTypeProvider<TypeBoxTypeProvider>();
@@ -53,6 +57,18 @@ export async function buildApp(deps: AppDeps) {
     async (api) => {
       await api.register(healthRoutes);
       await api.register(authRoutes);
+      await api.register(async (authed) => {
+        authed.addHook('onRequest', requireUser);
+        await authed.register(orgCreationRoutes);
+        await authed.register(
+          async (tenant) => {
+            tenant.addHook('preHandler', resolveTenant);
+            await tenant.register(orgRoutes);
+            await tenant.register(memberRoutes);
+          },
+          { prefix: '/orgs/:orgSlug' },
+        );
+      });
     },
     { prefix: '/api' },
   );
