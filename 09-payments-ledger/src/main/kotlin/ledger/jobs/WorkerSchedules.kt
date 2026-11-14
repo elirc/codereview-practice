@@ -1,0 +1,32 @@
+package ledger.jobs
+
+import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
+import org.springframework.scheduling.annotation.EnableScheduling
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Component
+import java.time.Clock
+
+@Configuration
+@Profile("worker")
+@EnableScheduling
+class SchedulingConfig
+
+/** The periodic loops of the worker process. */
+@Component
+@Profile("worker")
+class WorkerSchedules(
+    private val clock: Clock,
+    private val jobs: JobRunner,
+    private val idempotencyPurge: IdempotencyPurgeJob
+) {
+    @Scheduled(fixedDelay = HOUR_MS, initialDelay = MINUTE_MS)
+    fun purgeIdempotencyKeys() {
+        jobs.run("idempotency-purge") { idempotencyPurge.runOnce(clock.instant()) }
+    }
+
+    private companion object {
+        const val MINUTE_MS = 60_000L
+        const val HOUR_MS = 3_600_000L
+    }
+}

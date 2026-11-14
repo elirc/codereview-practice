@@ -1,10 +1,13 @@
 package ledger.api
 
+import com.fasterxml.jackson.databind.JsonNode
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import ledger.domain.Caller
 import ledger.domain.Role
+import ledger.idempotency.ApiResult
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -36,13 +39,22 @@ data class CreatedApiKeyResponse(
 
 @RestController
 @RequestMapping("/v1/api-keys")
-class ApiKeyController(private val apiKeys: ApiKeyService) {
+class ApiKeyController(
+    private val apiKeys: ApiKeyService,
+    private val idempotent: IdempotentRequests
+) {
     @PostMapping
-    fun create(caller: Caller, @Valid @RequestBody body: CreateApiKeyRequest): ResponseEntity<CreatedApiKeyResponse> {
+    fun create(
+        caller: Caller,
+        @Valid @RequestBody body: CreateApiKeyRequest,
+        request: HttpServletRequest
+    ): ResponseEntity<JsonNode> = idempotent.run(caller, request, body) {
         val created = apiKeys.create(caller, body.name.trim(), body.role, body.ownerId)
         val key = created.apiKey
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .body(CreatedApiKeyResponse(key.id, key.name, key.role, key.ownerId, key.createdAt, created.secret))
+        ApiResult(
+            HttpStatus.CREATED.value(),
+            CreatedApiKeyResponse(key.id, key.name, key.role, key.ownerId, key.createdAt, created.secret)
+        )
     }
 
     @DeleteMapping("/{id}")

@@ -1,5 +1,7 @@
 package ledger.api
 
+import com.fasterxml.jackson.databind.JsonNode
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -8,6 +10,7 @@ import ledger.domain.Caller
 import ledger.domain.Currency
 import ledger.domain.Page
 import ledger.domain.PageRequest
+import ledger.idempotency.ApiResult
 import ledger.ledger.Account
 import ledger.ledger.AccountPosting
 import ledger.ledger.AccountService
@@ -36,14 +39,18 @@ data class CreateAccountRequest(
 
 @RestController
 @RequestMapping("/v1/accounts")
-class AccountController(private val accounts: AccountService) {
+class AccountController(
+    private val accounts: AccountService,
+    private val idempotent: IdempotentRequests
+) {
     @PostMapping
-    fun create(caller: Caller, @Valid @RequestBody body: CreateAccountRequest): ResponseEntity<Account> {
-        val account = accounts.create(
-            caller,
-            CreateAccountCommand(body.ownerId, body.type, body.currency, body.feeBps, body.payoutEnabled)
-        )
-        return ResponseEntity.status(HttpStatus.CREATED).body(account)
+    fun create(
+        caller: Caller,
+        @Valid @RequestBody body: CreateAccountRequest,
+        request: HttpServletRequest
+    ): ResponseEntity<JsonNode> = idempotent.run(caller, request, body) {
+        val command = CreateAccountCommand(body.ownerId, body.type, body.currency, body.feeBps, body.payoutEnabled)
+        ApiResult(HttpStatus.CREATED.value(), accounts.create(caller, command))
     }
 
     @GetMapping("/{id}")
