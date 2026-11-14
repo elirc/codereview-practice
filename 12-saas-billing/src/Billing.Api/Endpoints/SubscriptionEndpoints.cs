@@ -15,7 +15,41 @@ public static class SubscriptionEndpoints
 
         var write = v1.MapGroup("/subscriptions").RequireRole(Roles.Writers);
         write.MapPost(string.Empty, Create).Validate<CreateSubscriptionRequest>();
+        write.MapPost("/{id:guid}/change", Change).Validate<ChangeSubscriptionRequest>();
+        write.MapPost("/{id:guid}/cancel", Cancel).Validate<CancelSubscriptionRequest>();
+        write.MapPost("/{id:guid}/resume", Resume);
     }
+
+    private static Task<IResult> Change(
+        Guid id,
+        ChangeSubscriptionRequest body,
+        HttpContext http,
+        IdempotentExecutor idempotency,
+        SubscriptionLifecycle lifecycle,
+        CancellationToken ct) =>
+        idempotency.ExecuteAsync(
+            http,
+            body,
+            StatusCodes.Status200OK,
+            () => lifecycle.ChangeAsync(id, body.PlanCode, body.Quantity, ct),
+            ct);
+
+    private static Task<IResult> Cancel(
+        Guid id,
+        CancelSubscriptionRequest body,
+        HttpContext http,
+        IdempotentExecutor idempotency,
+        SubscriptionLifecycle lifecycle,
+        CancellationToken ct) =>
+        idempotency.ExecuteAsync(
+            http,
+            body,
+            StatusCodes.Status200OK,
+            () => lifecycle.CancelAsync(id, body.Mode!.Value, ct),
+            ct);
+
+    private static async Task<IResult> Resume(Guid id, SubscriptionLifecycle lifecycle, CancellationToken ct) =>
+        Results.Ok(await lifecycle.ResumeAsync(id, ct));
 
     private static async Task<IResult> List(Guid? customerId, string? after, int? limit, SubscriptionService subscriptions, CancellationToken ct) =>
         Results.Ok(await subscriptions.ListAsync(customerId, PageQuery.Parse(after, limit), ct));

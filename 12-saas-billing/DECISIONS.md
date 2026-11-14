@@ -17,3 +17,7 @@ Points the spec leaves open, the choice made, and why.
 - **Rating covers only the events of one sealing.** Each sealing rates exactly the rows it marked, so usage sealed earlier into the same period (for example by an upgrade that drops a meter) is never priced a second time.
 - **Usage timestamps.** `occurredAt` is truncated to microseconds before it is stored and compared, matching the precision of `timestamptz`.
 - **Usage summary periods.** `GET /subscriptions/{id}/usage` reports, per meter, the events billed in the requested period and the unbilled events whose `occurredAt` falls inside it; a trialing subscription has no period and returns `404`.
+- **Equal-value plan changes.** A change whose recurring amount is unchanged takes effect at once without an invoice, but the current period keeps the plan it started with for rating usage, the same way a downgrade does. Only an increase moves the current period to the new plan.
+- **Meters dropped by an upgrade** are the usage meters of the plan rating the current period that the new plan does not price.
+- **Repeated period-end cancellation.** Asking again for `period_end` cancellation of a subscription that is already scheduled returns it unchanged without a new event. `resume` on a subscription that is not scheduled to cancel is `409 invalid_state`. Cancelling a trialing subscription ends it at once whichever mode is given.
+- **Immediate cancellation seals usage with `occurredAt < now`,** as the spec says; an event accepted earlier with an `occurredAt` up to five minutes in the future is not billed.

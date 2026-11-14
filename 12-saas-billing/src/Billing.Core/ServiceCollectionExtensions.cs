@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SubscriptionService>();
         services.AddScoped<UsageRating>();
         services.AddScoped<UsageService>();
+        services.AddScoped<SubscriptionLifecycle>();
         services.AddScoped<SubscriptionBiller>();
         services.AddScoped<BillingRun>();
 

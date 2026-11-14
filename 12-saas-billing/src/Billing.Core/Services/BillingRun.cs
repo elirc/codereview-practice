@@ -1,4 +1,5 @@
 using Billing.Core.Data;
+using Billing.Core.Views;
 using Billing.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -128,15 +129,67 @@ public sealed class SubscriptionBiller(
             subscription.Id,
             now);
 
+        if (subscription.CancelAtPeriodEnd)
+        {
+            await EndAtPeriodEndAsync(subscription, customer, ended, charges, now, ct);
+            return;
+        }
+
+        SubscriptionSnapshot? previous = null;
+        if (subscription.PendingPlanId is not null || subscription.PendingQuantity is not null)
+        {
+            var currentCode = (await LoadPlanAsync(subscription.PlanId, ct)).Code;
+            previous = new SubscriptionSnapshot(currentCode, subscription.Quantity, subscription.Status);
+            subscription.PlanId = subscription.PendingPlanId ?? subscription.PlanId;
+            subscription.Quantity = subscription.PendingQuantity ?? subscription.Quantity;
+            subscription.PendingPlanId = null;
+            subscription.PendingQuantity = null;
+        }
+
         var plan = ended.PlanId == subscription.PlanId ? ratingPlan : await LoadPlanAsync(subscription.PlanId, ct);
         var next = cycle.OpenPeriod(subscription, plan, ended.Index + 1, zone);
         var invoice = cycle.NewInvoice(subscription, customer.Currency, InvoiceKind.Cycle, next.PeriodStart, next.PeriodEnd);
         usage.AddUsageLines(invoice, charges, ended);
         cycle.AddAdvanceLines(invoice, plan, subscription.Quantity, next.PeriodStart, next.PeriodEnd);
         await cycle.SaveAndFinalizeAsync(invoice, ct);
+
+        if (previous is not null)
+        {
+            await events.SubscriptionUpdatedAsync(subscription, previous, ct);
+        }
+    }
+
+    private async Task EndAtPeriodEndAsync(
+        Subscription subscription,
+        Customer customer,
+        SubscriptionPeriod ended,
+        IReadOnlyList<UsageCharge> charges,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        subscription.Status = SubscriptionStatus.Canceled;
+        subscription.CanceledAt = now;
+        subscription.CancelReason = CancelReason.Requested;
+        subscription.EndedOn = ended.PeriodEnd;
+        subscription.FinalSealedAt = now;
+        subscription.NextBillingAt = null;
+        subscription.PendingPlanId = null;
+        subscription.PendingQuantity = null;
+
+        if (charges.Count > 0)
+        {
+            var invoice = cycle.NewInvoice(subscription, customer.Currency, InvoiceKind.Final, ended.PeriodStart, ended.PeriodEnd);
+            usage.AddUsageLines(invoice, charges, ended);
+            await cycle.SaveAndFinalizeAsync(invoice, ct);
+        }
+
+        await events.SubscriptionAsync(
+            EventTypes.SubscriptionCanceled,
+            subscription,
+            new Dictionary<string, object?> { ["reason"] = CancelReason.Requested },
+            ct);
     }
 
     private async Task<Plan> LoadPlanAsync(Guid planId, CancellationToken ct) =>
         await db.PlanWithItemsAsync(planId, ct) ?? throw new InvalidOperationException($"Plan {planId} does not exist.");
-    }
 }
