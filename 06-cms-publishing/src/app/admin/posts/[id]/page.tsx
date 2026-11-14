@@ -69,6 +69,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
           </span>
         )}
         <Link href={`/admin/posts/${post.id}/revisions`}>Revisions</Link>
+        <a href={`/api/preview?postId=${post.id}&revisionId=${latest.id}`}>Preview</a>
         {post.publishedRevisionId && <Link href={`/posts/${post.slug}`}>View live</Link>}
       </div>
 

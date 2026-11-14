@@ -124,6 +124,9 @@ export default async function RevisionsPage({
               </td>
               <td>
                 <div className="actions">
+                  <a href={`/api/preview?postId=${post.id}&revisionId=${revision.id}`}>
+                    Preview
+                  </a>
                   {canEdit && (
                     <ActionButton
                       label="Restore"
