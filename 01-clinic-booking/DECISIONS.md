@@ -54,3 +54,7 @@ The spec asks for one "rescheduled" email after commit but lists only `email.can
 ## Email enqueue failures
 
 Cancellation and reschedule emails are enqueued after the database transaction commits. If enqueueing fails, the error is logged and the API still reports the committed change; the appointment state is never rolled back over a notification.
+
+## Retry timing for failed reminders
+
+The spec returns a failed reminder to `PENDING` without saying when it is retried. It is picked up by the next dispatch run (about a minute later) with its original `scheduledFor`, so the 30-minute staleness rule still applies to retries: a reminder that keeps failing past that point is `SKIPPED` rather than sent late.
