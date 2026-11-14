@@ -168,3 +168,27 @@ export async function call<P extends Record<string, string>>(
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : null, headers: res.headers };
 }
+
+export interface AppointmentFixture {
+  providerId: string;
+  patientId: string;
+  bookedByUserId: string;
+  startsAt: string;
+  minutes?: number;
+  status?: "BOOKED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
+}
+
+/** Inserts an appointment row directly, bypassing booking rules. */
+export async function insertAppointment(fixture: AppointmentFixture) {
+  const startsAt = DateTime.fromISO(fixture.startsAt, { setZone: true }).toUTC();
+  return db.appointment.create({
+    data: {
+      providerId: fixture.providerId,
+      patientId: fixture.patientId,
+      bookedByUserId: fixture.bookedByUserId,
+      startsAt: startsAt.toJSDate(),
+      endsAt: startsAt.plus({ minutes: fixture.minutes ?? 30 }).toJSDate(),
+      status: fixture.status ?? "BOOKED",
+    },
+  });
+}
