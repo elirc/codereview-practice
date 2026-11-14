@@ -5,7 +5,9 @@ import Fastify from 'fastify';
 import type { Config } from './config.js';
 import type { Database } from './db/index.js';
 import type { Clock } from './lib/clock.js';
+import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { registerSessionAuth } from './plugins/auth.js';
 import { registerCsrfProtection } from './plugins/csrf.js';
 import { registerErrorHandling } from './plugins/error-handler.js';
 
@@ -43,12 +45,14 @@ export async function buildApp(deps: AppDeps) {
     reply.header('x-request-id', request.id);
   });
   registerCsrfProtection(base, deps.config.appOrigin);
+  registerSessionAuth(base);
   registerErrorHandling(base);
 
   const app = base.withTypeProvider<TypeBoxTypeProvider>();
   await app.register(
     async (api) => {
       await api.register(healthRoutes);
+      await api.register(authRoutes);
     },
     { prefix: '/api' },
   );
