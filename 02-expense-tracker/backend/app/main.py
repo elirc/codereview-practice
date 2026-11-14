@@ -7,9 +7,14 @@ from app.core.db import build_engine, build_session_factory
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
+from app.services.storage import LocalDiskStorage, ReceiptStorage
 
 
-def create_app(settings: Settings | None = None, clock: Clock | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    clock: Clock | None = None,
+    storage: ReceiptStorage | None = None,
+) -> FastAPI:
     """Application factory; run with `uvicorn app.main:create_app --factory`."""
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -20,6 +25,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app.state.engine = engine
     app.state.session_factory = build_session_factory(engine)
     app.state.clock = clock or SystemClock()
+    app.state.storage = storage or LocalDiskStorage(settings.receipt_storage_dir)
 
     install_error_handlers(app)
     app.add_middleware(RequestContextMiddleware)

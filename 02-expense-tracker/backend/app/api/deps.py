@@ -11,6 +11,7 @@ from app.domain.errors import Forbidden, Unauthenticated
 from app.models import User
 from app.services import auth as auth_service
 from app.services.context import ServiceContext
+from app.services.storage import ReceiptStorage
 
 SESSION_COOKIE = "et_session"
 CSRF_HEADER = "x-requested-with"
@@ -30,8 +31,14 @@ def get_clock(request: Request) -> Clock:
     return clock
 
 
+def get_storage(request: Request) -> ReceiptStorage:
+    storage: ReceiptStorage = request.app.state.storage
+    return storage
+
+
 AppSettings = Annotated[Settings, Depends(get_settings_dep)]
 AppClock = Annotated[Clock, Depends(get_clock)]
+Storage = Annotated[ReceiptStorage, Depends(get_storage)]
 
 
 def require_csrf_header(request: Request) -> None:

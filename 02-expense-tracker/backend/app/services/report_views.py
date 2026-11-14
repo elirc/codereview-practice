@@ -9,6 +9,7 @@ from app.domain.policy import requires_receipt
 from app.domain.state_machine import is_editable
 from app.models import ApprovalStep, ExpenseLine, Report, User
 from app.schemas.money import rate_text
+from app.schemas.receipts import ReceiptOut
 from app.schemas.reports import (
     Capabilities,
     LineOut,
@@ -25,7 +26,7 @@ from app.services.permissions import capabilities, current_step
 
 DETAIL_OPTIONS = (
     selectinload(Report.owner),
-    selectinload(Report.lines),
+    selectinload(Report.lines).selectinload(ExpenseLine.receipt),
     selectinload(Report.steps).selectinload(ApprovalStep.approver),
     selectinload(Report.steps).selectinload(ApprovalStep.decider),
     selectinload(Report.reimbursement),
@@ -72,6 +73,7 @@ def _line_out(line: ExpenseLine, estimate: int | None) -> LineOut:
         amount_minor=line.amount_minor,
         currency=line.currency,
         receipt_id=line.receipt_id,
+        receipt=ReceiptOut.model_validate(line.receipt) if line.receipt is not None else None,
         rate_used=rate_text(line.rate_used) if line.rate_used is not None else None,
         rate_effective_date=line.rate_effective_date,
         base_amount_minor=line.base_amount_minor,

@@ -9,7 +9,7 @@ from app.domain.errors import InvalidTransition, NotFound
 from app.domain.state_machine import ensure_editable
 from app.models import ExpenseLine, Report
 from app.schemas.reports import LineCreate, LineUpdate, OwnerScope
-from app.services import audit
+from app.services import audit, receipts
 from app.services.access import ensure_version, get_own_report, touch, visible_reports_clause
 from app.services.context import ServiceContext
 
@@ -137,6 +137,7 @@ def add_line(ctx: ServiceContext, report_id: uuid.UUID, data: LineCreate) -> Exp
         updated_at=ctx.now,
     )
     ctx.db.add(line)
+    attached = receipts.attach_to_line(ctx, line, data.receipt_id)
     touch(report, ctx)
     audit.record(
         ctx,
@@ -146,7 +147,9 @@ def add_line(ctx: ServiceContext, report_id: uuid.UUID, data: LineCreate) -> Exp
         action="line.added",
         after=audit.snapshot(line, LINE_AUDIT_FIELDS),
     )
-    ctx.db.commit()
+    if attached:
+        receipts.record_attachment(ctx, report, line)
+    receipts.commit_attachment(ctx)
     return line
 
 
@@ -160,6 +163,9 @@ def update_line(
     for name in LINE_EDITABLE_FIELDS:
         if name in data.model_fields_set:
             setattr(line, name, getattr(data, name))
+    attached = "receipt_id" in data.model_fields_set and receipts.attach_to_line(
+        ctx, line, data.receipt_id
+    )
 
     old, new = audit.changed_fields(before, audit.snapshot(line, LINE_AUDIT_FIELDS))
     touch(report, ctx)
@@ -174,7 +180,9 @@ def update_line(
             before=old,
             after=new,
         )
-    ctx.db.commit()
+    if attached:
+        receipts.record_attachment(ctx, report, line)
+    receipts.commit_attachment(ctx)
     return line
 
 

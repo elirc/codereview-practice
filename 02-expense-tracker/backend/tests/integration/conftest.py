@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.models import User
 from tests.conftest import DEFAULT_TEST_DATABASE_URL, SteppingClock
+from tests.fakes import InMemoryStorage
 from tests.integration.factories import signed_in_client
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -56,8 +57,15 @@ def db(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def app(test_settings: Settings, clock: SteppingClock, engine: Engine) -> Iterator[FastAPI]:
-    application = create_app(test_settings, clock=clock)
+def storage() -> InMemoryStorage:
+    return InMemoryStorage()
+
+
+@pytest.fixture
+def app(
+    test_settings: Settings, clock: SteppingClock, storage: InMemoryStorage, engine: Engine
+) -> Iterator[FastAPI]:
+    application = create_app(test_settings, clock=clock, storage=storage)
     yield application
     application.state.engine.dispose()
 

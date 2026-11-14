@@ -7,6 +7,7 @@ from pydantic import BaseModel, StringConstraints, model_validator
 from app.domain.enums import ExpenseCategory, ReportStatus, StepKind, StepStatus
 from app.schemas.common import StrictModel
 from app.schemas.money import AmountMinor, CurrencyCode
+from app.schemas.receipts import ReceiptOut
 from app.schemas.users import UserSummary
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
@@ -32,6 +33,7 @@ class LineCreate(StrictModel):
     description: Description
     amount_minor: AmountMinor
     currency: CurrencyCode
+    receipt_id: uuid.UUID | None = None
 
 
 class LineUpdate(StrictModel):
@@ -41,6 +43,7 @@ class LineUpdate(StrictModel):
     description: Description | None = None
     amount_minor: AmountMinor | None = None
     currency: CurrencyCode | None = None
+    receipt_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def _non_null_changes(self) -> "LineUpdate":
@@ -58,6 +61,7 @@ class LineOut(BaseModel):
     amount_minor: int
     currency: str
     receipt_id: uuid.UUID | None
+    receipt: ReceiptOut | None
     rate_used: str | None
     rate_effective_date: date | None
     base_amount_minor: int | None
