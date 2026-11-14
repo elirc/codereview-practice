@@ -1,10 +1,11 @@
-//! Enqueueing, reading and listing jobs.
+//! Enqueueing, reading, listing, cancelling and requeueing jobs.
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
+use crate::error::is_unique_violation;
 use crate::models::{Job, JobAttempt, JOB_COLUMNS};
 use crate::page::TimeCursor;
 use crate::StoreError;
@@ -193,4 +194,116 @@ pub async fn list_jobs(
         .fetch_all(pool)
         .await?;
     Ok(jobs)
+}
+
+/// Result of [`cancel_job`].
+#[derive(Debug, Clone)]
+pub struct Cancellation {
+    pub job: Job,
+    /// True when the job was cancelled at once; false when a running job was asked to stop.
+    pub immediate: bool,
+}
+
+/// Cancels a pending job, or asks a running job to stop.
+///
+/// Fails with `WorkflowJob` for jobs that belong to a workflow run and with `InvalidState`
+/// for jobs that have already finished.
+pub async fn cancel_job(
+    pool: &PgPool,
+    id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<Cancellation, StoreError> {
+    let mut tx = pool.begin().await?;
+    let (state, workflow_run_id) = sqlx::query_as::<_, (String, Option<Uuid>)>(
+        "SELECT state, workflow_run_id FROM jobs WHERE id = $1 FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(StoreError::NotFound)?;
+    if workflow_run_id.is_some() {
+        return Err(StoreError::WorkflowJob);
+    }
+    let (updated, immediate) = match state.as_str() {
+        "pending" => {
+            let sql = format!(
+                "UPDATE jobs SET state = 'cancelled', finished_at = $2 \
+                 WHERE id = $1 AND state = 'pending' RETURNING {JOB_COLUMNS}"
+            );
+            let job = sqlx::query_as::<_, Job>(&sql)
+                .bind(id)
+                .bind(now)
+                .fetch_optional(&mut *tx)
+                .await?;
+            (job, true)
+        }
+        "running" => {
+            let sql = format!(
+                "UPDATE jobs SET cancel_requested = true \
+                 WHERE id = $1 AND state = 'running' RETURNING {JOB_COLUMNS}"
+            );
+            let job = sqlx::query_as::<_, Job>(&sql)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+            (job, false)
+        }
+        other => return Err(StoreError::InvalidState(format!("The job is already {other}."))),
+    };
+    let job =
+        updated.ok_or_else(|| StoreError::Corrupt(format!("job {id} changed while locked")))?;
+    tx.commit().await?;
+    Ok(Cancellation { job, immediate })
+}
+
+/// Puts a dead job back to `pending`, due at `now`, with its attempt count reset.
+///
+/// Fails with `WorkflowJob` for jobs of a workflow run, `InvalidState` for jobs that are not
+/// dead and `UniqueKeyConflict` when another live job holds the same unique key.
+pub async fn requeue_job(pool: &PgPool, id: Uuid, now: DateTime<Utc>) -> Result<Job, StoreError> {
+    let mut tx = pool.begin().await?;
+    let (state, workflow_run_id) = sqlx::query_as::<_, (String, Option<Uuid>)>(
+        "SELECT state, workflow_run_id FROM jobs WHERE id = $1 FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(StoreError::NotFound)?;
+    if workflow_run_id.is_some() {
+        return Err(StoreError::WorkflowJob);
+    }
+    if state != "dead" {
+        return Err(StoreError::InvalidState(
+            "Only dead jobs can be requeued.".to_string(),
+        ));
+    }
+    let job = reset_to_pending(&mut tx, id, now).await?;
+    tx.commit().await?;
+    Ok(job)
+}
+
+/// Resets a finished job to `pending`, due at `now`, keeping its attempt history.
+pub(crate) async fn reset_to_pending(
+    conn: &mut PgConnection,
+    id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<Job, StoreError> {
+    let sql = format!(
+        "UPDATE jobs SET state = 'pending', attempt = 0, run_at = $2, cancel_requested = false, \
+         last_error = NULL, dead_reason = NULL, result = NULL, finished_at = NULL \
+         WHERE id = $1 RETURNING {JOB_COLUMNS}"
+    );
+    let result = sqlx::query_as::<_, Job>(&sql)
+        .bind(id)
+        .bind(now)
+        .fetch_optional(&mut *conn)
+        .await;
+    match result {
+        Ok(Some(job)) => Ok(job),
+        Ok(None) => Err(StoreError::NotFound),
+        Err(err) if is_unique_violation(&err, "jobs_live_unique_key") => {
+            Err(StoreError::UniqueKeyConflict)
+        }
+        Err(err) => Err(err.into()),
+    }
 }

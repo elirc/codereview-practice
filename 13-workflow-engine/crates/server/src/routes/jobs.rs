@@ -199,3 +199,35 @@ pub async fn list(
         .encode()
     })))
 }
+
+/// `POST /api/jobs/{id}/cancel`: cancels a pending job (`200`) or asks a running job to stop
+/// (`202`).
+pub async fn cancel(
+    State(state): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<(StatusCode, Json<Job>), ApiError> {
+    ensure(&caller, Action::Cancel)?;
+    visible_job(&state, &caller, id).await?;
+    let cancellation = jobs::cancel_job(&state.pool, id, state.clock.now()).await?;
+    let status = if cancellation.immediate {
+        StatusCode::OK
+    } else {
+        StatusCode::ACCEPTED
+    };
+    tracing::info!(job_id = %id, immediate = cancellation.immediate, "job cancellation");
+    Ok((status, Json(cancellation.job)))
+}
+
+/// `POST /api/jobs/{id}/requeue`: puts a dead job back on its queue.
+pub async fn requeue(
+    State(state): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<Job>, ApiError> {
+    ensure(&caller, Action::Recover)?;
+    visible_job(&state, &caller, id).await?;
+    let job = jobs::requeue_job(&state.pool, id, state.clock.now()).await?;
+    tracing::info!(job_id = %id, "dead job requeued");
+    Ok(Json(job))
+}

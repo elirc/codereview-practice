@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod fake;
+
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeZone, Utc};

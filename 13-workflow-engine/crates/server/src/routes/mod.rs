@@ -25,6 +25,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/queues/:name/resume", post(queues::resume))
         .route("/jobs", get(jobs::list).post(jobs::enqueue))
         .route("/jobs/:id", get(jobs::show))
+        .route("/jobs/:id/cancel", post(jobs::cancel))
+        .route("/jobs/:id/requeue", post(jobs::requeue))
         .route("/tokens", post(tokens::create))
         .route("/tokens/:id", delete(tokens::revoke))
         .route_layer(middleware::from_fn_with_state(
