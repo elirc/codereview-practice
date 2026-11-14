@@ -5,7 +5,7 @@ use engine_core::authz::{Action, Caller};
 use engine_core::names::is_queue_name;
 use engine_store::models::Queue;
 use engine_store::page::Page;
-use engine_store::queues::{self, NewQueue, QueuePatch, RateLimit};
+use engine_store::queues::{self, NewQueue, QueuePatch, QueueStats, RateLimit};
 use serde::Deserialize;
 
 use crate::auth::{ensure, ensure_visible};
@@ -214,4 +214,16 @@ pub async fn resume(
 ) -> Result<Json<Queue>, ApiError> {
     ensure(&caller, Action::Control)?;
     Ok(Json(queues::set_queue_paused(&state.pool, &name, false).await?))
+}
+
+/// `GET /api/queues/{name}/stats`: job counts by state, oldest pending `run_at` and tokens.
+pub async fn stats(
+    State(state): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    ApiPath(name): ApiPath<String>,
+) -> Result<Json<QueueStats>, ApiError> {
+    ensure(&caller, Action::Read)?;
+    ensure_visible(&caller, &name)?;
+    let stats = queues::queue_stats(&state.pool, &name, state.clock.now()).await?;
+    Ok(Json(stats))
 }

@@ -11,6 +11,7 @@ use crate::error::ApiError;
 use crate::request_id::{assign_request_id, RequestId};
 use crate::state::AppState;
 
+mod admin;
 mod health;
 mod jobs;
 mod queues;
@@ -25,6 +26,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/queues/:name", get(queues::show).patch(queues::update))
         .route("/queues/:name/pause", post(queues::pause))
         .route("/queues/:name/resume", post(queues::resume))
+        .route("/queues/:name/stats", get(queues::stats))
         .route("/jobs", get(jobs::list).post(jobs::enqueue))
         .route("/jobs/:id", get(jobs::show))
         .route("/jobs/:id/cancel", post(jobs::cancel))
@@ -59,6 +61,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/healthz", get(health::healthz));
 
     Router::new()
+        .route("/", get(admin::index))
         .nest("/api", api)
         .fallback(not_found)
         .layer(

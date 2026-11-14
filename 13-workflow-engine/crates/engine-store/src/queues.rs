@@ -1,6 +1,11 @@
 //! Queue definitions and controls.
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
+use engine_core::rate::{refill, Bucket};
+use engine_core::state::JobState;
+use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 
 use crate::error::is_unique_violation;
@@ -210,4 +215,61 @@ pub async fn set_queue_paused(
         .fetch_optional(pool)
         .await?
         .ok_or(StoreError::NotFound)
+}
+
+/// Job counts and limits for one queue.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct QueueStats {
+    pub queue: String,
+    pub paused: bool,
+    /// Number of jobs in each state, including states with no jobs.
+    pub counts: BTreeMap<String, i64>,
+    pub oldest_pending_run_at: Option<DateTime<Utc>>,
+    /// Whole tokens in the rate-limit bucket as of now, when the queue has a rate limit.
+    pub tokens_available: Option<i64>,
+}
+
+/// Returns the job counts of a queue, its oldest pending `run_at` and its available tokens.
+pub async fn queue_stats(
+    pool: &PgPool,
+    name: &str,
+    now: DateTime<Utc>,
+) -> Result<QueueStats, StoreError> {
+    let queue = get_queue(pool, name).await?;
+    let mut counts: BTreeMap<String, i64> = JobState::ALL
+        .iter()
+        .map(|s| (s.as_str().to_string(), 0))
+        .collect();
+    let rows = sqlx::query_as::<_, (String, i64)>(
+        "SELECT state, count(*) FROM jobs WHERE queue = $1 GROUP BY state",
+    )
+    .bind(name)
+    .fetch_all(pool)
+    .await?;
+    for (state, count) in rows {
+        counts.insert(state, count);
+    }
+    let oldest_pending_run_at = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+        "SELECT min(run_at) FROM jobs WHERE queue = $1 AND state = 'pending'",
+    )
+    .bind(name)
+    .fetch_one(pool)
+    .await?;
+    let tokens_available = match (queue.rate_limit_per_minute, queue.rate_burst) {
+        (Some(per_minute), Some(burst)) => {
+            let bucket = Bucket {
+                tokens_milli: queue.rate_tokens_milli,
+                refilled_at: queue.rate_refilled_at,
+            };
+            Some(refill(bucket, per_minute, burst, now).tokens_milli / 1000)
+        }
+        _ => None,
+    };
+    Ok(QueueStats {
+        queue: queue.name,
+        paused: queue.paused,
+        counts,
+        oldest_pending_run_at,
+        tokens_available,
+    })
 }

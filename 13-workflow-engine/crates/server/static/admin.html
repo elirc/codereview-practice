@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow Engine Admin</title>
+<style>
+  body { font-family: sans-serif; margin: 1rem 2rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  table { border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { border: 1px solid #ccc; padding: 0.25rem 0.5rem; text-align: left; font-size: 0.9rem; }
+  th { background: #f3f3f3; }
+  .error { color: #a00; }
+  .muted { color: #777; }
+  input, select, button { font-size: 0.9rem; }
+  code { font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>Workflow Engine</h1>
+
+<section>
+  <label>API token <input id="token" type="password" size="70" autocomplete="off"></label>
+  <button id="connect">Load</button>
+  <p id="status" class="muted">Paste a token and press Load.</p>
+</section>
+
+<section>
+  <h2>Queues</h2>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Paused</th><th>Pending</th><th>Running</th><th>Dead</th>
+          <th>Oldest pending</th><th>Tokens</th><th></th></tr>
+    </thead>
+    <tbody id="queues"></tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Jobs</h2>
+  <label>State
+    <select id="job-state">
+      <option value="pending">pending</option>
+      <option value="running">running</option>
+      <option value="succeeded">succeeded</option>
+      <option value="dead">dead</option>
+      <option value="cancelled">cancelled</option>
+    </select>
+  </label>
+  <label>Queue <input id="job-queue" size="20"></label>
+  <button id="load-jobs">Show</button>
+  <table>
+    <thead>
+      <tr><th>Id</th><th>Queue</th><th>Kind</th><th>Attempt</th><th>Run at</th>
+          <th>Last error</th><th></th></tr>
+    </thead>
+    <tbody id="jobs"></tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Workflow runs</h2>
+  <button id="load-runs">Refresh</button>
+  <table>
+    <thead>
+      <tr><th>Id</th><th>Definition</th><th>State</th><th>Created</th><th></th></tr>
+    </thead>
+    <tbody id="runs"></tbody>
+  </table>
+  <div id="run-detail"></div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  const statusLine = document.getElementById("status");
+
+  function token() {
+    return document.getElementById("token").value.trim();
+  }
+
+  function setStatus(text, isError) {
+    statusLine.textContent = text;
+    statusLine.className = isError ? "error" : "muted";
+  }
+
+  async function api(method, path) {
+    const response = await fetch("/api" + path, {
+      method: method,
+      headers: { "Authorization": "Bearer " + token(), "Content-Type": "application/json" },
+      body: method === "POST" ? "{}" : undefined,
+    });
+    const text = await response.text();
+    const body = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      const message = body && body.error ? body.error.code + ": " + body.error.message : response.statusText;
+      throw new Error(message);
+    }
+    return body;
+  }
+
+  function cell(row, value) {
+    const td = document.createElement("td");
+    td.textContent = value === null || value === undefined ? "" : String(value);
+    row.appendChild(td);
+    return td;
+  }
+
+  function button(td, label, onClick) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    td.appendChild(b);
+  }
+
+  function run(action) {
+    return function () {
+      action().catch(function (err) { setStatus(err.message, true); });
+    };
+  }
+
+  async function loadQueues() {
+    const page = await api("GET", "/queues?limit=200");
+    const body = document.getElementById("queues");
+    body.replaceChildren();
+    for (const queue of page.items) {
+      const stats = await api("GET", "/queues/" + encodeURIComponent(queue.name) + "/stats");
+      const row = document.createElement("tr");
+      cell(row, queue.name);
+      cell(row, queue.paused ? "yes" : "no");
+      cell(row, stats.counts.pending);
+      cell(row, stats.counts.running);
+      cell(row, stats.counts.dead);
+      cell(row, stats.oldest_pending_run_at);
+      cell(row, stats.tokens_available);
+      const actions = cell(row, "");
+      const verb = queue.paused ? "resume" : "pause";
+      button(actions, verb, run(async function () {
+        await api("POST", "/queues/" + encodeURIComponent(queue.name) + "/" + verb);
+        await loadQueues();
+      }));
+      body.appendChild(row);
+    }
+  }
+
+  async function loadJobs() {
+    const state = document.getElementById("job-state").value;
+    const queue = document.getElementById("job-queue").value.trim();
+    let path = "/jobs?limit=100&state=" + encodeURIComponent(state);
+    if (queue) {
+      path += "&queue=" + encodeURIComponent(queue);
+    }
+    const page = await api("GET", path);
+    const body = document.getElementById("jobs");
+    body.replaceChildren();
+    for (const job of page.items) {
+      const row = document.createElement("tr");
+      cell(row, job.id);
+      cell(row, job.queue);
+      cell(row, job.kind);
+      cell(row, job.attempt + " / " + job.max_attempts);
+      cell(row, job.run_at);
+      cell(row, job.last_error);
+      const actions = cell(row, "");
+      if (job.state === "dead" && !job.workflow_run_id) {
+        button(actions, "requeue", run(async function () {
+          await api("POST", "/jobs/" + job.id + "/requeue");
+          await loadJobs();
+        }));
+      }
+      if ((job.state === "pending" || job.state === "running") && !job.workflow_run_id) {
+        button(actions, "cancel", run(async function () {
+          await api("POST", "/jobs/" + job.id + "/cancel");
+          await loadJobs();
+        }));
+      }
+      body.appendChild(row);
+    }
+  }
+
+  async function showRun(id) {
+    const detail = await api("GET", "/workflow-runs/" + id);
+    const target = document.getElementById("run-detail");
+    target.replaceChildren();
+    const heading = document.createElement("h3");
+    heading.textContent = "Run " + detail.id + " (" + detail.state + ")";
+    target.appendChild(heading);
+    const table = document.createElement("table");
+    const head = document.createElement("tr");
+    for (const title of ["Step", "State", "Job", "Output"]) {
+      const th = document.createElement("th");
+      th.textContent = title;
+      head.appendChild(th);
+    }
+    table.appendChild(head);
+    for (const step of detail.steps) {
+      const row = document.createElement("tr");
+      cell(row, step.step_key);
+      cell(row, step.state);
+      cell(row, step.job_id);
+      cell(row, step.output === null ? "" : JSON.stringify(step.output));
+      table.appendChild(row);
+    }
+    target.appendChild(table);
+  }
+
+  async function loadRuns() {
+    const page = await api("GET", "/workflow-runs?limit=50");
+    const body = document.getElementById("runs");
+    body.replaceChildren();
+    for (const r of page.items) {
+      const row = document.createElement("tr");
+      cell(row, r.id);
+      cell(row, r.definition_name + " v" + r.definition_version);
+      cell(row, r.state);
+      cell(row, r.created_at);
+      const actions = cell(row, "");
+      button(actions, "steps", run(function () { return showRun(r.id); }));
+      if (r.state === "running") {
+        button(actions, "cancel", run(async function () {
+          await api("POST", "/workflow-runs/" + r.id + "/cancel");
+          await loadRuns();
+        }));
+      }
+      if (r.state === "failed") {
+        button(actions, "retry", run(async function () {
+          await api("POST", "/workflow-runs/" + r.id + "/retry");
+          await loadRuns();
+        }));
+      }
+      body.appendChild(row);
+    }
+  }
+
+  document.getElementById("connect").addEventListener("click", run(async function () {
+    setStatus("Loading…", false);
+    await loadQueues();
+    await loadJobs();
+    await loadRuns();
+    setStatus("Loaded.", false);
+  }));
+  document.getElementById("load-jobs").addEventListener("click", run(loadJobs));
+  document.getElementById("load-runs").addEventListener("click", run(loadRuns));
+})();
+</script>
+</body>
+</html>
