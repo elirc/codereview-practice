@@ -1,6 +1,6 @@
-# Shared conventions for all eight projects
+# Shared conventions for all projects
 
-These rules apply to every project folder (`01-clinic-booking` … `08-volunteer-scheduler`). Each project's `SPEC.md` is the source of truth for business rules; this file is the source of truth for how the work is done. Where the two conflict, the SPEC wins for domain behaviour and this file wins for process.
+These rules apply to every project folder (`01-clinic-booking` … `13-workflow-engine`). Projects 09–13 (wave 2) also follow section 12, which adds to and in a few named places overrides the earlier sections. Each project's `SPEC.md` is the source of truth for business rules; this file is the source of truth for how the work is done. Where the two conflict, the SPEC wins for domain behaviour and this file wins for process.
 
 The finished codebases are used for code-reading and code-review practice. A reader will compare each commit against the SPEC, and later a separate agent will plant bugs on a branch. That has two consequences that drive most of the rules below: the baseline must be the correct version, and the code must not point at its own hard parts.
 
@@ -130,3 +130,83 @@ Email, SMS, payment and storage integrations go through an interface defined in 
 - README, `.env.example`, seed, migrations, CI workflow and `DECISIONS.md` (if any decisions were needed) are present.
 - 8–12 clean commits on `build/NN-<slug>`.
 - Final report to the overseer: commit list (hash + subject), approximate source line count, entries added to `DECISIONS.md`, and anything you were unsure of in the pinned library APIs.
+
+## 12. Wave 2 additions (projects 09–13)
+
+Sections 1–11 apply unchanged except where this section says otherwise.
+
+### 12.1 Overrides
+
+- **Commits:** 10–14 per project (replaces "8–12" in sections 8 and 11).
+- **Size:** 6,000–12,000 lines of source excluding tests, hand-written generated artefacts and seed data (replaces the target in section 9). Keep any UI thin: a few plain screens that call the API. The line budget belongs to the backend, the workers and the messaging paths. If you are heading over, cut UI, list filters and admin conveniences, never domain rules, failure handling or tests.
+- **Manifests (section 2):** the pinned-version rule covers `build.gradle.kts`, `Directory.Packages.props`, `Cargo.toml` and `go.mod` too. Do not write `gradle-wrapper.jar`, `Cargo.lock`, `packages.lock.json`, `go.sum` or `package-lock.json`. Where a build tool manages transitive versions from a pinned platform (the Spring Boot plugin's BOM), rely on it instead of guessing versions.
+- **Hand-written generated artefacts:** sqlc output (11) and the EF Core model snapshot (12), consistent with their sources. Flyway SQL, sqlx migrations and goose migrations are ordinary sources. Do not use compile-time database checks that need a live database (`sqlx::query!` and friends).
+- **Comments (section 4) apply with full force.** Do not write comments, doc comments, log messages, test names or README prose that say which race, duplicate, replay, stale write, lost message or reordering a piece of code is there for, or that describe the locking, fencing, deduplication, ordering or compensation design. Say what the function does and what it returns. Domain vocabulary from the SPEC (`leaseEpoch`, `inbox`, `outbox`, `idempotencyKey`, `sequence`) is fine in identifiers.
+
+### 12.2 Multi-process and multi-service layout
+
+- Every process (API, worker, relay, consumer, scheduler) is an entry point inside the one project folder and is built from the one manifest or workspace named in the SPEC. One `compose.yaml` per project starts every backing service on the host ports given in the SPEC.
+- Any process may run as several instances at once. Nothing may rely on being the only instance unless the SPEC says how that is enforced.
+- In a multi-service project each service owns its database. A service never reads or writes another service's database and never imports another service's packages. Services cooperate only through the HTTP endpoints and events listed in the SPEC.
+- Shared code inside a project (`pkg/` in 11, a core crate in 13, a domain assembly in 12) holds plumbing and pure logic only: event envelope, outbox relay, inbox, clock, config, logging, error envelope, token verification. In 11 it holds no domain types and no SQL for a service's own tables.
+- The README "run" section lists every process with its command, and "architecture" shows which process owns which table, topic or subject.
+
+### 12.3 JSON casing and error-envelope mapping per language
+
+| Language | JSON keys | Central error mapping |
+|---|---|---|
+| Kotlin (09) | `camelCase` | One `@RestControllerAdvice` maps a sealed `DomainException` hierarchy and the framework exceptions (`MethodArgumentNotValidException`, `HttpMessageNotReadableException`, missing header or parameter, unsupported media type) to the envelope. Controllers never build error bodies |
+| TypeScript (10) | `camelCase` | Fastify `setErrorHandler`, as in wave 1. WebSocket failures use the close codes in the SPEC, not the envelope |
+| Go (11) | `snake_case` | One `httpx.WriteError` in `pkg/` maps typed domain errors with `errors.As`; every service uses it |
+| C# (12) | `camelCase` | One `IExceptionHandler` registered with `AddExceptionHandler` maps `DomainException` (carrying `Code`, HTTP status, `Details`) and `BadHttpRequestException`; an endpoint filter turns validation failures into `validation_failed`. No `ProblemDetails` responses |
+| Rust (13) | `snake_case` | One `ApiError` enum with `impl IntoResponse`; handlers return `Result<_, ApiError>`; `From` impls convert domain and database errors. No `unwrap`/`expect` on request or job paths |
+
+The envelope's four keys stay literal (`code`, `message`, `details`, `requestId`) in every language. Unknown JSON fields in request bodies are rejected in all five projects (Jackson `FAIL_ON_UNKNOWN_PROPERTIES`, zod `.strict()`, Go `DisallowUnknownFields`, `JsonUnmappedMemberHandling.Disallow`, serde `deny_unknown_fields`).
+
+### 12.4 Event envelope
+
+Every event put on a broker (Kafka in 09, NATS JetStream in 11) or sent as a webhook (12) is a JSON object with these fields, spelled in the project's JSON casing:
+
+| Field (camelCase / snake_case) | Meaning |
+|---|---|
+| `id` | UUID of the event, generated once when the outbox row is written; identical on every redelivery |
+| `type` | `noun.past_participle`, lower case, from the SPEC's event table |
+| `schemaVersion` / `schema_version` | integer, starts at 1 |
+| `occurredAt` / `occurred_at` | instant from the injected clock at the time of the state change |
+| `aggregateType`, `aggregateId` / `aggregate_type`, `aggregate_id` | the entity the event is about |
+| `sequence` | integer that increases with every event of the same aggregate, assigned in the same transaction as the change (a version column or an identity value, as the SPEC's event table says) |
+| `requestId` / `request_id` | request id of the originating request or job run |
+| `data` | the event-specific payload from the SPEC |
+
+- Events state facts that have committed. They carry ids, enums, instants, and money as minor units plus currency; never secrets, tokens, or personal data beyond what the SPEC lists.
+- Consumers validate the envelope and the `data` fields they use, ignore unknown fields, and acknowledge and log event types they do not handle.
+
+### 12.5 Transactional outbox
+
+- An event is recorded as an outbox row in the same database transaction as the state change it describes. Request handlers, job handlers and consumers never publish to a broker, call a webhook or enqueue follow-up work outside that transaction.
+- A relay loop is the only publisher. It reads unpublished rows in id order, publishes, and marks a row published only after the broker has acknowledged it.
+- Events of one aggregate are published in `sequence` order. The SPEC says how several relay instances are coordinated.
+- A publish failure leaves the row unpublished; it is retried on a later pass, and later rows of the same aggregate wait behind it.
+- Published rows are purged by a periodic job after the retention in the SPEC.
+
+### 12.6 Consumers
+
+- Delivery is at-least-once and may be out of order. Each consumer records the event id in an inbox (or the dedupe table named in the SPEC) in the same transaction as the handler's effects, and acknowledges only after commit.
+- Handlers decide from current state plus the event. An event that no longer applies is acknowledged as a no-op; one that cannot apply yet is handled as the SPEC says (parked, redelivered with delay, or recorded for later).
+- A message that keeps failing is moved to the project's dead-letter store after the delivery limit in the SPEC and then acknowledged. Dead letters can be listed and replayed.
+
+### 12.7 Clocks, timers and randomness
+
+- Deadlines (expiries, leases, retries, schedules) are stored as instants in the database and evaluated by periodic loops against the injected clock. No in-memory timers that are lost on restart.
+- Each loop exposes a `runOnce(now)`-style function that tests call directly. Loops are switched off in tests by configuration.
+- Boundary semantics are those in the SPEC (for example "valid while `now < expiresAt`") and are applied by the code path that acts, whether or not the sweeper has run yet.
+- Jitter and generated tokens come from an injected source so tests can fix them.
+
+### 12.8 Authentication in wave 2
+
+- 09, 12 and 13 authenticate with API keys sent as `Authorization: Bearer <key>`. Keys are random (at least 256 bits), shown once at creation, stored as SHA-256 and found by hash lookup. 11 uses HS256 bearer tokens verified by shared `pkg/` code. 10 uses hashed session cookies exactly as section 6 describes for projects 01–03.
+- Authorisation is checked in the service that performs the work, on every request and every WebSocket message, against current database state.
+
+### 12.9 CI for wave 2
+
+Still exactly one workflow file per project, `.github/workflows/NN-<slug>.yml`, with the path filters from section 5. A multi-service or multi-crate project uses jobs or a matrix inside that one file. Backing services run as service containers; no Docker image is built or pushed. Jobs: install toolchain, format/lint check, build or type check, migrate, test.
