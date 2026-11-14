@@ -1,17 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../src/app.js';
+import { createDb, type Database } from '../src/db/index.js';
 import { systemClock } from '../src/lib/clock.js';
 import { APP_ORIGIN, testConfig } from './support/config.js';
 
 describe('application shell', () => {
   let app: App;
+  let db: Database;
 
   beforeAll(async () => {
-    app = await buildApp({ config: testConfig(), clock: systemClock });
+    const config = testConfig();
+    db = createDb(config.databaseUrl);
+    app = await buildApp({ config, clock: systemClock, db });
   });
 
   afterAll(async () => {
     await app.close();
+    await db.destroy();
   });
 
   it('answers health checks', async () => {

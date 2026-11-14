@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import type { Config } from './config.js';
+import type { Database } from './db/index.js';
 import type { Clock } from './lib/clock.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { registerCsrfProtection } from './plugins/csrf.js';
@@ -11,6 +12,7 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 export interface AppDeps {
   config: Config;
   clock: Clock;
+  db: Database;
 }
 
 declare module 'fastify' {

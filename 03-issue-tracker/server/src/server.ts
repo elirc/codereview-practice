@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, loadDotEnvIfPresent, type Config } from './config.js';
+import { createDb } from './db/index.js';
 import { systemClock } from './lib/clock.js';
 
 function readConfig(): Config {
@@ -16,7 +17,11 @@ function readConfig(): Config {
 
 loadDotEnvIfPresent();
 const config = readConfig();
-const app = await buildApp({ config, clock: systemClock });
+const db = createDb(config.databaseUrl);
+const app = await buildApp({ config, clock: systemClock, db });
+app.addHook('onClose', async () => {
+  await db.destroy();
+});
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'shutting down');
