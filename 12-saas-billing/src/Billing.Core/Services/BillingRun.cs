@@ -44,6 +44,7 @@ public sealed class BillingRun(
 public sealed class SubscriptionBiller(
     BillingDbContext db,
     SubscriptionCycle cycle,
+    UsageRating usage,
     EventRecorder events,
     ILogger<SubscriptionBiller> logger)
 {
@@ -100,8 +101,7 @@ public sealed class SubscriptionBiller(
 
     private async Task EndTrialAsync(Subscription subscription, Customer customer, TimeZoneInfo zone, CancellationToken ct)
     {
-        var plan = await db.PlanWithItemsAsync(subscription.PlanId, ct)
-            ?? throw new InvalidOperationException($"Plan {subscription.PlanId} does not exist.");
+        var plan = await LoadPlanAsync(subscription.PlanId, ct);
 
         subscription.Status = SubscriptionStatus.Active;
         var period = cycle.OpenPeriod(subscription, plan, 0, zone);
@@ -117,13 +117,26 @@ public sealed class SubscriptionBiller(
     {
         var ended = await db.SubscriptionPeriods
             .SingleAsync(p => p.SubscriptionId == subscription.Id && p.Index == subscription.PeriodIndex, ct);
-        ended.UsageSealedAt = now;
+        var periodEndsAt = BillingCalendar.StartOfDay(ended.PeriodEnd, zone);
+        var sealedUsage = await usage.SealAsync(ended, zone, periodEndsAt, null, ct);
+        var ratingPlan = await LoadPlanAsync(ended.PlanId, ct);
+        var charges = await usage.RateAsync(sealedUsage, ratingPlan, ct);
+        logger.LogInformation(
+            "Sealed {EventCount} usage events into period {PeriodIndex} of subscription {SubscriptionId} at {Now}",
+            sealedUsage.Count,
+            ended.Index,
+            subscription.Id,
+            now);
 
-        var plan = await db.PlanWithItemsAsync(subscription.PlanId, ct)
-            ?? throw new InvalidOperationException($"Plan {subscription.PlanId} does not exist.");
+        var plan = ended.PlanId == subscription.PlanId ? ratingPlan : await LoadPlanAsync(subscription.PlanId, ct);
         var next = cycle.OpenPeriod(subscription, plan, ended.Index + 1, zone);
         var invoice = cycle.NewInvoice(subscription, customer.Currency, InvoiceKind.Cycle, next.PeriodStart, next.PeriodEnd);
+        usage.AddUsageLines(invoice, charges, ended);
         cycle.AddAdvanceLines(invoice, plan, subscription.Quantity, next.PeriodStart, next.PeriodEnd);
         await cycle.SaveAndFinalizeAsync(invoice, ct);
+    }
+
+    private async Task<Plan> LoadPlanAsync(Guid planId, CancellationToken ct) =>
+        await db.PlanWithItemsAsync(planId, ct) ?? throw new InvalidOperationException($"Plan {planId} does not exist.");
     }
 }

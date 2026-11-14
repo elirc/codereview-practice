@@ -33,6 +33,7 @@ public static class ApiSetup
         v1.MapCatalogEndpoints();
         v1.MapInvoiceEndpoints();
         v1.MapSubscriptionEndpoints();
+        v1.MapUsageEndpoints();
 
         app.MapFallback(_ => throw DomainException.NotFound("The requested resource"));
         return app;
