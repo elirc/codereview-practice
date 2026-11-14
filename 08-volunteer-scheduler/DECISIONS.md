@@ -46,3 +46,8 @@ Choices made where the spec left room for interpretation.
 
 **Unclear:** whether `60 × 2^consecutiveFailures` uses the failure count before or after the failure being recorded.
 **Chosen:** after: the counter is incremented first, so the first failure waits 120 s, the second 240 s, and so on, never more than the job's interval.
+
+## CSV whitespace around quoted fields
+
+**Unclear:** whether spaces before an opening quote make a field unquoted, and how values with leading or trailing blanks survive a round trip when unquoted fields are trimmed.
+**Chosen:** blanks before an opening quote are ignored and the field is parsed as quoted; anything other than a comma or record end after the closing quote (including blanks) is `malformed_quotes`. The writer also quotes values that start or end with a space or tab, and writes a lone empty cell as `""`, so that exported values parse back unchanged.
