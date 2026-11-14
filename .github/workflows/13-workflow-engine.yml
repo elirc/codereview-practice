@@ -1,0 +1,70 @@
+name: 13-workflow-engine
+
+on:
+  push:
+    paths: ["13-workflow-engine/**", ".github/workflows/13-workflow-engine.yml"]
+  pull_request:
+    paths: ["13-workflow-engine/**", ".github/workflows/13-workflow-engine.yml"]
+
+defaults:
+  run:
+    working-directory: 13-workflow-engine
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wfe
+          POSTGRES_PASSWORD: wfe
+          POSTGRES_DB: wfe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wfe -d wfe"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://wfe:wfe@localhost:5432/wfe
+      CLOCK_SYNC_ENABLED: "false"
+      LOOPS_ENABLED: "false"
+      RUST_LOG: warn
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.84.0"
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            13-workflow-engine/target
+          key: cargo-13-${{ runner.os }}-${{ hashFiles('13-workflow-engine/Cargo.toml', '13-workflow-engine/crates/*/Cargo.toml') }}
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Migrate
+        run: cargo run -p wfe-server -- migrate
+
+      - name: Seed
+        run: cargo run -p wfe-server -- seed
+
+      - name: Test
+        run: cargo test --workspace
