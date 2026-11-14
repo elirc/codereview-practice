@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { getApp } from '$lib/server/app';
+import { findSessionUser, SESSION_COOKIE } from '$lib/server/auth/session';
 import { INTERNAL_ERROR_MESSAGE } from '$lib/server/errors';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const init: ServerInit = () => {
 	if (!building) getApp();
@@ -17,6 +19,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.requestId = requestId;
 	event.locals.log = app.logger.child({ requestId });
 	event.locals.ctx = app.ctx;
+	event.locals.session = {
+		secure: app.config.nodeEnv === 'production',
+		ttlMs: app.config.sessionTtlDays * DAY_MS
+	};
+
+	const token = event.cookies.get(SESSION_COOKIE);
+	event.locals.user = token ? findSessionUser(app.ctx, token) : null;
+	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 
 	const started = performance.now();
 	const response = await resolve(event);
@@ -26,6 +36,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			method: event.request.method,
 			path: event.url.pathname,
 			status: response.status,
+			userId: event.locals.user?.id,
 			durationMs: Math.round(performance.now() - started)
 		},
 		'request completed'
