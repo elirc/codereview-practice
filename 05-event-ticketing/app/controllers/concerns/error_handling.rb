@@ -19,6 +19,18 @@ module ErrorHandling
       respond_with_error(DomainError.validation([ { path: exception.param.to_s, message: "is required" } ]))
     end
 
+    def handle_unexpected_error(exception)
+      Rails.logger.error(
+        {
+          event: "request.unhandled_error",
+          error: exception.class.name,
+          message: exception.message,
+          backtrace: exception.backtrace&.first(30)
+        }
+      )
+      respond_with_error(DomainError.new(:internal_error))
+    end
+
     def respond_with_error(error)
       if request.format.json?
         render json: ErrorEnvelope.build(error, request_id: request.request_id), status: error.status

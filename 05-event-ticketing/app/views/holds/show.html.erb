@@ -7,9 +7,11 @@
 </p>
 
 <% if @hold.live?(@now) %>
+  <section data-controller="countdown" data-countdown-expires-at-value="<%= @hold.expires_at.utc.iso8601 %>">
   <p>
     Your tickets are held until
-    <%= format_in_zone(@hold.expires_at, @event.time_zone) %>.
+    <%= format_in_zone(@hold.expires_at, @event.time_zone) %>
+    (<span class="countdown" data-countdown-target="remaining"></span> left).
   </p>
 
   <%= render "holds/quote", hold: @hold, quote: @quote, error: nil %>
@@ -20,8 +22,9 @@
       <%= form.text_field :payment_token, value: "tok_visa", required: true, maxlength: 200 %>
       <p class="muted">Test gateway: any token is approved except <code>tok_decline</code>.</p>
     </div>
-    <%= form.submit "Pay now" %>
+    <%= form.submit "Pay now", data: { countdown_target: "submit" } %>
   <% end %>
+  </section>
 
   <%= button_to "Release tickets", hold_path(@hold), method: :delete %>
 <% else %>

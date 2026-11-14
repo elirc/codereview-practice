@@ -7,7 +7,8 @@ class EventsController < ApplicationController
 
   def show
     @event = EventPolicy.visible_scope(current_user).find(params[:id])
-    @availabilities = TierAvailability.for_event(@event, now: Time.current)
+    @now = Time.current
+    @availabilities = TierAvailability.for_event(@event, now: @now)
     @my_entries = my_waitlist_entries
   end
 

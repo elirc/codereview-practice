@@ -19,7 +19,8 @@
 
 <h2>Tickets</h2>
 
-<table>
+<% polling = @event.on_sale?(@now) ? { controller: "availability", availability_url_value: availability_api_event_path(@event) } : {} %>
+<%= tag.table data: polling do %>
   <thead>
     <tr><th>Tier</th><th>Price</th><th>Availability</th><th></th></tr>
   </thead>
@@ -28,4 +29,4 @@
       <%= render "events/tier", availability:, entry: @my_entries[availability.tier.id] %>
     <% end %>
   </tbody>
-</table>
+<% end %>

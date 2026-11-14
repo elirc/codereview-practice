@@ -37,5 +37,15 @@ Rails.application.routes.draw do
     end
   end
 
+  namespace :admin do
+    resources :users, only: %i[ index update ]
+  end
+
+  namespace :api do
+    resources :events, only: [] do
+      get :availability, on: :member
+    end
+  end
+
   get "up" => "rails/health#show", as: :rails_health_check
 end

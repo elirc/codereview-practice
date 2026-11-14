@@ -2,7 +2,7 @@
 <tr id="<%= dom_id(tier) %>">
   <td><%= tier.name %></td>
   <td><%= format_cents(tier.price_cents) %></td>
-  <td data-tier-state="<%= availability.state %>"><%= tier_state_label(availability) %></td>
+  <td data-tier-state="<%= availability.state %>" data-availability-tier-id="<%= tier.id %>"><%= tier_state_label(availability) %></td>
   <td>
     <% if entry&.offered? && entry.hold %>
       Tickets are held for you. <%= link_to "Check out", hold_path(entry.hold) %>
