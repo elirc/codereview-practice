@@ -67,9 +67,9 @@ Request flow: a route handler is wrapped by `route()` in `src/server/http.ts`, w
 
 Pages are server components that call the same services directly. Every mutation from the UI goes through the JSON API with `fetch`, so business errors always use the one envelope.
 
-Job flow: the web process writes `Reminder` rows inside the booking transaction and, after commit, enqueues `email.cancellation` or `email.rescheduled` through pg-boss. The worker's `reminders.dispatch` cron claims due reminders and enqueues one `reminders.send` per row; `reminders.send` re-checks the appointment and delivers through the `Mailer` interface.
+Job flow: the web process never talks to pg-boss. It writes `Reminder` rows inside the booking transaction and an `appointment_notifications` row inside each cancel or reschedule transaction. The worker's `reminders.dispatch` cron claims due reminders and pending notifications and enqueues one `reminders.send`, `email.cancellation` or `email.rescheduled` job per row; each handler re-checks the row and delivers through the `Mailer` interface.
 
-Reminder delivery is at-least-once. If the worker crashes after the mail provider accepted a message but before the row is marked `SENT`, the claim expires after ten minutes and the reminder can be sent again. This is accepted; duplicates are preferred over silently lost reminders.
+Delivery of reminders and appointment emails is at-least-once. If the worker crashes after the mail provider accepted a message but before the row is marked `SENT`, the claim expires after ten minutes and the message can be sent again. This is accepted; duplicates are preferred over silently lost emails.
 
 ## Where the hard parts live
 
@@ -84,6 +84,7 @@ Reminder delivery is at-least-once. If the worker crashes after the mail provide
 | Appointment visibility per role | `src/services/access.ts`, `src/services/appointments.ts` |
 | Clinic-local day queries | `src/services/appointments.ts`, `src/app/staff/day/page.tsx` |
 | Reminder planning, claiming and sending | `src/domain/reminders.ts`, `src/worker/reminders.ts`, `src/worker/index.ts` |
+| Cancellation and reschedule email outbox | `src/services/appointments.ts`, `src/worker/notifications.ts` |
 | Email time formatting across zones | `src/domain/emails.ts` |
 | Sessions, CSRF and the error envelope | `src/server/auth/`, `src/server/http.ts`, `src/server/errors.ts` |
 

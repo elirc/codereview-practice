@@ -19,7 +19,7 @@ function passwordHash(): Promise<string> {
 }
 
 export async function resetDatabase(): Promise<void> {
-  await db.$executeRaw`TRUNCATE TABLE reminders, appointments, availability_exceptions, availability_rules, sessions, patients, providers, users, clinics CASCADE`;
+  await db.$executeRaw`TRUNCATE TABLE appointment_notifications, reminders, appointments, availability_exceptions, availability_rules, sessions, patients, providers, users, clinics CASCADE`;
 }
 
 export function freezeTime(iso: string): DateTime {

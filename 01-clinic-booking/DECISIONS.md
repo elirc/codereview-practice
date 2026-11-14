@@ -45,15 +45,15 @@ Patients always book for themselves. A `patientId` in a patient's booking reques
 
 ## Rescheduled email job
 
-The spec asks for one "rescheduled" email after commit but lists only `email.cancellation` among the queues. A matching `email.rescheduled` queue is added, keyed on the new appointment id with the same retry policy.
+The spec asks for one "rescheduled" email after commit but lists only `email.cancellation` among the queues. A matching `email.rescheduled` queue is added and handled exactly like `email.cancellation`.
 
 ## Listing scopes
 
 `scope=mine` is for patients only; other roles use `scope=clinic`. A `date` filter is interpreted in the zone of the clinic named by `clinicId`, else the caller's own clinic, else the clinic of `providerId`. Admins filtering by date without either id get `400 validation_failed`, because "a day" is undefined across clinics in different zones.
 
-## Email enqueue failures
+## Cancellation and reschedule emails go through an outbox table
 
-Cancellation and reschedule emails are enqueued after the database transaction commits. If enqueueing fails, the error is logged and the API still reports the committed change; the appointment state is never rolled back over a notification.
+The spec has the web process enqueue `email.cancellation` through pg-boss after the transaction commits, which loses the email if the enqueue fails or the process stops between commit and enqueue. Instead the cancel and reschedule transactions write an `appointment_notifications` row (unique per appointment and kind), so the email exists exactly when the change commits and a rolled-back change leaves none. The minute `reminders.dispatch` run claims pending rows with `FOR UPDATE SKIP LOCKED` and enqueues one `email.cancellation` or `email.rescheduled` job per row, and the job handler uses the reminder semantics: it acts only on a `SENDING` row, marks it `SENT` conditionally, records mail failures on the row, retries on the next dispatch and gives up as `FAILED` after five attempts; claims older than ten minutes return to `PENDING`. The web process therefore no longer talks to pg-boss, and pg-boss's own retry is used only for unexpected handler errors. Delivery is at-least-once, like reminders. There is no staleness cut-off for these emails.
 
 ## Retry timing for failed reminders
 

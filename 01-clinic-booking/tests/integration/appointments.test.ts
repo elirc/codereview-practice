@@ -1,11 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { POST as cancel } from "@/app/api/appointments/[id]/cancel/route";
 import { POST as complete } from "@/app/api/appointments/[id]/complete/route";
 import { POST as noShow } from "@/app/api/appointments/[id]/no-show/route";
 import { POST as reschedule } from "@/app/api/appointments/[id]/reschedule/route";
 import { POST as createAppointment } from "@/app/api/appointments/route";
 import { db } from "@/server/db";
-import { jobs } from "@/server/jobs";
 import {
   addDailyRule,
   call,
@@ -56,12 +55,13 @@ function act(
   });
 }
 
-function publishedQueues(): string[] {
-  return vi.mocked(jobs.publish).mock.calls.map(([queue]) => queue);
+async function queuedNotifications(): Promise<[string, string, string][]> {
+  const rows = await db.appointmentNotification.findMany({ orderBy: { createdAt: "asc" } });
+  return rows.map((row) => [row.kind, row.appointmentId, row.status]);
 }
 
 describe("cancellation", () => {
-  it("cancels, skips pending reminders, emails once and frees the slot", async () => {
+  it("cancels, skips pending reminders, queues one email and frees the slot", async () => {
     const { provider, patient } = await scenario();
     const id = await book(patient, provider.providerId, "2026-07-06T13:00:00Z");
 
@@ -74,17 +74,13 @@ describe("cancellation", () => {
     });
     const reminders = await db.reminder.findMany({ where: { appointmentId: id } });
     expect(reminders.map((r) => r.status)).toEqual(["SKIPPED", "SKIPPED"]);
-    expect(jobs.publish).toHaveBeenCalledWith(
-      "email.cancellation",
-      { appointmentId: id },
-      expect.objectContaining({ retryLimit: 3 }),
-    );
+    expect(await queuedNotifications()).toEqual([["CANCELLATION", id, "PENDING"]]);
 
     const other = await createPatient();
     await book(other, provider.providerId, "2026-07-06T13:00:00Z");
   });
 
-  it("refuses to cancel twice and sends no second email", async () => {
+  it("refuses to cancel twice and queues no second email", async () => {
     const { provider, patient } = await scenario();
     const id = await book(patient, provider.providerId, "2026-07-06T13:00:00Z");
 
@@ -93,7 +89,7 @@ describe("cancellation", () => {
 
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe("invalid_state");
-    expect(publishedQueues()).toEqual(["email.cancellation"]);
+    expect(await queuedNotifications()).toEqual([["CANCELLATION", id, "PENDING"]]);
   });
 
   it("lets a patient cancel at exactly 24 hours' notice but not a second later", async () => {
@@ -108,6 +104,7 @@ describe("cancellation", () => {
     const refused = await act(cancel, "cancel", patient, late);
     expect(refused.status).toBe(422);
     expect(refused.body.error.code).toBe("cancellation_window_closed");
+    expect(await queuedNotifications()).toEqual([["CANCELLATION", onTime, "PENDING"]]);
   });
 
   it("lets staff cancel late, flagging it, but not after the start", async () => {
@@ -128,7 +125,7 @@ describe("cancellation", () => {
 });
 
 describe("rescheduling", () => {
-  it("moves the appointment, links the new one and emails once", async () => {
+  it("moves the appointment, links the new one and queues one email", async () => {
     const { provider, patient } = await scenario();
     const id = await book(patient, provider.providerId, "2026-07-06T13:00:00Z");
 
@@ -151,12 +148,7 @@ describe("rescheduling", () => {
     expect(original.reminders.every((r) => r.status === "SKIPPED")).toBe(true);
     const pending = { appointmentId: moved.id, status: "PENDING" as const };
     expect(await db.reminder.count({ where: pending })).toBe(2);
-    expect(publishedQueues()).toEqual(["email.rescheduled"]);
-    expect(jobs.publish).toHaveBeenCalledWith(
-      "email.rescheduled",
-      { appointmentId: moved.id },
-      expect.objectContaining({ retryLimit: 3 }),
-    );
+    expect(await queuedNotifications()).toEqual([["RESCHEDULED", moved.id, "PENDING"]]);
   });
 
   it("leaves the original untouched when the new slot is taken", async () => {
@@ -179,7 +171,7 @@ describe("rescheduling", () => {
     expect(original.cancelledAt).toBeNull();
     expect(original.reminders.map((r) => r.status)).toEqual(["PENDING", "PENDING"]);
     expect(await db.appointment.count()).toBe(2);
-    expect(publishedQueues()).toEqual([]);
+    expect(await queuedNotifications()).toEqual([]);
   });
 
   it("can move into a window that overlaps the appointment being replaced", async () => {

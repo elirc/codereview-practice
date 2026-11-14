@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { NotificationKind, Prisma } from "@prisma/client";
 import type { DateTime } from "luxon";
 import { evaluateCancellation, outcomeProblem, type AppointmentStatus } from "@/domain/policies";
 import { localDayRange, type LocalDate } from "@/domain/time";
@@ -6,7 +6,6 @@ import type { Actor } from "@/server/auth/actor";
 import { fromDbInstant } from "@/server/dates";
 import { db, LOCKING_TX_OPTIONS, type DbClient } from "@/server/db";
 import { AppError, forbidden, invalidState, notFound, validationError } from "@/server/errors";
-import { QUEUES } from "@/server/jobs";
 import {
   appointmentInclude,
   assertCanRecordOutcome,
@@ -16,7 +15,6 @@ import {
   type AppointmentView,
 } from "./access";
 import { insertBooking, lockPatient } from "./booking";
-import { enqueueAppointmentEmail } from "./notifications";
 
 const CANCELLATION_MESSAGES = {
   cancellation_window_closed:
@@ -58,6 +56,18 @@ async function cancelInTransaction(
   });
 }
 
+/** Records a patient email to be sent by the worker once this transaction commits. */
+async function queueNotification(
+  tx: DbClient,
+  appointmentId: string,
+  kind: NotificationKind,
+  now: DateTime,
+): Promise<void> {
+  await tx.appointmentNotification.create({
+    data: { appointmentId, kind, createdAt: now.toJSDate() },
+  });
+}
+
 export async function cancelAppointment(
   actor: Actor,
   id: string,
@@ -66,8 +76,10 @@ export async function cancelAppointment(
 ): Promise<AppointmentView> {
   const appointment = await loadVisibleAppointment(actor, id);
   cancellerRole(actor);
-  await db.$transaction((tx) => cancelInTransaction(tx, actor, appointment, reason, now));
-  await enqueueAppointmentEmail(QUEUES.emailCancellation, id);
+  await db.$transaction(async (tx) => {
+    await cancelInTransaction(tx, actor, appointment, reason, now);
+    await queueNotification(tx, id, "CANCELLATION", now);
+  });
   return getAppointmentView(id);
 }
 
@@ -88,7 +100,7 @@ export async function rescheduleAppointment(
   const created = await db.$transaction(async (tx) => {
     await lockPatient(tx, original.patientId);
     await cancelInTransaction(tx, actor, original, "Rescheduled", now);
-    return insertBooking(tx, {
+    const appointment = await insertBooking(tx, {
       actor,
       patientId: original.patientId,
       providerId: request.providerId ?? original.providerId,
@@ -99,9 +111,10 @@ export async function rescheduleAppointment(
       clinicId: original.provider.clinicId,
       now,
     });
+    await queueNotification(tx, appointment.id, "RESCHEDULED", now);
+    return appointment;
   }, LOCKING_TX_OPTIONS);
 
-  await enqueueAppointmentEmail(QUEUES.emailRescheduled, created.id);
   return getAppointmentView(created.id);
 }
 

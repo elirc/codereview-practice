@@ -1,5 +1,4 @@
 import type { Prisma } from "@prisma/client";
-import type { DateTime } from "luxon";
 import { reminderEmail } from "@/domain/emails";
 import {
   CLAIM_TIMEOUT_MINUTES,
@@ -7,20 +6,17 @@ import {
   statusAfterFailure,
 } from "@/domain/reminders";
 import { fromDbInstant, isoInstant } from "@/server/dates";
-import { emailAppointmentInclude, emailContext, type WorkerDeps } from "./context";
-
-export const DISPATCH_BATCH_SIZE = 100;
-
-export interface DispatchDeps extends Omit<WorkerDeps, "mailer"> {
-  now: DateTime;
-  enqueueSend(reminderId: string): Promise<void>;
-}
-
-export interface DispatchResult {
-  reset: number;
-  claimed: number;
-  enqueued: number;
-}
+import { QUEUES, type ReminderSendJob } from "@/server/jobs";
+import {
+  describeError,
+  DISPATCH_BATCH_SIZE,
+  emailAppointmentInclude,
+  emailContext,
+  type DispatchDeps,
+  type DispatchResult,
+  type SendDeps,
+  type SendOutcome,
+} from "./context";
 
 /**
  * Returns abandoned claims to the queue, claims the next batch of due reminders and enqueues a
@@ -51,7 +47,8 @@ export async function dispatchReminders(deps: DispatchDeps): Promise<DispatchRes
   let enqueued = 0;
   for (const { id } of claimed) {
     try {
-      await deps.enqueueSend(id);
+      const job: ReminderSendJob = { reminderId: id };
+      await deps.enqueue(QUEUES.remindersSend, job);
       enqueued += 1;
     } catch (err) {
       log.error({ err, reminderId: id }, "failed to enqueue reminder send");
@@ -60,22 +57,12 @@ export async function dispatchReminders(deps: DispatchDeps): Promise<DispatchRes
   return { reset, claimed: claimed.length, enqueued };
 }
 
-export interface SendDeps extends WorkerDeps {
-  now: DateTime;
-}
-
-export type SendOutcome = "sent" | "skipped" | "retry" | "failed" | "ignored";
-
 function updateIfSending(
   deps: SendDeps,
   reminderId: string,
   data: Prisma.ReminderUpdateManyMutationInput,
 ) {
   return deps.db.reminder.updateMany({ where: { id: reminderId, status: "SENDING" }, data });
-}
-
-function describeError(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).slice(0, 500);
 }
 
 /**

@@ -5,12 +5,13 @@ import { env } from "@/server/env";
 import {
   ensureQueues,
   QUEUES,
-  type AppointmentEmailJob,
+  type NotificationSendJob,
   type ReminderSendJob,
 } from "@/server/jobs";
 import { logger, type Logger } from "@/server/logger";
 import { createMailer } from "@/server/mailer";
-import { sendAppointmentEmail, type AppointmentEmailKind } from "./emails";
+import type { Enqueue } from "./context";
+import { dispatchNotifications, sendNotification } from "./notifications";
 import { dispatchReminders, sendReminder } from "./reminders";
 
 const DISPATCH_CRON = "* * * * *";
@@ -37,20 +38,17 @@ async function main(): Promise<void> {
   await boss.start();
   await ensureQueues(boss);
   const mailer = createMailer(env.MAILER, logger, env.MAIL_FROM);
+  const enqueue: Enqueue = async (queue, data) => {
+    await boss.send(queue, data);
+  };
 
   await boss.work<object>(QUEUES.remindersDispatch, WITH_METADATA, async (batch) => {
     for (const job of batch) {
       await runJob(job, async (log) => {
-        const result = await dispatchReminders({
-          db,
-          log,
-          now: clock.now(),
-          enqueueSend: async (reminderId) => {
-            const data: ReminderSendJob = { reminderId };
-            await boss.send(QUEUES.remindersSend, data);
-          },
-        });
-        log.info(result, "reminders dispatched");
+        const now = clock.now();
+        const reminders = await dispatchReminders({ db, log, now, enqueue });
+        const notifications = await dispatchNotifications({ db, log, now, enqueue });
+        log.info({ reminders, notifications }, "dispatch finished");
       });
     }
   });
@@ -65,17 +63,14 @@ async function main(): Promise<void> {
     }
   });
 
-  const emailQueues: [string, AppointmentEmailKind][] = [
-    [QUEUES.emailCancellation, "cancellation"],
-    [QUEUES.emailRescheduled, "rescheduled"],
-  ];
-  for (const [queue, kind] of emailQueues) {
-    await boss.work<AppointmentEmailJob>(queue, WITH_METADATA, async (batch) => {
+  for (const queue of [QUEUES.emailCancellation, QUEUES.emailRescheduled]) {
+    await boss.work<NotificationSendJob>(queue, WITH_METADATA, async (batch) => {
       for (const job of batch) {
         await runJob(job, async (log) => {
-          const { appointmentId } = job.data;
-          const outcome = await sendAppointmentEmail({ db, mailer, log }, kind, appointmentId);
-          log.info({ appointmentId, outcome }, "appointment email processed");
+          const { notificationId } = job.data;
+          const deps = { db, mailer, log, now: clock.now() };
+          const outcome = await sendNotification(deps, notificationId);
+          log.info({ notificationId, outcome }, "notification processed");
         });
       }
     });
