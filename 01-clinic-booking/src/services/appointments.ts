@@ -1,11 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import type { DateTime } from "luxon";
-import {
-  evaluateCancellation,
-  outcomeProblem,
-  type AppointmentStatus,
-  type CancellerRole,
-} from "@/domain/policies";
+import { evaluateCancellation, outcomeProblem, type AppointmentStatus } from "@/domain/policies";
 import { localDayRange, type LocalDate } from "@/domain/time";
 import type { Actor } from "@/server/auth/actor";
 import { fromDbInstant } from "@/server/dates";

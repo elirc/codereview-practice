@@ -77,7 +77,7 @@ describe("booking", () => {
     expect(res.body.error.code).toBe("not_a_slot");
   });
 
-  it("ignores a client-supplied end time", async () => {
+  it("rejects a client-supplied end time", async () => {
     const { provider, patient } = await scenario();
     const res = await book(patient.token, {
       providerId: provider.providerId,

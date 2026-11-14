@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { addDays, isLocalDate, localDateOf, localDayRange } from "@/domain/time";
 import type { Actor } from "@/server/auth/actor";
 import { requirePageActor } from "@/server/auth/page";
 import { clock } from "@/server/clock";
+import { AppError } from "@/server/errors";
 import { uuid } from "@/server/validation";
 import type { AppointmentView } from "@/services/access";
 import { listAppointments } from "@/services/appointments";
@@ -61,7 +63,10 @@ export default async function DayViewPage({ searchParams }: { searchParams: Sear
   const clinicId = chooseClinic(actor, first(params.clinicId), clinics);
   if (!clinicId) return <p>No clinics have been set up yet.</p>;
 
-  const clinic = await getClinic(clinicId);
+  const clinic = await getClinic(clinicId).catch((err: unknown) => {
+    if (err instanceof AppError) notFound();
+    throw err;
+  });
   const zone = clinic.timezone;
   const requestedDate = first(params.date);
   const date =

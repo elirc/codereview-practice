@@ -6,13 +6,8 @@ const envSchema = z.object({
     .string()
     .min(1)
     .refine((value) => /^postgres(ql)?:\/\//.test(value), "must be a postgres connection string"),
-  APP_ORIGIN: z
-    .string()
-    .url()
-    .transform((value) => new URL(value).origin),
-  LOG_LEVEL: z
-    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-    .default("info"),
+  APP_ORIGIN: z.string().url().transform((value) => new URL(value).origin),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   MAILER: z.enum(["console", "memory"]).default("console"),
   MAIL_FROM: z.string().email().default("appointments@clinic.example"),
 });
