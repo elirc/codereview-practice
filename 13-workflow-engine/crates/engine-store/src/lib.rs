@@ -4,9 +4,11 @@ pub mod claim;
 pub mod db;
 pub mod error;
 pub mod jobs;
+pub mod lease;
 pub mod models;
 pub mod page;
 pub mod queues;
+pub mod reaper;
 pub mod tokens;
 
 pub use error::StoreError;

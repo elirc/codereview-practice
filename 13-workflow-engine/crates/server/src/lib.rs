@@ -5,6 +5,7 @@ pub mod config;
 pub mod error;
 pub mod extract;
 pub mod logging;
+pub mod loops;
 pub mod pagination;
 pub mod request_id;
 pub mod routes;

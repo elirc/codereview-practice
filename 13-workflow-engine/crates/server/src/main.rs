@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use engine_core::clock::SystemClock;
+use engine_core::clock::{Clock, RandomJitter, SystemClock};
 use engine_core::secrets::RandomSecrets;
+use tokio_util::sync::CancellationToken;
+use wfe_server::loops::{self, LoopContext};
 use wfe_server::{build_router, config::Config, logging, shutdown, AppState};
 
 #[tokio::main]
@@ -34,15 +36,35 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let pool = engine_store::db::connect(&config.database_url, config.db_max_connections)
         .await
         .context("could not connect to the database")?;
-    let state = AppState::new(pool.clone(), Arc::new(SystemClock), Arc::new(RandomSecrets));
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let state = AppState::new(pool.clone(), clock.clone(), Arc::new(RandomSecrets));
+
+    let loops_shutdown = CancellationToken::new();
+    let loop_handles = if config.loops_enabled {
+        let ctx = LoopContext {
+            pool: pool.clone(),
+            clock: clock.clone(),
+            jitter: Arc::new(RandomJitter),
+        };
+        loops::spawn_all(ctx, loops_shutdown.clone())
+    } else {
+        Vec::new()
+    };
+
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
         .await
         .with_context(|| format!("could not bind {}", config.bind_addr))?;
     tracing::info!(addr = %config.bind_addr, "listening");
-    axum::serve(listener, build_router(state))
+    let served = axum::serve(listener, build_router(state))
         .with_graceful_shutdown(shutdown::signal())
-        .await
-        .context("server error")?;
+        .await;
+
+    loops_shutdown.cancel();
+    for handle in loop_handles {
+        if let Err(err) = handle.await {
+            tracing::error!(error = %err, "loop task ended abnormally");
+        }
+    }
     pool.close().await;
-    Ok(())
+    served.context("server error")
 }
