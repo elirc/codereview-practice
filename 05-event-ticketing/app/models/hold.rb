@@ -3,6 +3,7 @@ class Hold < ApplicationRecord
 
   belongs_to :user
   belongs_to :ticket_tier
+  belongs_to :order, optional: true
 
   enum :status, { active: "active", converted: "converted", released: "released", expired: "expired" }
   enum :source, { direct: "direct", waitlist: "waitlist" }, prefix: true

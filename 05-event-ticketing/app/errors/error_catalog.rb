@@ -13,7 +13,8 @@ module ErrorCatalog
     quantity_invalid: [ 422, "That ticket quantity is not allowed for this tier." ],
     event_limit_exceeded: [ 422, "You can hold or buy at most 8 tickets for one event." ],
     insufficient_capacity: [ 409, "Not enough tickets are available." ],
-    hold_expired: [ 409, "Your hold has expired." ]
+    hold_expired: [ 409, "Your hold has expired." ],
+    payment_declined: [ 422, "Your payment was declined. Your tickets are still held." ]
   }.freeze
 
   def self.status_for(code)

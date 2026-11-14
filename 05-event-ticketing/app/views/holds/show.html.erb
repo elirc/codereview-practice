@@ -12,7 +12,16 @@
     <%= format_in_zone(@hold.expires_at, @event.time_zone) %>.
   </p>
 
-  <p>Subtotal: <strong><%= format_cents(@hold.subtotal_cents) %></strong></p>
+  <p>Total: <strong><%= format_cents(@hold.subtotal_cents) %></strong></p>
+
+  <%= form_with url: hold_checkout_path(@hold), id: "checkout-form" do |form| %>
+    <div class="field">
+      <%= form.label :payment_token, "Payment token" %>
+      <%= form.text_field :payment_token, value: "tok_visa", required: true, maxlength: 200 %>
+      <p class="muted">Test gateway: any token is approved except <code>tok_decline</code>.</p>
+    </div>
+    <%= form.submit "Pay now" %>
+  <% end %>
 
   <%= button_to "Release tickets", hold_path(@hold), method: :delete %>
 <% else %>

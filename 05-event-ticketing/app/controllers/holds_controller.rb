@@ -10,6 +10,8 @@ class HoldsController < ApplicationController
   end
 
   def show
+    return redirect_to(order_path(@hold.order)) if @hold.converted?
+
     @tier = @hold.ticket_tier
     @event = @tier.event
     @now = Time.current

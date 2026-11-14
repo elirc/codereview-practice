@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_14_090600) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,6 +42,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
     t.datetime "expires_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.uuid "order_id"
+    t.index ["order_id"], name: "index_holds_on_order_id", unique: true
     t.index ["status", "expires_at"], name: "index_holds_on_status_and_expires_at"
     t.index ["ticket_tier_id"], name: "index_holds_on_ticket_tier_id"
     t.index ["user_id"], name: "index_holds_on_user_id"
@@ -50,6 +52,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
     t.check_constraint "((source)::text = ANY ((ARRAY['direct'::character varying, 'waitlist'::character varying])::text[]))", name: "holds_source_valid"
     t.check_constraint "((status)::text = ANY ((ARRAY['active'::character varying, 'converted'::character varying, 'released'::character varying, 'expired'::character varying])::text[]))", name: "holds_status_valid"
     t.check_constraint "(unit_price_cents >= 0)", name: "holds_unit_price_nonnegative"
+  end
+
+  create_table "orders", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.uuid "event_id", null: false
+    t.string "number", null: false
+    t.string "status", default: "paid", null: false
+    t.integer "subtotal_cents", null: false
+    t.integer "discount_cents", default: 0, null: false
+    t.integer "total_cents", null: false
+    t.string "payment_reference"
+    t.datetime "refunded_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id", "status"], name: "index_orders_on_event_id_and_status"
+    t.index ["number"], name: "index_orders_on_number", unique: true
+    t.index ["user_id"], name: "index_orders_on_user_id"
+    t.check_constraint "((subtotal_cents >= 0) AND (discount_cents >= 0) AND (total_cents >= 0))", name: "orders_amounts_nonnegative"
+    t.check_constraint "((status)::text = ANY ((ARRAY['paid'::character varying, 'refunded'::character varying])::text[]))", name: "orders_status_valid"
+    t.check_constraint "(total_cents = (subtotal_cents - discount_cents))", name: "orders_total_matches"
   end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -202,6 +224,19 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
     t.check_constraint "(sold_count >= 0)", name: "ticket_tiers_sold_count_nonnegative"
   end
 
+  create_table "tickets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "order_id", null: false
+    t.uuid "ticket_tier_id", null: false
+    t.string "code", null: false
+    t.string "status", default: "valid", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_tickets_on_code", unique: true
+    t.index ["order_id"], name: "index_tickets_on_order_id"
+    t.index ["ticket_tier_id"], name: "index_tickets_on_ticket_tier_id"
+    t.check_constraint "((status)::text = ANY ((ARRAY['valid'::character varying, 'void'::character varying])::text[]))", name: "tickets_status_valid"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "email_address", null: false
     t.string "password_digest", null: false
@@ -214,8 +249,11 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
   end
 
   add_foreign_key "events", "users", column: "organizer_id"
+  add_foreign_key "holds", "orders"
   add_foreign_key "holds", "ticket_tiers"
   add_foreign_key "holds", "users"
+  add_foreign_key "orders", "events"
+  add_foreign_key "orders", "users"
   add_foreign_key "sessions", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -224,4 +262,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "ticket_tiers", "events"
+  add_foreign_key "tickets", "orders"
+  add_foreign_key "tickets", "ticket_tiers"
 end

@@ -1,0 +1,24 @@
+<% content_for :title, "My orders" %>
+
+<h1>My orders</h1>
+
+<% if @orders.empty? %>
+  <p class="muted">You have no orders yet.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr><th>Order</th><th>Event</th><th>Total</th><th>Status</th><th>Placed</th></tr>
+    </thead>
+    <tbody>
+      <% @orders.each do |order| %>
+        <tr>
+          <td><%= link_to order.number, order_path(order) %></td>
+          <td><%= order.event.title %></td>
+          <td><%= format_cents(order.total_cents) %></td>
+          <td><span class="badge"><%= order.status %></span></td>
+          <td><%= format_in_zone(order.created_at, order.event.time_zone) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

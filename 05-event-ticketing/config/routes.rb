@@ -10,7 +10,11 @@ Rails.application.routes.draw do
     resources :holds, only: :create
   end
 
-  resources :holds, only: %i[ show destroy ]
+  resources :holds, only: %i[ show destroy ] do
+    resource :checkout, only: :create
+  end
+
+  resources :orders, only: %i[ index show ], param: :number
 
   namespace :manage do
     resources :events do
