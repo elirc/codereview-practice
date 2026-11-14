@@ -194,6 +194,7 @@ public sealed class InvoiceTests(BillingApp app) : IntegrationTest(app)
         {
             await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"UPDATE invoices SET total_minor = 1 WHERE id = {id}"));
             await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"UPDATE invoices SET number = 'INV-X' WHERE id = {id}"));
+            await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"UPDATE invoices SET status = 'draft' WHERE id = {id}"));
             await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"UPDATE invoice_lines SET amount_minor = 1 WHERE invoice_id = {id}"));
             await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"DELETE FROM invoice_lines WHERE invoice_id = {id}"));
             await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlAsync($"INSERT INTO invoice_lines (id, invoice_id, line_no, kind, description, quantity, amount_minor, tax_rate_bps, tax_minor, credited_minor, credited_tax_minor) VALUES ({Guid.NewGuid()}, {id}, 9, 'manual', 'x', 1, 1, 0, 0, 0, 0)"));

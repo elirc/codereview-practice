@@ -188,12 +188,18 @@ public sealed class CreditNoteTests(BillingApp app) : IntegrationTest(app)
 
         Assert.Equal("failed", (await (await OpsAsync()).GetAsync($"/v1/credit-notes/{refund.Id}"))["refundStatus"].GetString());
         Assert.Equal(5, App.Gateway.RefundCalls.Count);
-        Assert.Equal(0, (await InvoiceAsync(invoice)).GetProperty("refundedMinor").GetInt64());
+        var afterFailure = await InvoiceAsync(invoice);
+        Assert.Equal(0, afterFailure.GetProperty("refundedMinor").GetInt64());
+        Assert.Equal(0, afterFailure.GetProperty("creditedMinor").GetInt64());
+        Assert.Equal(0, afterFailure.GetProperty("lines")[0].GetProperty("creditedMinor").GetInt64());
+        Assert.Equal(0, afterFailure.GetProperty("lines")[0].GetProperty("creditedTaxMinor").GetInt64());
         var types = await App.WithDbAsync(db => db.WebhookEvents.Select(e => e.Type).ToListAsync());
         Assert.Single(types, t => t == "credit_note.refund_failed");
 
-        var again = await CreditAsync(invoice, line, 613, "refund");
+        var again = await CreditAsync(invoice, line, 1000, "refund");
         Assert.Equal(201, again.Status);
+        Assert.Equal(1083, again["totalMinor"].GetInt64());
+        Assert.Equal(1083, (await InvoiceAsync(invoice)).GetProperty("refundedMinor").GetInt64());
     }
 
     [Fact]

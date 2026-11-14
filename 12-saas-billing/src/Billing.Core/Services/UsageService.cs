@@ -164,6 +164,13 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
             return Reasons.SubscriptionEnded;
         }
 
+        if (subscription.CancelAtPeriodEnd
+            && subscription.CurrentPeriodEnd is { } lastPeriodEnd
+            && occurredAt >= BillingCalendar.StartOfDay(lastPeriodEnd, zone))
+        {
+            return Reasons.SubscriptionEnded;
+        }
+
         return null;
     }
 

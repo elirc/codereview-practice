@@ -236,6 +236,24 @@ public sealed class ChangeAndCancelTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task UsageAfterTheLastPeriodOfACancellingSubscriptionIsRejected()
+    {
+        var sub = await Data.SubscribeAsync(await Data.CustomerAsync(), "basic");
+        await CancelAsync(sub, "period_end");
+
+        Clock.Set(new DateTimeOffset(2026, 2, 15, 0, 30, 0, TimeSpan.Zero));
+        var inPeriod = await SendUsageAsync(sub, "last-day", 7, new DateTimeOffset(2026, 2, 14, 23, 0, 0, TimeSpan.Zero));
+        var afterEnd = await SendUsageAsync(sub, "after-end", 9, new DateTimeOffset(2026, 2, 15, 0, 10, 0, TimeSpan.Zero));
+        Clock.Set(new DateTimeOffset(2026, 2, 15, 1, 0, 0, TimeSpan.Zero));
+        await RunBillingAsync();
+
+        Assert.Equal(("accepted", null), inPeriod[0]);
+        Assert.Equal(("rejected", "subscription_ended"), afterEnd[0]);
+        var final = Assert.Single(await Data.InvoicesAsync(sub), i => i.GetProperty("kind").GetString() == "final");
+        Assert.Equal(new long[] { 7 }, Amounts(final));
+    }
+
+    [Fact]
     public async Task ResumeBeforeTheBoundaryRestoresNormalBilling()
     {
         var sub = await Data.SubscribeAsync(await Data.CustomerAsync(), "basic");

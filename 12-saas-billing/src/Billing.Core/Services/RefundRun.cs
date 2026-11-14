@@ -53,7 +53,7 @@ public sealed class RefundProcessor(
 
     /// <summary>
     /// Asks the gateway to refund a pending credit note against the invoice's successful charge; after the last
-    /// failed attempt the refund is marked failed and its amount is no longer counted as refunded.
+    /// failed attempt the refund is marked failed and its amount can be credited and refunded again.
     /// </summary>
     public async Task ProcessAsync(Guid creditNoteId, CancellationToken ct)
     {
@@ -95,6 +95,18 @@ public sealed class RefundProcessor(
                 var invoice = await db.LockInvoiceAsync(note.InvoiceId, ct)
                     ?? throw new InvalidOperationException($"Invoice {note.InvoiceId} does not exist.");
                 invoice.RefundedMinor -= note.TotalMinor;
+                invoice.CreditedMinor -= note.TotalMinor;
+
+                var noteLines = await db.CreditNoteLines.AsNoTracking().Where(l => l.CreditNoteId == note.Id).ToListAsync(ct);
+                var lineIds = noteLines.Select(l => l.InvoiceLineId).ToList();
+                var invoiceLines = await db.InvoiceLines.Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
+                foreach (var noteLine in noteLines)
+                {
+                    var line = invoiceLines[noteLine.InvoiceLineId];
+                    line.CreditedMinor -= noteLine.AmountMinor;
+                    line.CreditedTaxMinor -= noteLine.TaxMinor;
+                }
+
                 await db.SaveChangesAsync(ct);
                 var view = await views.CreditNoteAsync(note.Id, ct)
                     ?? throw new InvalidOperationException($"Credit note {note.Id} does not exist.");
