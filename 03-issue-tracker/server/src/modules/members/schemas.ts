@@ -17,6 +17,7 @@ export const MemberParams = OrgParams({
 });
 
 export const ListMembersQuery = StrictObject({
+  q: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   limit: Type.Optional(Limit),
   cursor: Type.Optional(CursorParam),
 });

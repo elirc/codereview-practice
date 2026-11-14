@@ -69,11 +69,12 @@ async function withOwnersLocked<T>(
 export async function listMembers(
   deps: Deps,
   tenant: TenantContext,
-  query: { limit?: number; cursor?: string },
+  query: { q?: string; limit?: number; cursor?: string },
 ) {
   const limit = query.limit ?? 25;
   const after = query.cursor ? decodeCursor(query.cursor, 'joined') : null;
-  const rows = await listMembersPage(tenant.orgId, after, limit + 1, deps.db);
+  const search = query.q?.trim() || undefined;
+  const rows = await listMembersPage(tenant.orgId, search, after, limit + 1, deps.db);
   const page = buildPage(rows, limit, (row) => ({
     s: 'joined',
     v: row.joined_cursor,

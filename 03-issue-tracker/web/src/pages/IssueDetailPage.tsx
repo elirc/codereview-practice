@@ -8,7 +8,14 @@ import { PRIORITY_LABELS, STATUSES, type IssueDetail, type IssueStatus } from '.
 import { useMe } from '../auth/session';
 import { CommentsSection } from '../issues/CommentsSection';
 import { useIssueMutation } from '../issues/useIssueMutation';
-import { atLeast, useLabels, useMemberOptions, useProjects, useRole } from '../org/queries';
+import {
+  atLeast,
+  useLabels,
+  useMemberOptions,
+  useMemberSearch,
+  useProjects,
+  useRole,
+} from '../org/queries';
 
 export function IssueDetailPage() {
   const { orgSlug = '', projectKey = '', number = '' } = useParams();
@@ -34,6 +41,8 @@ function IssueEditor({ orgSlug, issue }: { orgSlug: string; issue: IssueDetail }
   const projects = useProjects(orgSlug);
   const labels = useLabels(orgSlug);
   const members = useMemberOptions(orgSlug);
+  const [memberQuery, setMemberQuery] = useState('');
+  const matches = useMemberSearch(orgSlug, memberQuery.trim());
   const [notice, setNotice] = useState<string | null>(null);
   const [title, setTitle] = useState(issue.title);
   const [description, setDescription] = useState(issue.description);
@@ -57,7 +66,14 @@ function IssueEditor({ orgSlug, issue }: { orgSlug: string; issue: IssueDetail }
   const project = projects.data?.find((p) => p.key === issue.projectKey);
   const archived = !!project?.archivedAt;
   const canEdit = atLeast(role, 'member') && !archived;
-  const assignable = members.data?.filter((m) => m.role !== 'viewer') ?? [];
+  const candidates = memberQuery.trim() ? matches.data : members.data;
+  const assignable = (candidates ?? [])
+    .filter((m) => m.role !== 'viewer')
+    .map((m) => ({ id: m.userId, name: m.name }));
+  // Keep the current assignee selectable even when the search does not match them.
+  if (issue.assignee && !assignable.some((m) => m.id === issue.assignee?.id)) {
+    assignable.unshift(issue.assignee);
+  }
   const otherProjects = projects.data?.filter((p) => !p.archivedAt && p.key !== issue.projectKey);
   const mutationError =
     mutation.error instanceof ApiError && mutation.error.code === 'version_conflict'
@@ -158,21 +174,29 @@ function IssueEditor({ orgSlug, issue }: { orgSlug: string; issue: IssueDetail }
             value={issue.assignee?.id ?? ''}
             disabled={!canEdit}
             onChange={(e) => {
-              const member = assignable.find((m) => m.userId === e.target.value);
+              const member = assignable.find((m) => m.id === e.target.value);
               mutation.mutate({
                 kind: 'patch',
-                patch: { assigneeId: member?.userId ?? null },
-                preview: { assignee: member ? { id: member.userId, name: member.name } : null },
+                patch: { assigneeId: member?.id ?? null },
+                preview: { assignee: member ?? null },
               });
             }}
           >
             <option value="">Unassigned</option>
             {assignable.map((m) => (
-              <option key={m.userId} value={m.userId}>
+              <option key={m.id} value={m.id}>
                 {m.name}
               </option>
             ))}
           </select>
+          <input
+            type="search"
+            aria-label="Find member"
+            placeholder="Find member"
+            value={memberQuery}
+            disabled={!canEdit}
+            onChange={(e) => setMemberQuery(e.target.value)}
+          />
         </label>
       </div>
 

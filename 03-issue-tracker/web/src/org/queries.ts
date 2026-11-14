@@ -26,6 +26,16 @@ export function useMemberOptions(slug: string) {
   });
 }
 
+/** Members whose name or email contains `q`, for the assignee picker. */
+export function useMemberSearch(slug: string, q: string) {
+  return useQuery({
+    queryKey: ['members', 'search', q],
+    queryFn: async () => (await endpoints.searchMembers(slug, q)).items,
+    enabled: q.length > 0,
+    staleTime: 30_000,
+  });
+}
+
 const RANK: Record<Role, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
 
 /** The caller's role in the org, for hiding controls; the server enforces the real rules. */

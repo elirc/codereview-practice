@@ -70,6 +70,8 @@ export const endpoints = {
 
   listMembers: (slug: string, cursor: string | null, limit?: number) =>
     api.get<Page<Member>>(`/orgs/${enc(slug)}/members${cursorQuery(cursor, limit)}`),
+  searchMembers: (slug: string, q: string) =>
+    api.get<Page<Member>>(`/orgs/${enc(slug)}/members?q=${enc(q)}&limit=20`),
   addMember: (slug: string, body: { email: string; role: Role }) =>
     api.post<Member>(`/orgs/${enc(slug)}/members`, body),
   changeRole: (slug: string, userId: string, role: Role) =>

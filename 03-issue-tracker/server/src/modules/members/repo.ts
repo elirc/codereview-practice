@@ -28,13 +28,21 @@ function memberQuery(orgId: string, db: Database) {
     .where('m.org_id', '=', orgId);
 }
 
+/** Members in join order; `search` matches a substring of the name or email. */
 export async function listMembersPage(
   orgId: string,
+  search: string | undefined,
   after: Cursor | null,
   take: number,
   db: Database,
 ): Promise<MemberRow[]> {
   let query = memberQuery(orgId, db);
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.where((eb) =>
+      eb.or([eb('u.name', 'ilike', pattern), eb('u.email', 'ilike', pattern)]),
+    );
+  }
   if (after) {
     query = query.where(
       keysetAfter('m.created_at', 'm.user_id', 'asc', timestampValue(after.v), after.id),
