@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import structlog
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -25,6 +25,8 @@ from ..provider import ProviderPermanentError, ProviderTransientError, get_provi
 
 logger = structlog.get_logger(__name__)
 
+SUBMIT_TASK = "payments.submit_refund"
+UNSUBMITTED_AFTER = timedelta(minutes=5)
 REFUNDABLE_STATUSES = (Order.Status.PAID, Order.Status.FULFILLED)
 CLAIMING_STATUSES = (Refund.Status.PENDING, Refund.Status.SUCCEEDED)
 
@@ -179,7 +181,7 @@ def create_refund(
                 for line in request.lines or ()
             ]
         )
-        enqueue_on_commit("payments.submit_refund", str(refund.id))
+        enqueue_on_commit(SUBMIT_TASK, str(refund.id))
     return refund
 
 
@@ -195,7 +197,7 @@ def create_system_refund(order: Order, *, reason: str) -> Refund | None:
         reason=reason,
         source=Refund.Source.SYSTEM,
     )
-    enqueue_on_commit("payments.submit_refund", str(refund.id))
+    enqueue_on_commit(SUBMIT_TASK, str(refund.id))
     return refund
 
 
@@ -229,6 +231,22 @@ def submit_refund(
         updated_at=now,
     )
     return None
+
+
+def requeue_unsubmitted_refunds(*, now: datetime) -> int:
+    """Publish submission again for pending refunds the provider has not acknowledged."""
+    refund_ids = list(
+        Refund.objects.filter(
+            status=Refund.Status.PENDING,
+            provider_refund_id="",
+            created_at__lte=now - UNSUBMITTED_AFTER,
+        )
+        .order_by("created_at")
+        .values_list("id", flat=True)
+    )
+    for refund_id in refund_ids:
+        enqueue_on_commit(SUBMIT_TASK, str(refund_id))
+    return len(refund_ids)
 
 
 def fail_refund(refund_id: uuid.UUID, *, reason: str) -> None:

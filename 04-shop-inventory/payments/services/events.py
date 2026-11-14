@@ -193,7 +193,7 @@ def _record_provider_refund(order: Order, data: EventData) -> str:
     if not data.refund_id or data.amount_minor <= 0:
         _flag_for_review(order, "The provider reported a refund that could not be matched.")
         return WebhookEvent.Status.PROCESSED
-    if refunds.succeeded_minor(order) + data.amount_minor > order.amount_paid_minor:
+    if refunds.claimed_minor(order) + data.amount_minor > order.amount_paid_minor:
         _flag_for_review(
             order,
             f"Provider refund {data.refund_id} of {data.amount_minor} {data.currency} would "

@@ -59,9 +59,15 @@ def requeue_stale_events(self) -> int:
     log = logger.bind(task_id=self.request.id, attempt=self.request.retries + 1)
     log.info("requeue_stale_events_started")
     try:
-        requeued = webhooks.requeue_stale_events(now=clock.now())
+        now = clock.now()
+        events_requeued = webhooks.requeue_stale_events(now=now)
+        refunds_requeued = refunds.requeue_unsubmitted_refunds(now=now)
     except Exception:
         log.exception("requeue_stale_events_failed")
         raise
-    log.info("requeue_stale_events_finished", requeued=requeued)
-    return requeued
+    log.info(
+        "requeue_stale_events_finished",
+        events_requeued=events_requeued,
+        refunds_requeued=refunds_requeued,
+    )
+    return events_requeued + refunds_requeued

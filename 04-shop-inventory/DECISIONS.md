@@ -88,3 +88,18 @@ The timestamp is signed exactly as it appears in the header.
 event keeps its `failed` status until the task processes it. Retrying an event in any other
 status is `409 invalid_state`. Processing treats `failed` like `received`, and processing is
 idempotent, so a double retry has no extra effect.
+
+## Dashboard refunds count pending refunds too
+
+The spec checks a provider-issued refund against `refunded_minor` (succeeded refunds only).
+A pending staff refund could then also succeed and take the total above the amount paid, so the
+check uses pending plus succeeded refunds, the same claim used for staff refunds. A dashboard
+refund that does not fit flags the order for review.
+
+## Re-submitting refunds whose publish was lost
+
+Publishing a task never fails the request, so a lost `submit_refund` message would leave a
+refund `pending` with no provider id, holding its claim indefinitely. The five-minute
+`payments.requeue_stale_events` beat task also re-publishes `submit_refund` for refunds that are
+still `pending` with no provider refund id five minutes after creation. Submission is safe to
+repeat because the refund id is the provider idempotency key.

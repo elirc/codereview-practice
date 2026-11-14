@@ -8,11 +8,11 @@ from django.core.management import CommandError, call_command
 
 from payments import tasks
 from payments.management.commands import simulate_webhook
-from payments.models import WebhookEvent
+from payments.models import Refund, WebhookEvent
 from payments.services import webhooks
 from payments.signature import verify
 from tests.factories import stocked_product
-from tests.helpers import NOW, create_order, store_event
+from tests.helpers import NOW, create_order, pay, store_event
 
 pytestmark = pytest.mark.django_db
 
@@ -114,6 +114,34 @@ def test_requeue_task_uses_the_current_time(order, clock):
     clock.advance(minutes=5)
 
     assert tasks.requeue_stale_events() == 1
+
+
+def _refund(order, **fields) -> Refund:
+    refund = Refund.objects.create(
+        order=order,
+        amount_minor=100,
+        reason="faulty",
+        source=Refund.Source.STAFF,
+    )
+    Refund.objects.filter(pk=refund.pk).update(**fields)
+    return refund
+
+
+def test_unsubmitted_pending_refunds_are_published_again(
+    order,
+    published,
+    django_capture_on_commit_callbacks,
+):
+    paid = pay(order)
+    stale = _refund(paid, created_at=NOW - timedelta(minutes=5))
+    _refund(paid, created_at=NOW - timedelta(minutes=4))
+    _refund(paid, created_at=NOW - timedelta(hours=1), provider_refund_id="re_sent")
+    _refund(paid, created_at=NOW - timedelta(hours=1), status=Refund.Status.FAILED)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        assert tasks.requeue_stale_events() == 1
+
+    assert published == [("payments.submit_refund", (str(stale.pk),))]
 
 
 class FakeResponse:

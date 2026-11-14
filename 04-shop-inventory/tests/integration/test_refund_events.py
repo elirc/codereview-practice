@@ -177,6 +177,18 @@ def test_dashboard_refund_beyond_the_amount_paid_needs_review(paid_order):
     assert "re_dash_2" in order.review_reason
 
 
+def test_dashboard_refund_counts_pending_refunds_against_the_amount_paid(
+    manager_client,
+    paid_order,
+):
+    refund_lines(manager_client, paid_order, 2, restock=False, key="key-0001")
+
+    refund_event("refund.succeeded", paid_order, refund_id="re_dash", amount_minor=1201)
+
+    assert not Refund.objects.filter(source=Refund.Source.PROVIDER).exists()
+    assert Order.objects.get(pk=paid_order.pk).needs_review is True
+
+
 def test_failure_for_an_unknown_refund_is_ignored(paid_order):
     outcome = refund_event("refund.failed", paid_order, refund_id="re_unknown", amount_minor=500)
 
