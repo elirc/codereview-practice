@@ -72,7 +72,7 @@ pub async fn claim(
     }
     let limited = unlocked.max_concurrency.is_some() || unlocked.rate_limit_per_minute.is_some();
     let q: Queue = if limited {
-        let sql = format!("SELECT {QUEUE_COLUMNS} FROM queues WHERE name = $1 FOR UPDATE");
+        let sql = format!("SELECT {QUEUE_COLUMNS} FROM queues WHERE name = $1 FOR NO KEY UPDATE");
         sqlx::query_as::<_, Queue>(&sql)
             .bind(queue)
             .fetch_one(&mut *tx)

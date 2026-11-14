@@ -31,7 +31,7 @@ async fn schedule_endpoints_validate_and_enforce_roles(pool: PgPool) {
     let id = reply.body["id"].as_str().unwrap().to_string();
 
     let reply = app.post("/api/schedules", &admin, body).await;
-    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    assert_eq!(reply.status, StatusCode::CONFLICT);
 
     let reply = app
         .post(

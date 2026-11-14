@@ -98,8 +98,8 @@ async fn duplicate_queue_name_is_rejected(pool: PgPool) {
     let admin = token(&pool, Role::Admin, &[]).await;
     app.queue(&admin, "email").await;
     let reply = app.post("/api/queues", &admin, json!({ "name": "email" })).await;
-    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
-    assert_eq!(reply.body["error"]["details"]["fields"][0]["path"], "name");
+    assert_eq!(reply.status, StatusCode::CONFLICT);
+    assert_eq!(error_code(&reply), "invalid_state");
 }
 
 #[sqlx::test(migrations = "../../migrations")]

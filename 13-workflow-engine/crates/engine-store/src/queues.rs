@@ -73,10 +73,9 @@ pub async fn create_queue(
         .await;
     match result {
         Ok(queue) => Ok(queue),
-        Err(err) if is_unique_violation(&err, "queues_pkey") => Err(StoreError::Conflict {
-            field: "name".to_string(),
-            message: "a queue with this name already exists".to_string(),
-        }),
+        Err(err) if is_unique_violation(&err, "queues_pkey") => Err(StoreError::InvalidState(
+            "A queue with this name already exists.".to_string(),
+        )),
         Err(err) => Err(err.into()),
     }
 }

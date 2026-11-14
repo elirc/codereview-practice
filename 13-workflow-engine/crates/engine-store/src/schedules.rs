@@ -72,10 +72,7 @@ fn first_fire_after(cron_expr: &str, now: DateTime<Utc>) -> Result<DateTime<Utc>
 
 fn map_write_error(err: sqlx::Error, queue: &str) -> StoreError {
     if is_unique_violation(&err, "schedules_name_key") {
-        StoreError::Conflict {
-            field: "name".to_string(),
-            message: "a schedule with this name already exists".to_string(),
-        }
+        StoreError::InvalidState("A schedule with this name already exists.".to_string())
     } else if is_foreign_key_violation(&err, "schedules_queue_fkey") {
         StoreError::UnknownQueue(queue.to_string())
     } else {

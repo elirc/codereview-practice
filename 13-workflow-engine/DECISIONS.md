@@ -5,8 +5,7 @@ Short records of places where the spec left a choice open.
 - **Health route path.** The API table lists `GET /healthz` under the `/api` prefix, while the admin
   page is served at `/`. The health check is served at `/api/healthz`, without authentication.
 - **Duplicate names.** No error code is listed for a queue or schedule name that already exists.
-  These return `400 validation_failed` with a field error on `name`, the same shape as other
-  invalid input.
+  These return `409 invalid_state`, the status the conventions give to state conflicts.
 - **What a submitter may read.** The permission table grants submitters jobs, runs and queues in
   their list. Schedules and workflow definitions are not mentioned, so submitters get
   `403 forbidden` for them; viewers, operators and admins may read them.
@@ -56,3 +55,8 @@ Short records of places where the spec left a choice open.
 - **Seed tokens.** API tokens are normally random and shown once. `wfe-server seed` upserts four
   fixed development tokens (listed in the README) so a fresh checkout can use the API and the
   admin page; they must not be used outside local development.
+- **Handlers stopped by the worker's own shutdown.** After the grace period the worker cancels
+  every handler's token. A handler that then returns `Cancelled` is not reported as a failure
+  (which would use up an attempt and could kill the job); its claim is released with the attempt
+  count restored, the same as a handler that does not stop in time. A `Cancelled` returned while
+  the worker is not stopping is still reported as in 5.4.

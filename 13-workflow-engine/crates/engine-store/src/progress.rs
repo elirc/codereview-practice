@@ -101,8 +101,7 @@ async fn set_step_state(
     Ok(())
 }
 
-/// Records the end of a step's job and moves the run forward. The run must already be
-/// locked by the caller's transaction.
+/// Records the end of a step's job and moves the run forward.
 pub(crate) async fn on_step_job_ended(
     conn: &mut PgConnection,
     run_id: Uuid,

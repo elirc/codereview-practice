@@ -114,7 +114,7 @@ pub async fn run(pool: &PgPool, now: DateTime<Utc>) -> anyhow::Result<()> {
         paused: false,
     };
     match create_schedule(pool, &nightly, now).await {
-        Ok(_) | Err(StoreError::Conflict { .. }) => {}
+        Ok(_) | Err(StoreError::InvalidState(_)) => {}
         Err(err) => return Err(err.into()),
     }
 

@@ -16,8 +16,7 @@ use crate::StoreError;
 pub const REAP_BATCH: i64 = 100;
 
 /// Ends claims whose lease expired at or before `now` and returns how many were ended. Each
-/// job is cancelled, killed or scheduled for a retry. Standalone jobs are handled in one
-/// batch; jobs of workflow runs one at a time together with their run.
+/// job is cancelled, killed or scheduled for a retry.
 pub async fn reap_expired(
     pool: &PgPool,
     now: DateTime<Utc>,
