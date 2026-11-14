@@ -150,8 +150,7 @@ func (r *Runner) Run(ctx context.Context, job string, asOf calendar.Date) (Resul
 		if err == nil && released {
 			return
 		}
-		// A session-level advisory lock lives as long as the connection, so
-		// a connection that could not unlock is closed instead of pooled.
+		// The lock is held by the session, so close the connection.
 		r.log.Error("releasing job lock", "job", job, "released", released, "error", err)
 		if cerr := conn.Conn().Close(unlockCtx); cerr != nil {
 			r.log.Error("closing lock connection", "job", job, "error", cerr)
@@ -165,8 +164,6 @@ func (r *Runner) execute(ctx context.Context, job string, def definition, asOf c
 	q := db.New(r.pool)
 	started := r.clock.Now()
 
-	// Holding the lock means no other run of this job is alive, so any
-	// row still marked running belongs to a process that died.
 	stale, err := q.FailStaleJobRuns(ctx, db.FailStaleJobRunsParams{FinishedAt: store.Timestamptz(started), Job: job})
 	if err != nil {
 		return Result{}, fmt.Errorf("closing stale %s runs: %w", job, err)

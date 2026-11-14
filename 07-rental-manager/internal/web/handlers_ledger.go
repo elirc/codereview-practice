@@ -61,9 +61,7 @@ func (s *Server) showLedger(w http.ResponseWriter, r *http.Request) {
 	s.renderLedger(w, r, http.StatusOK, id, queryForm(r), nil, "")
 }
 
-// renderLedger shows the statement page, or only its panel for htmx. The
-// range comes from rangeForm; entryForm, when set, re-fills the entry form
-// after a failed submission.
+// renderLedger shows the statement page, or only its panel for htmx.
 func (s *Server) renderLedger(w http.ResponseWriter, r *http.Request, status int, id pgtype.UUID, rangeForm, entryForm *form, notice string) {
 	d, err := s.leases.Get(r.Context(), id)
 	if err != nil {
@@ -80,8 +78,6 @@ func (s *Server) renderLedger(w http.ResponseWriter, r *http.Request, status int
 		s.fail(w, r, err)
 		return
 	}
-	// A form shown again after a failed submission keeps its key, so the
-	// corrected submission still posts at most once.
 	var key string
 	if entryForm != nil && !entryForm.errs.Has("idempotency_key") {
 		key = entryForm.raw("idempotency_key")

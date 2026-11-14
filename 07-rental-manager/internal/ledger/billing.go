@@ -36,10 +36,8 @@ func FeeTermsOf(l db.Lease) billing.FeeTerms {
 	return terms
 }
 
-// PostRent posts each rent charge of l whose charge date is on or before
-// asOf and whose key is not yet in the ledger, dated by the schedule rather
-// than by asOf. It returns the number of entries posted. The caller holds
-// the lease row lock.
+// PostRent posts the rent charges of l that are due by asOf and not yet
+// posted, and returns how many it posted.
 func PostRent(ctx context.Context, q *db.Queries, l db.Lease, asOf calendar.Date) (int, error) {
 	if !billing.Billable(l.Status) {
 		return 0, nil

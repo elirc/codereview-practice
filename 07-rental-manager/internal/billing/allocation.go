@@ -45,9 +45,7 @@ func ReversedIDs(entries []Entry) map[int64]bool {
 }
 
 // Allocate applies the payments and credits dated on or before cutoff to the
-// charges dated on or before cutoff, oldest first. A reversal and the entry
-// it reverses are both left out, whatever their dates, so the reversal
-// status of an entry is decided by the entries passed in.
+// charges dated on or before cutoff and returns the open items.
 func Allocate(entries []Entry, cutoff calendar.Date) Allocation {
 	reversed := ReversedIDs(entries)
 	var items []Item

@@ -89,8 +89,8 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (Use
 		return User{}, fmt.Errorf("loading user: %w", err)
 	}
 	if err != nil || !u.Active {
-		// Compare anyway so unknown and known emails take the same time;
-		// the outcome is irrelevant.
+		// Dummy compare so unknown emails take as long as known ones; the
+		// result is deliberately discarded.
 		_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
 		return User{}, ErrInvalidCredentials
 	}

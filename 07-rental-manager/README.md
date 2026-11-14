@@ -15,6 +15,8 @@ make migrate                       # rentmgr migrate up
 make seed                          # demo data and the accounts below
 ```
 
+The files in `internal/store/db/` were written by hand to match sqlc 1.27.0 output. On first setup run `sqlc generate` (or `make sqlc`) and commit any diff.
+
 `github.com/alexedwards/scs/pgxstore` has no tagged release and is pinned by pseudo-version; if `go mod tidy` cannot resolve it, run `go get github.com/alexedwards/scs/pgxstore@latest` once.
 
 htmx is not committed. Without `make htmx` the pages still work as plain forms. The command it runs is:

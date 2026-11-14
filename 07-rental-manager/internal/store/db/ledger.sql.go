@@ -299,15 +299,15 @@ func (q *Queries) ListLeaseBalances(ctx context.Context, asOf pgtype.Date) ([]Li
 
 const listStatementEntries = `-- name: ListStatementEntries :many
 SELECT s.id, s.entry_date, s.kind, s.amount_cents, s.period, s.reverses_entry_id, s.memo,
-    s.created_at, s.reversed_by_id, s.running_balance
+    s.created_at, r.id AS reversed_by_id, s.running_balance
 FROM (
     SELECT e.id, e.entry_date, e.kind, e.amount_cents, e.period, e.reverses_entry_id, e.memo,
-        e.created_at, r.id AS reversed_by_id,
+        e.created_at,
         (SUM(e.amount_cents) OVER (ORDER BY e.entry_date, e.id))::bigint AS running_balance
     FROM ledger_entries e
-    LEFT JOIN ledger_entries r ON r.reverses_entry_id = e.id
     WHERE e.lease_id = $1 AND e.entry_date <= $2::date
 ) AS s
+LEFT JOIN ledger_entries r ON r.reverses_entry_id = s.id
 WHERE s.entry_date >= $3::date
 ORDER BY s.entry_date, s.id
 `

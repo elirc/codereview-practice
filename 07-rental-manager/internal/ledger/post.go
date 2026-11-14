@@ -1,5 +1,4 @@
-// Package ledger posts and reads lease ledger entries. All balances,
-// statements and reports are derived from the entries; nothing is stored.
+// Package ledger posts and reads lease ledger entries.
 package ledger
 
 import (
@@ -103,8 +102,7 @@ func ReversalKey(id int64) string {
 	return "reversal:" + strconv.FormatInt(id, 10)
 }
 
-// LockLease loads a lease with SELECT ... FOR UPDATE, serialising postings
-// and job runs on that lease until the transaction ends.
+// LockLease loads a lease and locks its row until the transaction ends.
 func LockLease(ctx context.Context, q *db.Queries, id pgtype.UUID) (db.Lease, error) {
 	l, err := q.GetLeaseForUpdate(ctx, id)
 	if store.IsNotFound(err) {
