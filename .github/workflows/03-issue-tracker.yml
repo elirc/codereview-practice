@@ -1,0 +1,78 @@
+name: 03-issue-tracker
+
+on:
+  push:
+    paths: ["03-issue-tracker/**", ".github/workflows/03-issue-tracker.yml"]
+  pull_request:
+    paths: ["03-issue-tracker/**", ".github/workflows/03-issue-tracker.yml"]
+
+defaults:
+  run:
+    working-directory: 03-issue-tracker
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 03-issue-tracker/server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: issues
+          POSTGRES_PASSWORD: issues
+          POSTGRES_DB: issues_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U issues -d issues_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://issues:issues@localhost:5432/issues_test
+      TEST_DATABASE_URL: postgres://issues:issues@localhost:5432/issues_test
+      APP_ORIGIN: http://localhost:5303
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Type check
+        run: npm run typecheck
+      - name: Migrate
+        run: npm run migrate
+      - name: Test
+        run: npm test
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 03-issue-tracker/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Type check
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npx vite build
