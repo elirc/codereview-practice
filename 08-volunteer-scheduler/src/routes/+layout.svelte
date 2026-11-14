@@ -3,12 +3,18 @@
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+
+	const manager = $derived(data.user?.role === 'coordinator' || data.user?.role === 'admin');
 </script>
 
 <header>
 	<strong>Volunteer Scheduler</strong>
 	{#if data.user}
 		<nav>
+			{#if manager}
+				<a href="/manage/shifts">Shifts</a>
+				<a href="/manage/series">Series</a>
+			{/if}
 			{#if data.user.role === 'admin'}
 				<a href="/admin/users">Users</a>
 			{/if}
