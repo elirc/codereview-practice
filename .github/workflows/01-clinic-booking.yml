@@ -1,0 +1,66 @@
+name: 01-clinic-booking
+
+on:
+  push:
+    paths: ["01-clinic-booking/**", ".github/workflows/01-clinic-booking.yml"]
+  pull_request:
+    paths: ["01-clinic-booking/**", ".github/workflows/01-clinic-booking.yml"]
+
+defaults:
+  run:
+    working-directory: 01-clinic-booking
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: clinic
+          POSTGRES_PASSWORD: clinic
+          POSTGRES_DB: clinic_booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clinic -d clinic_booking_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://clinic:clinic@localhost:5432/clinic_booking_test?schema=public
+      APP_ORIGIN: http://localhost:3000
+      LOG_LEVEL: silent
+      MAILER: memory
+      MAIL_FROM: appointments@clinic.example
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Migrate
+        run: npx prisma migrate deploy
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm run test:integration
