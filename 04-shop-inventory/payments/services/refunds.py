@@ -2,6 +2,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 import structlog
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -19,6 +20,7 @@ from ..exceptions import (
     ExceedsRefundableQuantity,
     InvalidLine,
     RefundLimitExceeded,
+    RefundTooSmall,
 )
 from ..models import Refund, RefundLine
 from ..provider import ProviderPermanentError, ProviderTransientError, get_provider
@@ -43,6 +45,7 @@ class RefundRequest:
     reason: str
     lines: Sequence[RefundLineRequest] | None = None
     amount_minor: int | None = None
+    percent: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,17 @@ class LineAvailability:
     @property
     def refundable_quantity(self) -> int:
         return self.quantity - self.refunded_quantity - self.pending_quantity
+
+
+@dataclass(frozen=True)
+class RefundQuote:
+    amount_minor: int
+    refundable_minor: int
+
+
+def percent_of(amount_minor: int, percent: Decimal) -> int:
+    """Return ``percent`` per cent of ``amount_minor``, rounded to the nearest minor unit."""
+    return round(amount_minor * float(percent) / 100)
 
 
 def refund_amount(
@@ -90,6 +104,10 @@ def refund_amount(
         amount = sum(
             lines[line.order_line_id].unit_price_minor * line.quantity for line in request.lines
         )
+    elif request.percent is not None:
+        amount = percent_of(amount_paid_minor, request.percent)
+        if amount < 1:
+            raise RefundTooSmall(details={"amount_paid_minor": amount_paid_minor})
     else:
         amount = request.amount_minor or 0
 
@@ -141,6 +159,21 @@ def line_availability(order: Order) -> dict[uuid.UUID, LineAvailability]:
     }
 
 
+def quote_refund(order: Order, request: RefundRequest, *, limit_minor: int | None) -> RefundQuote:
+    """Work out what ``request`` would refund on ``order`` without creating anything."""
+    if order.status not in REFUNDABLE_STATUSES:
+        raise InvalidState("Only paid or fulfilled orders can be refunded.")
+    claimed = claimed_minor(order)
+    amount = refund_amount(
+        request,
+        lines=line_availability(order),
+        amount_paid_minor=order.amount_paid_minor,
+        claimed_minor=claimed,
+        limit_minor=limit_minor,
+    )
+    return RefundQuote(amount_minor=amount, refundable_minor=order.amount_paid_minor - claimed)
+
+
 def create_refund(
     *,
     order_number: str,
@@ -149,22 +182,17 @@ def create_refund(
     limit_minor: int | None,
 ) -> Refund:
     """Create a pending staff refund and submit it to the provider after commit."""
+    order = Order.objects.filter(number=order_number).first()
+    if order is None:
+        raise NotFound()
+    quote = quote_refund(order, request, limit_minor=limit_minor)
     with transaction.atomic():
-        order = Order.objects.select_for_update().filter(number=order_number).first()
-        if order is None:
-            raise NotFound()
+        order = Order.objects.select_for_update().get(pk=order.pk)
         if order.status not in REFUNDABLE_STATUSES:
             raise InvalidState("Only paid or fulfilled orders can be refunded.")
-        amount = refund_amount(
-            request,
-            lines=line_availability(order),
-            amount_paid_minor=order.amount_paid_minor,
-            claimed_minor=claimed_minor(order),
-            limit_minor=limit_minor,
-        )
         refund = Refund.objects.create(
             order=order,
-            amount_minor=amount,
+            amount_minor=quote.amount_minor,
             status=Refund.Status.PENDING,
             reason=request.reason,
             source=Refund.Source.STAFF,

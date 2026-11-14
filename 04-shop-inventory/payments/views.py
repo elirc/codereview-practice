@@ -17,11 +17,16 @@ from orders.models import Order
 from .models import Refund, WebhookEvent
 from .serializers import (
     RefundCreateSerializer,
+    RefundQuoteQuerySerializer,
     RefundSerializer,
     WebhookEventFilterSerializer,
     WebhookEventSerializer,
 )
 from .services import refunds, webhooks
+
+
+def _refund_limit(request: Request) -> int | None:
+    return settings.CLERK_REFUND_LIMIT_MINOR if role_of(request.user) == CLERK else None
 
 
 def _refunds() -> QuerySet[Refund]:
@@ -50,8 +55,9 @@ class OrderRefundListCreateView(generics.ListAPIView):
             reason=data["reason"],
             lines=lines,
             amount_minor=data.get("amount_minor"),
+            percent=data.get("percent"),
         )
-        limit = settings.CLERK_REFUND_LIMIT_MINOR if role_of(request.user) == CLERK else None
+        limit = _refund_limit(request)
 
         def create() -> tuple[int, dict]:
             refund = refunds.create_refund(
@@ -69,6 +75,27 @@ class OrderRefundListCreateView(generics.ListAPIView):
             action=create,
         )
         return Response(result.body, status=result.status)
+
+
+class OrderRefundQuoteView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def get(self, request: Request, number: str) -> Response:
+        query = RefundQuoteQuerySerializer(data=request.query_params.dict())
+        query.is_valid(raise_exception=True)
+        order = get_object_or_404(Order, number=number)
+        quote = refunds.quote_refund(
+            order,
+            refunds.RefundRequest(reason="quote", percent=query.validated_data["percent"]),
+            limit_minor=_refund_limit(request),
+        )
+        return Response(
+            {
+                "amount_minor": quote.amount_minor,
+                "refundable_minor": quote.refundable_minor,
+                "currency": order.currency,
+            }
+        )
 
 
 class PaymentWebhookView(APIView):

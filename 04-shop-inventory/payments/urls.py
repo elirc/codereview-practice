@@ -8,6 +8,11 @@ urlpatterns = [
         views.OrderRefundListCreateView.as_view(),
         name="order-refunds",
     ),
+    path(
+        "orders/<str:number>/refunds/quote/",
+        views.OrderRefundQuoteView.as_view(),
+        name="order-refund-quote",
+    ),
     path("webhook-events/", views.WebhookEventListView.as_view(), name="webhook-event-list"),
     path(
         "webhook-events/<str:event_id>/",

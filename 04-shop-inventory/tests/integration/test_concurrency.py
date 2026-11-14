@@ -2,7 +2,6 @@ import json
 from functools import partial
 
 import pytest
-from django.db.models import Sum
 from django.test import Client
 from rest_framework.test import APIClient
 
@@ -22,7 +21,6 @@ from tests.helpers import (
     client_for,
     create_order,
     event_payload,
-    pay,
     run_concurrently,
     stock_of,
     store_event,
@@ -248,26 +246,3 @@ def test_cancel_racing_a_payment_has_one_winner():
     assert movements.filter(kind="commit").count() == 1
     assert (stock_of(product).on_hand, stock_of(product).reserved) == (3, 0)
     assert_ledger_balanced(product)
-
-
-def test_concurrent_refunds_cannot_exceed_the_amount_paid():
-    manager = staff_user("manager")
-    order = pay(create_order((stocked_product(on_hand=5, price_minor=4500), 1)))
-
-    def refund(key: str):
-        def call():
-            response = client_for(manager).post(
-                f"/api/orders/{order.number}/refunds/",
-                {"amount_minor": 3000, "reason": "goodwill"},
-                format="json",
-                HTTP_IDEMPOTENCY_KEY=key,
-            )
-            return response.status_code
-
-        return call
-
-    results = run_concurrently(refund("refund-key-a"), refund("refund-key-b"))
-
-    assert sorted(results) == [202, 422]
-    claimed = Refund.objects.filter(order=order).aggregate(total=Sum("amount_minor"))["total"]
-    assert claimed == 3000

@@ -1,9 +1,12 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .models import Refund, RefundLine, WebhookEvent
 
 MAX_REFUND_MINOR = 10**12
 MAX_EVENT_TIMESTAMP = 253402300799
+REFUND_KINDS = ("lines", "amount_minor", "percent")
 
 
 class RefundLineInputSerializer(serializers.Serializer):
@@ -19,15 +22,33 @@ class RefundCreateSerializer(serializers.Serializer):
         max_value=MAX_REFUND_MINOR,
         required=False,
     )
+    percent = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("100"),
+        required=False,
+    )
     reason = serializers.CharField(min_length=1, max_length=200)
 
     def validate(self, attrs: dict) -> dict:
-        if ("lines" in attrs) == ("amount_minor" in attrs):
-            raise serializers.ValidationError("Provide exactly one of lines or amount_minor.")
+        if sum(kind in attrs for kind in REFUND_KINDS) != 1:
+            raise serializers.ValidationError(
+                "Provide exactly one of lines, amount_minor or percent.",
+            )
         line_ids = [line["order_line_id"] for line in attrs.get("lines", [])]
         if len(set(line_ids)) != len(line_ids):
             raise serializers.ValidationError({"lines": ["Each order line may appear only once."]})
         return attrs
+
+
+class RefundQuoteQuerySerializer(serializers.Serializer):
+    percent = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("100"),
+    )
 
 
 class RefundLineSerializer(serializers.ModelSerializer):

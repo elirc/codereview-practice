@@ -336,3 +336,25 @@ def test_submit_refund_task_reraises_transient_errors_when_called_directly(paid_
         tasks.submit_refund(str(refund.id))
 
     assert Refund.objects.get(pk=refund.pk).status == Refund.Status.PENDING
+
+
+def test_percentage_refund_is_created_for_a_share_of_the_amount_paid(manager_client, paid_order):
+    response = post_refund(manager_client, paid_order, {"percent": "20", "reason": "late delivery"})
+
+    assert response.status_code == 202
+    assert response.json()["amount_minor"] == 900
+
+
+def test_refund_quote_previews_a_percentage_refund(clerk_client, paid_order):
+    Refund.objects.create(
+        order=paid_order,
+        amount_minor=500,
+        reason="dent",
+        source=Refund.Source.STAFF,
+    )
+
+    response = clerk_client.get(f"/api/orders/{paid_order.number}/refunds/quote/?percent=10")
+
+    assert response.status_code == 200
+    assert response.json() == {"amount_minor": 450, "refundable_minor": 4000, "currency": "USD"}
+    assert Refund.objects.count() == 1

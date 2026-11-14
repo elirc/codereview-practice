@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 import pytest
 
@@ -118,3 +119,12 @@ def test_limit_applies_to_line_refund_amounts():
 
 def test_no_limit_means_any_refundable_amount_is_allowed():
     assert amount_for(RefundRequest(reason="x", amount_minor=9000), paid=9000) == 9000
+
+
+def test_percentage_refund_is_a_share_of_the_amount_paid():
+    assert amount_for(RefundRequest(reason="late", percent=Decimal("20")), paid=4500) == 900
+
+
+def test_percentage_refund_respects_what_is_already_claimed():
+    with pytest.raises(ExceedsRefundable):
+        amount_for(RefundRequest(reason="late", percent=Decimal("50")), paid=4500, claimed=3000)

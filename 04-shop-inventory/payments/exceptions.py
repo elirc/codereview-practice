@@ -27,6 +27,12 @@ class RefundLimitExceeded(DomainError):
     message = "This refund is above the limit you are allowed to issue."
 
 
+class RefundTooSmall(DomainError):
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    code = "refund_too_small"
+    message = "The requested percentage does not amount to a refundable sum."
+
+
 class OrderNotFoundYet(Exception):
     """No order carries the event's payment intent (yet); processing should be retried."""
 
