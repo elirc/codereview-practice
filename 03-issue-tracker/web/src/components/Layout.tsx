@@ -33,6 +33,9 @@ export function Layout({ me }: { me: Me }) {
         {membership && (
           <nav>
             <NavLink to={`/o/${membership.orgSlug}/issues`}>Issues</NavLink>
+            <NavLink to={`/o/${membership.orgSlug}/projects`}>Projects</NavLink>
+            <NavLink to={`/o/${membership.orgSlug}/labels`}>Labels</NavLink>
+            <NavLink to={`/o/${membership.orgSlug}/members`}>Members</NavLink>
           </nav>
         )}
         <span className="spacer" />

@@ -60,3 +60,11 @@ in the same request (so `q=ENG-1&projectKey=OPS` is empty) rather than ignoring 
 every filter meaning the same thing in every request. List filters that name nothing in the org
 (an unknown `projectKey`, `assigneeId` or `labelId`) return an empty list instead of an error,
 since they narrow a list rather than reference a record.
+
+## Optimistic edits while another edit is queued
+
+Edits to one issue share a React Query mutation scope, so the second edit's request waits for the
+first and reads the version the first one produced. The detail and list queries are only
+invalidated once no edit for that issue is pending, so a refetch never overwrites a queued
+preview. If an earlier edit fails, its rollback restores the snapshot taken before it, which can
+briefly hide a later queued preview until that edit settles.
