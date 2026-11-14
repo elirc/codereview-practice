@@ -1,0 +1,50 @@
+name: 08-volunteer-scheduler
+
+on:
+  push:
+    paths: ["08-volunteer-scheduler/**", ".github/workflows/08-volunteer-scheduler.yml"]
+  pull_request:
+    paths: ["08-volunteer-scheduler/**", ".github/workflows/08-volunteer-scheduler.yml"]
+
+defaults:
+  run:
+    working-directory: 08-volunteer-scheduler
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      LOG_LEVEL: warn
+      ORG_TIMEZONE: America/New_York
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Lint and format check
+        run: npm run lint
+
+      - name: Type check
+        run: npm run check
+
+      - name: Migrate
+        run: npm run db:migrate
+        env:
+          DATABASE_PATH: ${{ runner.temp }}/volunteer-scheduler.sqlite
+
+      - name: Seed
+        run: npm run db:seed
+        env:
+          DATABASE_PATH: ${{ runner.temp }}/volunteer-scheduler.sqlite
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
