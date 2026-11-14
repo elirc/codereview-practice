@@ -5,6 +5,7 @@ import ledger.domain.WireValue
 import ledger.ledger.Account
 import ledger.ledger.BalanceRow
 import ledger.ledger.JournalEntry
+import ledger.settlement.BankExpectation
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.util.UUID
@@ -59,6 +60,26 @@ class LedgerEvents(private val outbox: OutboxWriter) {
                 "availableMinor" to balance.availableMinor,
                 "causeType" to causeType,
                 "causeId" to causeId
+            )
+        )
+    }
+
+    fun payout(type: String, expectation: BankExpectation, sequence: Long, occurredAt: Instant) {
+        outbox.record(
+            topic = Topics.SETTLEMENT,
+            partitionKey = expectation.accountId.toString(),
+            type = type,
+            aggregateType = "bank_expectation",
+            aggregateId = expectation.id.toString(),
+            sequence = sequence,
+            occurredAt = occurredAt,
+            data = mapOf(
+                "expectationId" to expectation.id,
+                "kind" to expectation.kind,
+                "reference" to expectation.reference,
+                "accountId" to expectation.accountId,
+                "amountMinor" to expectation.amountMinor,
+                "currency" to expectation.currency
             )
         )
     }
