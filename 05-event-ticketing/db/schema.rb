@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_14_090700) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_14_090800) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -52,10 +52,12 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090700) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.uuid "order_id"
+    t.uuid "waitlist_entry_id"
     t.index ["order_id"], name: "index_holds_on_order_id", unique: true
     t.index ["status", "expires_at"], name: "index_holds_on_status_and_expires_at"
     t.index ["ticket_tier_id"], name: "index_holds_on_ticket_tier_id"
     t.index ["user_id"], name: "index_holds_on_user_id"
+    t.index ["waitlist_entry_id"], name: "index_holds_on_waitlist_entry_id", unique: true
     t.index ["user_id", "ticket_tier_id"], name: "index_holds_one_active_per_user_and_tier", unique: true, where: "((status)::text = 'active'::text)"
     t.check_constraint "(quantity > 0)", name: "holds_quantity_positive"
     t.check_constraint "((source)::text = ANY ((ARRAY['direct'::character varying, 'waitlist'::character varying])::text[]))", name: "holds_source_valid"
@@ -305,12 +307,29 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090700) do
     t.check_constraint "((role)::text = ANY ((ARRAY['customer'::character varying, 'organizer'::character varying, 'admin'::character varying])::text[]))", name: "users_role_valid"
   end
 
+  create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.uuid "ticket_tier_id", null: false
+    t.integer "quantity", null: false
+    t.string "status", default: "waiting", null: false
+    t.datetime "offered_at"
+    t.datetime "offer_expires_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ticket_tier_id", "status", "created_at", "id"], name: "index_waitlist_entries_for_promotion"
+    t.index ["user_id"], name: "index_waitlist_entries_on_user_id"
+    t.index ["user_id", "ticket_tier_id"], name: "index_waitlist_entries_one_open_per_user_and_tier", unique: true, where: "((status)::text = ANY ((ARRAY['waiting'::character varying, 'offered'::character varying])::text[]))"
+    t.check_constraint "(quantity > 0)", name: "waitlist_entries_quantity_positive"
+    t.check_constraint "((status)::text = ANY ((ARRAY['waiting'::character varying, 'offered'::character varying, 'converted'::character varying, 'expired'::character varying, 'cancelled'::character varying])::text[]))", name: "waitlist_entries_status_valid"
+  end
+
   add_foreign_key "events", "users", column: "organizer_id"
   add_foreign_key "hold_promos", "holds"
   add_foreign_key "hold_promos", "promo_codes"
   add_foreign_key "holds", "orders"
   add_foreign_key "holds", "ticket_tiers"
   add_foreign_key "holds", "users"
+  add_foreign_key "holds", "waitlist_entries"
   add_foreign_key "orders", "events"
   add_foreign_key "orders", "users"
   add_foreign_key "promo_code_tiers", "promo_codes", on_delete: :cascade
@@ -329,4 +348,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090700) do
   add_foreign_key "ticket_tiers", "events"
   add_foreign_key "tickets", "orders"
   add_foreign_key "tickets", "ticket_tiers"
+  add_foreign_key "waitlist_entries", "ticket_tiers"
+  add_foreign_key "waitlist_entries", "users"
 end

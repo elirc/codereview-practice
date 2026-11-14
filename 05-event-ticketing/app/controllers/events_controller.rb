@@ -7,6 +7,17 @@ class EventsController < ApplicationController
 
   def show
     @event = EventPolicy.visible_scope(current_user).find(params[:id])
-    @tiers = @event.ticket_tiers
+    @availabilities = TierAvailability.for_event(@event, now: Time.current)
+    @my_entries = my_waitlist_entries
   end
+
+  private
+    def my_waitlist_entries
+      return {} unless authenticated?
+
+      current_user.waitlist_entries.pending
+        .where(ticket_tier_id: @availabilities.map { |availability| availability.tier.id })
+        .includes(:hold)
+        .index_by(&:ticket_tier_id)
+    end
 end

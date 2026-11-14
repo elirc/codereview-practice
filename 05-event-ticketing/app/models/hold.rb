@@ -4,6 +4,7 @@ class Hold < ApplicationRecord
   belongs_to :user
   belongs_to :ticket_tier
   belongs_to :order, optional: true
+  belongs_to :waitlist_entry, optional: true
   has_many :hold_promos, dependent: :delete_all
   has_many :promo_codes, through: :hold_promos
 

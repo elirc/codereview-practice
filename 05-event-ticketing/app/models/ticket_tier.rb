@@ -2,6 +2,7 @@ class TicketTier < ApplicationRecord
   belongs_to :event
   has_many :holds, dependent: :restrict_with_exception
   has_many :tickets, dependent: :restrict_with_exception
+  has_many :waitlist_entries, dependent: :restrict_with_exception
 
   validates :name, presence: true, length: { maximum: 100 }
   validates :price_cents, numericality: { only_integer: true, greater_than_or_equal_to: 0 }

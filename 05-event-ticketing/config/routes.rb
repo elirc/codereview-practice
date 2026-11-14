@@ -8,6 +8,7 @@ Rails.application.routes.draw do
 
   resources :tiers, only: [] do
     resources :holds, only: :create
+    resources :waitlist_entries, only: :create
   end
 
   resources :holds, only: %i[ show destroy ] do
@@ -16,6 +17,7 @@ Rails.application.routes.draw do
   end
 
   resources :orders, only: %i[ index show ], param: :number
+  resources :waitlist_entries, only: :destroy
 
   namespace :manage do
     resources :events do
@@ -25,6 +27,7 @@ Rails.application.routes.draw do
 
       resources :tiers, only: %i[ new create edit update ]
       resources :promo_codes, only: %i[ index new create edit update ]
+      resources :waitlist_entries, only: :index
     end
   end
 

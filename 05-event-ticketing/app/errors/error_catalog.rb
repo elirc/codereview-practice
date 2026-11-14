@@ -21,7 +21,11 @@ module ErrorCatalog
     promo_min_not_met: [ 422, "Your order does not reach the minimum for that promo code." ],
     promo_exhausted: [ 422, "That promo code has been fully redeemed." ],
     promo_user_limit: [ 422, "You have already used that promo code the maximum number of times." ],
-    promo_not_stackable: [ 422, "That promo code cannot be combined with the codes already applied." ]
+    promo_not_stackable: [ 422, "That promo code cannot be combined with the codes already applied." ],
+    waitlist_active: [ 422, "Tickets for this tier go to the waitlist first. Join the waitlist instead." ],
+    tickets_available: [ 422, "Tickets are available, so hold them directly instead of joining the waitlist." ],
+    already_waitlisted: [ 409, "You are already on the waitlist for this tier." ],
+    waitlist_entry_closed: [ 409, "That waitlist entry is no longer open." ]
   }.freeze
 
   def self.status_for(code)

@@ -22,6 +22,15 @@ module TicketingHelpers
     Holds::Create.call(user:, tier:, quantity:, now:)
   end
 
+  # Holds every listed quantity for a fresh customer each, at NOW.
+  def fill_tier(tier, *quantities)
+    quantities.map { |quantity| place_hold(create_customer("Filler"), tier, quantity) }
+  end
+
+  def join_waitlist(user, tier, quantity, now: NOW)
+    Waitlist::Join.call(user:, tier:, quantity:, now:)
+  end
+
   def create_promo(code, event: events(:concert), percent_off: nil, amount_off_cents: nil, **attributes)
     kind = percent_off ? "percent" : "fixed"
     PromoCode.create!(event:, code:, kind:, percent_off:, amount_off_cents:, **attributes)

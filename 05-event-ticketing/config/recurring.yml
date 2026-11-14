@@ -3,6 +3,10 @@ default: &default
     class: SweepExpiredHoldsJob
     queue: default
     schedule: every minute
+  sweep_waitlist:
+    class: SweepWaitlistJob
+    queue: default
+    schedule: every 5 minutes
 
 development:
   <<: *default

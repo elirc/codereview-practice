@@ -24,6 +24,8 @@
     <tr><th>Tier</th><th>Price</th><th>Availability</th><th></th></tr>
   </thead>
   <tbody>
-    <%= render partial: "events/tier", collection: @tiers, as: :tier, locals: { event: @event } %>
+    <% @availabilities.each do |availability| %>
+      <%= render "events/tier", availability:, entry: @my_entries[availability.tier.id] %>
+    <% end %>
   </tbody>
 </table>

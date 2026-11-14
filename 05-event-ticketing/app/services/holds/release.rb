@@ -11,7 +11,7 @@ module Holds
     end
 
     def call
-      ApplicationRecord.transaction do
+      closed = ApplicationRecord.transaction do
         tier = TicketTier.lock.find(@hold.ticket_tier_id)
         @hold.lock!
         next false unless @hold.active?
@@ -19,6 +19,9 @@ module Holds
         Closing.close!(@hold, tier, status: :released)
         true
       end
+
+      PromoteWaitlistJob.perform_after_commit(@hold.ticket_tier_id) if closed
+      closed
     end
   end
 end

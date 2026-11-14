@@ -25,6 +25,7 @@ module Holds
 
         existing = Hold.active.lock.find_by(user_id: @user.id, ticket_tier_id: tier.id)
         EventAllowance.check!(user: @user, event:, quantity: @quantity, now: @now, excluding: existing)
+        raise DomainError.new(:waitlist_active) if tier.waitlist_entries.pending.exists?
 
         replace(existing, tier)
       end

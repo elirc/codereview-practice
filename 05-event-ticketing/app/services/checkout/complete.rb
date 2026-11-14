@@ -39,6 +39,7 @@ module Checkout
         order = create_order(tier, quote, charge)
         redeem(order, quote)
         @hold.update!(status: :converted, order:)
+        @hold.waitlist_entry&.update!(status: :converted)
         order
       end
       committed = true

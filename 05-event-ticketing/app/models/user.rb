@@ -6,6 +6,7 @@ class User < ApplicationRecord
     inverse_of: :organizer, dependent: :restrict_with_exception
   has_many :holds, dependent: :restrict_with_exception
   has_many :orders, dependent: :restrict_with_exception
+  has_many :waitlist_entries, dependent: :restrict_with_exception
 
   enum :role, { customer: "customer", organizer: "organizer", admin: "admin" }, default: :customer, validate: true
 

@@ -1,0 +1,29 @@
+<% content_for :title, "Waitlist" %>
+
+<p><%= link_to @event.title, manage_event_path(@event) %></p>
+
+<h1>Waitlist</h1>
+
+<% if @entries_by_tier.empty? %>
+  <p class="muted">Nobody has joined a waitlist for this event.</p>
+<% end %>
+
+<% @entries_by_tier.each do |tier, entries| %>
+  <h2><%= tier.name %></h2>
+  <table>
+    <thead>
+      <tr><th>Joined</th><th>Customer</th><th>Quantity</th><th>Status</th><th>Offer expires</th></tr>
+    </thead>
+    <tbody>
+      <% entries.each do |entry| %>
+        <tr>
+          <td><%= format_in_zone(entry.created_at, @event.time_zone) %></td>
+          <td><%= entry.user.name %> &lt;<%= entry.user.email_address %>&gt;</td>
+          <td><%= entry.quantity %></td>
+          <td><span class="badge"><%= entry.status %></span></td>
+          <td><%= format_in_zone(entry.offer_expires_at, @event.time_zone) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
