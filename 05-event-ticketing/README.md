@@ -65,7 +65,7 @@ lib/                    AppConfig, JSON log formatter, request-id log context, l
 db/                     migrations, schema.rb (includes the Solid Queue tables), seeds.rb
 ```
 
-Request flow: a controller authenticates the user, checks policies or scopes the lookup to the current user, validates parameters, and calls one service. Services run in a database transaction, raise `DomainError` with a stable code when a rule is broken, and enqueue jobs and mail once the transaction has committed. `ErrorHandling` turns `DomainError` into a redirect with a flash carrying the error code (HTML), a re-rendered quote frame (Turbo Stream, promo codes), or the JSON error envelope (API).
+Request flow: a controller authenticates the user, checks policies or scopes the lookup to the current user, validates parameters, and calls one service. Services run in a database transaction that takes row locks in one order (user, tier, hold, promo codes by id, waitlist entries), raise `DomainError` with a stable code when a rule is broken, and enqueue jobs and mail once the transaction has committed. `ErrorHandling` turns `DomainError` into a redirect with a flash carrying the error code (HTML), a re-rendered quote frame (Turbo Stream, promo codes), or the JSON error envelope (API).
 
 Job flow: creating a hold schedules `ExpireHoldJob` at its expiry; releasing, expiring, refunding, leaving the waitlist and raising capacity enqueue `PromoteWaitlistJob` for the tier. `SweepExpiredHoldsJob` and `SweepWaitlistJob` run on a schedule alongside them. Cancelling an event marks it cancelled immediately and leaves releasing holds, closing waitlists and refunding orders to `CancelEventJob`, one order per transaction.
 

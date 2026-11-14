@@ -15,6 +15,7 @@ module Holds
 
     def call
       hold = ApplicationRecord.transaction do
+        User.lock.find(@user.id)
         tier = TicketTier.lock.find(@tier.id)
         event = tier.event
 

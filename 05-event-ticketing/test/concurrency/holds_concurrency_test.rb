@@ -25,6 +25,17 @@ class HoldsConcurrencyTest < ConcurrencyTestCase
     assert_equal 2, tier.reload.held_count
   end
 
+  test "one user holding on two tiers at once cannot exceed the per-event cap" do
+    tiers = [ concurrent_tier(capacity: 10), concurrent_tier(capacity: 10) ]
+    buyer = customers(1).first
+
+    results = run_concurrently(2) { |i| place_hold(buyer, tiers[i], 6) }
+
+    assert_equal 1, results.count { |result| result.is_a?(Hold) }
+    assert_equal [ :event_limit_exceeded ], results.grep(Symbol)
+    assert_equal 6, Hold.active.where(user: buyer).sum(:quantity)
+  end
+
   test "an expiry job and the sweep racing on one hold return its tickets once" do
     tier = concurrent_tier(capacity: 4)
     hold = place_hold(customers(1).first, tier, 3)

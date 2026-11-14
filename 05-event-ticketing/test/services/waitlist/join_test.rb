@@ -59,4 +59,22 @@ class Waitlist::JoinTest < ActiveSupport::TestCase
     assert_domain_error(:event_limit_exceeded) { join_waitlist(@user, @tier, 4) }
     assert join_waitlist(@user, @tier, 3).waiting?
   end
+
+  test "waiting quantities count toward the per-event cap for later holds" do
+    fill_tier(@tier, 4)
+    join_waitlist(@user, @tier, 4)
+
+    assert_domain_error(:event_limit_exceeded) { place_hold(@user, create_tier(capacity: 10, name: "Other room"), 5) }
+    assert_equal 4, place_hold(@user, create_tier(capacity: 10, name: "Third room"), 4).quantity
+  end
+
+  test "waiting quantities across tiers count toward the per-event cap" do
+    other = create_tier(capacity: 6, name: "Other room")
+    fill_tier(@tier, 4)
+    fill_tier(other, 6)
+    join_waitlist(@user, @tier, 4)
+
+    assert_domain_error(:event_limit_exceeded) { join_waitlist(@user, other, 5) }
+    assert join_waitlist(@user, other, 4).waiting?
+  end
 end

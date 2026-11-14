@@ -15,6 +15,7 @@ module Waitlist
 
     def call
       ApplicationRecord.transaction do
+        User.lock.find(@user.id)
         tier = TicketTier.lock.find(@tier.id)
         event = tier.event
 

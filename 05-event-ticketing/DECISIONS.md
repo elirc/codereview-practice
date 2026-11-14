@@ -22,7 +22,7 @@ Places where the spec left room for interpretation, what was chosen, and why.
 
 10. **Cancellation mail** is sent to each refunded order's customer. Released holds and cancelled waitlist entries are not mailed.
 
-11. **Per-event cap at promotion and checkout.** The 8-ticket cap is enforced when holding and when joining a waitlist, as the spec states; it is not re-checked when an offer is made or at checkout.
+11. **What the per-event cap counts.** The 8-ticket cap is checked when holding and when joining a waitlist, and counts valid paid tickets, live holds and the quantities of the user's `waiting` entries on the event. An offered entry is counted through its hold, so an offer and a checkout only move quantity between already-counted buckets and need no re-check.
 
 12. **Stale direct hold during promotion.** If a waiting user has an active direct hold that is already past its expiry (not yet swept), promotion expires it in place before offering, since the one-active-hold-per-tier index would otherwise block the offer.
 
