@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { Config } from '../config/config.js';
 import type { Logger } from '../lib/logger.js';
+import type { ServiceContext } from '../services/context.js';
+import { registerAuth } from './auth.js';
 import { registerErrorHandling } from './errors.js';
+import { authRoutes } from './routes/auth.js';
+import { workspaceRoutes } from './routes/workspaces.js';
 
 export interface AppOptions {
-  config: Config;
+  ctx: ServiceContext;
   logger: Logger;
 }
 
@@ -14,6 +17,7 @@ const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /** Builds the HTTP application without starting to listen. */
 export function buildApp(options: AppOptions): FastifyInstance {
+  const { ctx } = options;
   const app = Fastify({
     loggerInstance: options.logger,
     requestIdLogLabel: 'requestId',
@@ -31,7 +35,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
   registerErrorHandling(app);
   void app.register(cookie);
 
-  app.get('/api/health', async () => ({ status: 'ok' }));
+  void app.register(
+    async (api) => {
+      registerAuth(api, ctx);
+      api.get('/health', async () => ({ status: 'ok' }));
+      authRoutes(api, ctx);
+      workspaceRoutes(api, ctx);
+    },
+    { prefix: '/api' },
+  );
 
   return app;
 }

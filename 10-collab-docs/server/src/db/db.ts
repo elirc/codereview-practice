@@ -34,3 +34,10 @@ export function readSnapshot<T>(db: Db, fn: (trx: Tx) => Promise<T>): Promise<T>
 export function toBytea(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
+
+/** Returns whether a database error is a unique violation, optionally of one constraint. */
+export function isUniqueViolation(error: unknown, constraint?: string): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const pgError = error as { code?: unknown; constraint?: unknown };
+  return pgError.code === '23505' && (constraint === undefined || pgError.constraint === constraint);
+}
