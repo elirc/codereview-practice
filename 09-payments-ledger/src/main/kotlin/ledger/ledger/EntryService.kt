@@ -33,12 +33,12 @@ class EntryService(
     fun reverse(caller: Caller, id: UUID, reason: String): JournalEntry {
         caller.require(Role.OPERATOR)
         return tx.inTx {
+            if (!entries.lock(id)) throw entryNotFound(id)
             val original = entries.find(id) ?: throw entryNotFound(id)
             if (original.kind !in REVERSIBLE_KINDS) throw notReversible(original)
             requireNotReversed(id)
             if (original.kind == EntryKind.WITHDRAWAL) {
                 val expectation = expectations.lockBySourceEntry(id) ?: throw notReversible(original)
-                requireNotReversed(id)
                 if (expectation.status != ExpectationStatus.OPEN) throw notReversible(original)
                 expectations.transition(expectation, ExpectationStatus.OPEN, ExpectationStatus.CANCELLED, clock.instant())
             }

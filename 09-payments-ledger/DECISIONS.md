@@ -3,7 +3,7 @@
 Where the SPEC left a choice open, the choice made and why.
 
 1. **Outbox table in V1.** The commit plan adds the outbox in step 9, but `LedgerService.post` writes outbox rows from step 3, so the table ships with the first schema migration; step 9 adds the relay, publisher, purge and stats.
-2. **Idempotency for `POST /settlements`.** A settlement run commits once per merchant, so it cannot share one transaction with its key. The key row is committed as `in_progress` first and completed with the response afterwards; a repeat while it is still running gets `409 invalid_state`, a non-domain failure deletes the key. If the process dies mid-run the key stays `in_progress`; the caller retries with a new key (the run itself resumes safely).
+2. **Idempotency for `POST /settlements`.** A settlement run commits once per merchant, so it cannot share one transaction with its key. The key row is committed as `in_progress` first and completed with the response afterwards; a repeat while it is still running gets `409 invalid_state`, a non-domain failure deletes the key. If the process dies mid-run the key stays `in_progress`; the caller retries with a new key (the run itself resumes safely), and the purge job removes such keys after the 7-day retention.
 3. **`GET /entries/{id}` for service and merchant keys is `403`.** The permission table grants reading entries to operator and auditor only; the "foreign id is 404" rule is applied to accounts, balances, postings and holds.
 4. **Holds take a `currency` field** that must equal the wallet's and the merchant account's currency (`422 currency_mismatch`), matching the shape of transfers.
 5. **FX transfer between accounts of another owner** is `422 quote_owner_mismatch`; the SPEC names no code for this case.
@@ -21,4 +21,5 @@ Where the SPEC left a choice open, the choice made and why.
 17. **`POST /withdrawals` answers with the entry only**, like transfers; the `WDR-` reference is on the bank expectation.
 18. **Status changes on system accounts** (`freeze`, `unfreeze`, `close`) are `422 invalid_account_type`.
 19. **Pending lines with the same statement date and line number** are ordered by statement id after `(statementDate, lineNo)`.
-20. **Seed API keys** use fixed, documented development secrets so the README can list them; keys created through the API are random 256-bit secrets.
+20. **Stored response for `POST /api-keys` omits the secret.** The live response carries `key` once; the response kept with the idempotency key (and returned on a repeat) has the key's metadata only, so secrets never sit in the database.
+21. **Seed API keys** use fixed, documented development secrets so the README can list them; keys created through the API are random 256-bit secrets.

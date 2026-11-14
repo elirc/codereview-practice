@@ -15,6 +15,7 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
       accept-float-as-int: false
+      fail-on-null-for-primitives: true
     serialization:
       write-dates-as-timestamps: false
   kafka:

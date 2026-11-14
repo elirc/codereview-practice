@@ -57,10 +57,7 @@ class LedgerService(
 ) {
     /**
      * Posts [entry] in the caller's transaction and returns the stored entry.
-     *
-     * The balance rows of every account in the entry and of every key of [heldDeltas] are locked together,
-     * unless the caller passes the [locks] it already holds. [heldDeltas] adjusts `heldMinor` of those accounts
-     * in the same update as the postings.
+     * [locks] supplies balance rows the caller already holds; [heldDeltas] changes `heldMinor` of those accounts.
      */
     fun post(entry: NewEntry, locks: LockSet? = null, heldDeltas: Map<UUID, Long> = emptyMap()): JournalEntry {
         check(TransactionSynchronizationManager.isActualTransactionActive()) { "post must run inside a transaction" }

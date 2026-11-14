@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component
 import java.time.Duration
 import java.time.Instant
 
-/** Deletes completed idempotency keys older than the retention period. */
+/** Deletes idempotency keys older than the retention period. */
 @Component
 class IdempotencyPurgeJob(private val jdbc: JdbcClient) {
     /** Deletes expired keys in passes of [BATCH_SIZE] rows and returns how many were deleted. */
@@ -19,7 +19,7 @@ class IdempotencyPurgeJob(private val jdbc: JdbcClient) {
                 DELETE FROM idempotency_keys
                 WHERE (api_key_id, key) IN (
                     SELECT api_key_id, key FROM idempotency_keys
-                    WHERE state = 'completed' AND created_at < :cutoff
+                    WHERE created_at < :cutoff
                     ORDER BY created_at
                     LIMIT :batch
                 )

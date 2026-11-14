@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import java.time.Duration
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 class IdempotencyIntegrationTest : IntegrationTest() {
@@ -131,6 +133,37 @@ class IdempotencyIntegrationTest : IntegrationTest() {
         val invalid = post("/v1/accounts", serviceKey, mapOf("ownerId" to UUID.randomUUID(), "type" to "customer_wallet"), "key-0000006")
         assertEquals(400, invalid.response.status)
         assertEquals(201, post("/v1/accounts", serviceKey, walletBody(), "key-0000006").response.status)
+    }
+
+    @Test
+    fun `a created api key secret is returned once and never stored`() {
+        val body = mapOf("name" to "reporting", "role" to "auditor")
+        val first = post("/v1/api-keys", operatorKey, body, "key-api-0001")
+        assertEquals(201, first.response.status)
+        val secret = json(first).path("key").asText()
+        assertTrue(secret.startsWith("lk_"))
+
+        val stored = jdbc.sql("SELECT response_body::text FROM idempotency_keys WHERE key = 'key-api-0001'")
+            .query(String::class.java).single()
+        assertFalse(stored.contains(secret))
+        assertFalse(mapper.readTree(stored).has("key"))
+
+        val replay = post("/v1/api-keys", operatorKey, body, "key-api-0001")
+        assertEquals(201, replay.response.status)
+        assertEquals("true", replay.response.getHeader("Idempotent-Replay"))
+        assertFalse(json(replay).has("key"))
+        assertEquals(json(first).path("id"), json(replay).path("id"))
+    }
+
+    @Test
+    fun `purge also removes keys left in progress past the retention`() {
+        jdbc.sql(
+            """
+            INSERT INTO idempotency_keys (api_key_id, key, fingerprint, state, created_at)
+            VALUES (:k, 'stuck-key-001', 'f', 'in_progress', '2026-02-01T00:00:00Z')
+            """.trimIndent()
+        ).param("k", operatorKey.id).update()
+        assertEquals(1, purgeJob.runOnce(clock.instant()))
     }
 
     @Test

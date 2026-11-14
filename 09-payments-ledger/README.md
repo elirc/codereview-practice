@@ -31,6 +31,8 @@ All processes come from the same jar and are selected by Spring profile.
 
 With a built jar: `java -jar build/libs/payments-ledger.jar --spring.profiles.active=api`. API and worker can each run as several instances.
 
+`POST /v1/settlements` runs synchronously and commits merchant by merchant. Repeating it with the same `Idempotency-Key` while the first call is still running answers `409 invalid_state`; wait for the first call and repeat with the same key to get its stored answer, rather than switching to a new key.
+
 Every request needs `Authorization: Bearer <key>`; every `POST` needs an `Idempotency-Key` header of 8–128 visible ASCII characters. Example:
 
 ```sh

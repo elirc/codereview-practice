@@ -67,6 +67,14 @@ class EntryQueries(private val jdbc: JdbcClient) {
         return header.copy(postings = postings)
     }
 
+    /** Locks the entry row and returns whether the entry exists. */
+    fun lock(id: UUID): Boolean =
+        jdbc.sql("SELECT id FROM journal_entries WHERE id = :id FOR UPDATE")
+            .param("id", id)
+            .query { rs, _ -> rs.uuid("id") }
+            .optional()
+            .isPresent
+
     /** Returns the id of the entry that reverses [entryId], if one exists. */
     fun reversalOf(entryId: UUID): UUID? =
         jdbc.sql("SELECT id FROM journal_entries WHERE reverses_entry_id = :id")

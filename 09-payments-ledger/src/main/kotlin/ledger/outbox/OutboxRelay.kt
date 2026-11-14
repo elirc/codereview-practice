@@ -24,10 +24,7 @@ class OutboxRelay(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /**
-     * Runs one pass: publishes up to [batchSize] rows in id order, stopping at the first failure, and marks the
-     * published prefix with [now]. Returns [RelayResult.SKIPPED] when another relay is running a pass.
-     */
+    /** Publishes up to [batchSize] unpublished rows in id order, marks them published at [now] and returns the outcome. */
     fun runOnce(now: Instant): RelayResult = tx.inTx {
         val locked = jdbc.sql("SELECT pg_try_advisory_xact_lock(:key)")
             .param("key", LOCK_KEY)

@@ -17,8 +17,11 @@ import org.springframework.stereotype.Service
 import java.time.Clock
 import java.util.UUID
 
-/** The outcome of an operation run under an idempotency key: HTTP status and response body. */
-data class ApiResult(val status: Int, val body: Any)
+/**
+ * The outcome of an operation run under an idempotency key: HTTP status and response body.
+ * [storedBody], when set, is what later repeats of the request receive instead of [body].
+ */
+data class ApiResult(val status: Int, val body: Any, val storedBody: Any? = null)
 
 /** Runs POST operations at most once per API key and `Idempotency-Key`, returning the stored response on repeats. */
 @Service
@@ -44,7 +47,7 @@ class IdempotencyService(
                 val result = operation()
                 status.releaseSavepoint(savepoint)
                 val body = toJson(result.body)
-                complete(caller.keyId, key, result.status, body)
+                complete(caller.keyId, key, result.status, result.storedBody?.let { toJson(it) } ?: body)
                 ResponseEntity.status(result.status).body(body)
             } catch (e: DomainException) {
                 if (e.status !in STORED_ERROR_STATUSES) throw e
@@ -80,7 +83,7 @@ class IdempotencyService(
             throw e
         }
         val body = toJson(result.body)
-        tx.inTx { complete(caller.keyId, key, result.status, body) }
+        tx.inTx { complete(caller.keyId, key, result.status, result.storedBody?.let { toJson(it) } ?: body) }
         return ResponseEntity.status(result.status).body(body)
     }
 

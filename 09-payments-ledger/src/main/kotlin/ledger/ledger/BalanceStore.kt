@@ -30,10 +30,7 @@ class LockSet(private val rows: Map<UUID, LockedAccount>) {
 /** Locks and updates rows of `account_balances`. */
 @Component
 class BalanceStore(private val jdbc: JdbcClient, private val accounts: Accounts) {
-    /**
-     * Locks the balance rows of [accountIds] with a single `SELECT … FOR UPDATE` ordered by account id and
-     * returns them with their accounts. Throws `not_found` when any account does not exist.
-     */
+    /** Locks the balance rows of [accountIds] and returns them with their accounts; throws `not_found` for a missing account. */
     fun lock(accountIds: Collection<UUID>): LockSet {
         val ids = accountIds.toSet()
         require(ids.isNotEmpty()) { "nothing to lock" }

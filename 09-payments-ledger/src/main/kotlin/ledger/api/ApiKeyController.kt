@@ -27,6 +27,15 @@ data class CreateApiKeyRequest(
     val ownerId: UUID? = null
 )
 
+/** An API key without its secret. */
+data class ApiKeyResponse(
+    val id: UUID,
+    val name: String,
+    val role: Role,
+    val ownerId: UUID?,
+    val createdAt: Instant
+)
+
 /** The response to key creation; [key] is the secret and is shown only here. */
 data class CreatedApiKeyResponse(
     val id: UUID,
@@ -52,8 +61,9 @@ class ApiKeyController(
         val created = apiKeys.create(caller, body.name.trim(), body.role, body.ownerId)
         val key = created.apiKey
         ApiResult(
-            HttpStatus.CREATED.value(),
-            CreatedApiKeyResponse(key.id, key.name, key.role, key.ownerId, key.createdAt, created.secret)
+            status = HttpStatus.CREATED.value(),
+            body = CreatedApiKeyResponse(key.id, key.name, key.role, key.ownerId, key.createdAt, created.secret),
+            storedBody = ApiKeyResponse(key.id, key.name, key.role, key.ownerId, key.createdAt)
         )
     }
 

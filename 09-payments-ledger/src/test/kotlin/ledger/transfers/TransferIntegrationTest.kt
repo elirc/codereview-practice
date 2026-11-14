@@ -177,6 +177,16 @@ class TransferIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `missing numeric fields are validation errors rather than zero`() {
+        val owner = UUID.randomUUID()
+        val result = put("/v1/owners/$owner/limits/USD", operatorKey, "{}")
+        assertEquals(400, result.response.status)
+        assertEquals("validation_failed", errorCode(result))
+        val rate = post("/v1/fx/rates", operatorKey, mapOf("sellCurrency" to "USD", "buyCurrency" to "EUR", "midRate" to "0.90000000"))
+        assertEquals(400, rate.response.status)
+    }
+
+    @Test
     fun `withdrawal moves money to payout clearing and opens an expectation`() {
         val owner = UUID.randomUUID()
         val a = wallet(owner)
