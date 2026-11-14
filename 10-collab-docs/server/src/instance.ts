@@ -47,7 +47,7 @@ export function createInstance(options: InstanceOptions): Instance {
   const store = new DocStore(db, clock, config.MAX_DOC_BYTES);
   const registry = new RoomRegistry({ store, bus, logger, roomIdleMs: config.ROOM_IDLE_MS });
   const notifier = new BusNotifier(bus, logger);
-  const ctx: ServiceContext = { db, clock, random, config, notifier };
+  const ctx: ServiceContext = { db, clock, random, config, notifier, live: registry };
   const app = buildApp({ ctx, logger });
   const collab = new CollabServer({ config, db, clock, random, logger, registry });
   collab.attach(app.server);

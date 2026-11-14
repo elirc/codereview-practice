@@ -1,5 +1,7 @@
+import type * as Y from 'yjs';
 import { fromBase64, toBase64 } from '../lib/bytes.js';
 import type { Logger } from '../lib/logger.js';
+import type { LiveDocs } from '../services/liveDocs.js';
 import { CloseCode } from '../ws/codec.js';
 import type { Bus, BusHandler } from './bus.js';
 import {
@@ -26,7 +28,7 @@ export interface RegistryOptions {
 }
 
 /** The open rooms of this instance, keyed by document id. */
-export class RoomRegistry {
+export class RoomRegistry implements LiveDocs {
   private readonly rooms = new Map<string, Room>();
   private readonly store: RoomStore;
   private readonly bus: Bus;
@@ -63,6 +65,12 @@ export class RoomRegistry {
   /** Returns the open room for a document, if this instance has one. */
   get(docId: string): Room | undefined {
     return this.rooms.get(docId);
+  }
+
+  /** Returns the loaded document of an open room. */
+  openDoc(docId: string): Y.Doc | null {
+    const room = this.rooms.get(docId);
+    return room && room.isLoaded && !room.closing ? room.doc : null;
   }
 
   /** Returns every open room. */

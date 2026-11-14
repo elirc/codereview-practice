@@ -6,6 +6,7 @@ import type { ServiceContext } from '../services/context.js';
 import { registerAuth } from './auth.js';
 import { registerErrorHandling } from './errors.js';
 import { authRoutes } from './routes/auth.js';
+import { commentRoutes } from './routes/comments.js';
 import { docRoutes } from './routes/docs.js';
 import { sharingRoutes } from './routes/sharing.js';
 import { workspaceRoutes } from './routes/workspaces.js';
@@ -45,6 +46,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
       workspaceRoutes(api, ctx);
       docRoutes(api, ctx);
       sharingRoutes(api, ctx);
+      commentRoutes(api, ctx);
     },
     { prefix: '/api' },
   );

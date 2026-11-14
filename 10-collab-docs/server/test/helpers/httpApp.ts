@@ -4,6 +4,7 @@ import { buildApp } from '../../src/http/app.js';
 import { createLogger } from '../../src/lib/logger.js';
 import { cryptoRandom } from '../../src/lib/random.js';
 import type { ServiceContext } from '../../src/services/context.js';
+import { noLiveDocs } from '../../src/services/liveDocs.js';
 import { FakeClock, resetDb, testConfig, TEST_DATABASE_URL } from './env.js';
 import { RecordingNotifier } from './http.js';
 
@@ -28,6 +29,7 @@ export async function createHttpTestApp(): Promise<HttpTestApp> {
     random: cryptoRandom,
     config: testConfig(),
     notifier,
+    live: noLiveDocs,
   };
   const app = buildApp({ ctx, logger: createLogger('silent') });
   await app.ready();
