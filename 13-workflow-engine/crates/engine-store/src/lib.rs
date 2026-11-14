@@ -8,6 +8,7 @@ pub mod jobs;
 pub mod lease;
 pub mod models;
 pub mod page;
+pub mod progress;
 pub mod queues;
 pub mod reaper;
 pub mod schedules;

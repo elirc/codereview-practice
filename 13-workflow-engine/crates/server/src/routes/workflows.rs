@@ -7,6 +7,7 @@ use engine_core::limits::{json_size, MAX_PAYLOAD_BYTES};
 use engine_core::names::is_queue_name;
 use engine_core::state::RunState;
 use engine_store::page::{Page, TimeCursor};
+use engine_store::progress;
 use engine_store::workflows::{self, RunDetail, WorkflowDefinition, WorkflowRun};
 use serde::Deserialize;
 use serde_json::Value;
@@ -151,4 +152,26 @@ pub async fn list_runs(
         }
         .encode()
     })))
+}
+
+/// `POST /api/workflow-runs/{id}/cancel`: cancels a running run.
+pub async fn cancel_run(
+    State(state): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<RunDetail>, ApiError> {
+    ensure(&caller, Action::Cancel)?;
+    visible_run(&state, &caller, id).await?;
+    Ok(Json(progress::cancel_run(&state.pool, id, state.clock.now()).await?))
+}
+
+/// `POST /api/workflow-runs/{id}/retry`: reruns the failed and cancelled steps of a failed run.
+pub async fn retry_run(
+    State(state): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<RunDetail>, ApiError> {
+    ensure(&caller, Action::Recover)?;
+    visible_run(&state, &caller, id).await?;
+    Ok(Json(progress::retry_run(&state.pool, id, state.clock.now()).await?))
 }

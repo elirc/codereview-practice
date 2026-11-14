@@ -32,3 +32,13 @@ Short records of places where the spec left a choice open.
 - **Which runs a submitter may see.** A run counts as "in its queues" only when every step of the
   run's definition uses one of the submitter's queues, the same test used to allow starting it.
   Other runs are `404 not_found` and left out of listings.
+- **Run resolution fallback.** The resolution rules cover cancelled, failed and all-succeeded
+  runs. Any other combination with nothing queued (for example a blocked step left behind) is
+  resolved as `failed`, so a run never stays `running` with no work outstanding.
+- **Releasing a claim that was asked to cancel.** A claim released at worker shutdown goes back to
+  `pending`, but pending jobs with `cancel_requested` are never claimed again. When cancellation
+  was requested, the released job becomes `cancelled` instead (attempt count still restored,
+  attempt outcome `cancelled`), which also lets a cancelled workflow run finish.
+- **Retrying a run.** Failed and cancelled steps reuse their existing job (requeued as in 5.5),
+  since a run has at most one job per step; that job keeps the payload it was created with,
+  whose parent outputs have not changed.

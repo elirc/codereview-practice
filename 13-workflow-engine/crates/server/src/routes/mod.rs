@@ -48,6 +48,8 @@ pub fn build_router(state: AppState) -> Router {
             get(workflows::list_runs).post(workflows::start_run),
         )
         .route("/workflow-runs/:id", get(workflows::show_run))
+        .route("/workflow-runs/:id/cancel", post(workflows::cancel_run))
+        .route("/workflow-runs/:id/retry", post(workflows::retry_run))
         .route("/tokens", post(tokens::create))
         .route("/tokens/:id", delete(tokens::revoke))
         .route_layer(middleware::from_fn_with_state(

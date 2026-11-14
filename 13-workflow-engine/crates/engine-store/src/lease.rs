@@ -11,6 +11,7 @@ use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::claim::ClaimRef;
+use crate::progress::{lock_run, on_step_job_ended, JobEnd};
 use crate::StoreError;
 
 /// What [`complete`] recorded.
@@ -82,11 +83,12 @@ pub async fn complete(
         return Ok(Completion::ResultTooLarge);
     }
     let mut tx = pool.begin().await?;
-    let updated = sqlx::query_scalar::<_, Uuid>(
+    lock_claim_run(&mut tx, claim).await?;
+    let updated = sqlx::query_as::<_, (Option<Uuid>, Option<String>)>(
         "UPDATE jobs SET state = 'succeeded', result = $3, finished_at = $4, \
          lease_owner = NULL, lease_expires_at = NULL \
          WHERE id = $1 AND lease_epoch = $2 AND state = 'running' \
-         RETURNING id",
+         RETURNING workflow_run_id, step_key",
     )
     .bind(claim.job_id)
     .bind(claim.lease_epoch)
@@ -94,9 +96,9 @@ pub async fn complete(
     .bind(now)
     .fetch_optional(&mut *tx)
     .await?;
-    if updated.is_none() {
+    let Some((run_id, step_key)) = updated else {
         return Err(StoreError::LeaseLost);
-    }
+    };
     close_attempt(
         &mut tx,
         claim.job_id,
@@ -106,8 +108,38 @@ pub async fn complete(
         now,
     )
     .await?;
+    if let (Some(run_id), Some(step_key)) = (run_id, step_key) {
+        let end = JobEnd::Succeeded(result.clone());
+        on_step_job_ended(&mut tx, run_id, &step_key, claim.job_id, end, now).await?;
+    }
     tx.commit().await?;
     Ok(Completion::Succeeded)
+}
+
+/// Locks the workflow run of a claim's job, when it belongs to one.
+async fn lock_claim_run(conn: &mut PgConnection, claim: &ClaimRef) -> Result<(), StoreError> {
+    if let Some(run_id) = claim.workflow_run_id {
+        if lock_run(conn, run_id).await?.is_none() {
+            return Err(StoreError::LeaseLost);
+        }
+    }
+    Ok(())
+}
+
+/// Moves the workflow run of `job` forward after the job reached `state`.
+pub(crate) async fn after_job_end(
+    conn: &mut PgConnection,
+    job: &RunningJob,
+    state: JobState,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    let (Some(run_id), Some(step_key)) = (job.workflow_run_id, job.step_key.as_deref()) else {
+        return Ok(());
+    };
+    match JobEnd::from_failure(state) {
+        Some(end) => on_step_job_ended(conn, run_id, step_key, job.id, end, now).await,
+        None => Ok(()),
+    }
 }
 
 /// Records a handler error for a claim and returns the job's new state.
@@ -133,6 +165,7 @@ async fn fail_on(
     now: DateTime<Utc>,
     r: f64,
 ) -> Result<JobState, StoreError> {
+    lock_claim_run(conn, claim).await?;
     let job = lock_running(conn, claim).await?;
     let decision = decide_failure(
         kind,
@@ -160,7 +193,9 @@ async fn fail_on(
         now,
     )
     .await?;
-    Ok(decision.next.job_state())
+    let state = decision.next.job_state();
+    after_job_end(conn, &job, state, now).await?;
+    Ok(state)
 }
 
 /// Gives a claim back without using up an attempt. The job becomes due at `now`, or
@@ -171,6 +206,7 @@ pub async fn release(
     now: DateTime<Utc>,
 ) -> Result<JobState, StoreError> {
     let mut tx = pool.begin().await?;
+    lock_claim_run(&mut tx, claim).await?;
     let job = lock_running(&mut tx, claim).await?;
     let (state, outcome) = if job.cancel_requested {
         sqlx::query(
@@ -198,6 +234,7 @@ pub async fn release(
         (JobState::Pending, AttemptOutcome::Released)
     };
     close_attempt(&mut tx, job.id, job.lease_epoch, outcome, None, now).await?;
+    after_job_end(&mut tx, &job, state, now).await?;
     tx.commit().await?;
     Ok(state)
 }
