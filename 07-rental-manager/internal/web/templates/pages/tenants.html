@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>Tenants</h1>
+<table>
+  <thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
+  <tbody>
+  {{range .Data}}
+    <tr><td><a href="/tenants/{{uuid .ID}}">{{.FullName}}</a></td><td>{{.Email.String}}</td><td>{{.Phone.String}}</td></tr>
+  {{else}}
+    <tr><td colspan="3" class="muted">No tenants yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if can .User "edit"}}
+<h2>Add a tenant</h2>
+<form method="post" action="/tenants" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "tenant_fields" .}}
+  <button type="submit">Create tenant</button>
+</form>
+{{end}}
+{{end}}

@@ -1,0 +1,39 @@
+{{define "content"}}
+{{$id := uuid .Data.Detail.Lease.ID}}
+<h1>End lease: {{.Data.Detail.Property.Name}} · {{.Data.Detail.Unit.Label}}</h1>
+<p class="muted">Rent already posted is not changed automatically. If the new end date leaves posted rent
+  for days after it, a credit is suggested below; it is posted only if you tick the box.</p>
+<form method="post" action="/leases/{{$id}}/end" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <input type="hidden" name="idempotency_key" value="{{.Data.Key}}">
+  <label>Last day of occupancy
+    <input name="end_date" type="date" value="{{.Form.Get "end_date"}}" required
+      hx-get="/leases/{{$id}}/end" hx-trigger="change" hx-target="#end-preview" hx-swap="outerHTML" hx-include="this">
+    {{template "field_error" index .Errors "end_date"}}
+  </label>
+  {{template "end_preview" .}}
+  <button type="submit">End lease</button>
+</form>
+<p><a href="/leases/{{$id}}">Back to the lease</a></p>
+{{end}}
+
+{{define "end_preview"}}
+<div id="end-preview">
+  {{template "field_error" index .Errors "_form"}}
+  {{with .Data.Preview}}
+    {{if .Credit.Lines}}
+    <table>
+      <thead><tr><th>Period</th><th class="num">Posted rent</th><th class="num">Rent due</th></tr></thead>
+      <tbody>
+      {{range .Credit.Lines}}
+        <tr><td>{{.Period}}</td><td class="num">{{cents .Posted}}</td><td class="num">{{cents .Due}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    <label><input type="checkbox" name="post_credit" value="on"> Post a credit of {{cents .Credit.Total}} today</label>
+    {{else}}
+    <p>No posted rent falls after {{date .EndDate}}; no credit is suggested.</p>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

@@ -114,7 +114,18 @@ func (s *Server) funcs() template.FuncMap {
 		"uuid":  store.FormatUUID,
 		"kind":  func(k any) string { return billing.Kind(fmt.Sprint(k)).Label() },
 		"can":   can,
+		"has":   has,
 	}
+}
+
+// has reports whether values holds v under key, for multi-select fields.
+func has(values url.Values, key, v string) bool {
+	for _, x := range values[key] {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 func toCents(v any) money.Cents {

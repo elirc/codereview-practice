@@ -1,0 +1,59 @@
+{{define "content"}}
+{{$canEdit := can .User "edit"}}
+{{with .Data.Detail}}
+<h1>{{.Property.Name}} · {{.Unit.Label}}</h1>
+<table class="summary">
+  <tr><th>Status</th><td>{{.Lease.Status}}</td></tr>
+  <tr><th>Term</th><td>{{date .Lease.StartDate}} to {{with date .Lease.EndDate}}{{.}}{{else}}month-to-month{{end}}</td></tr>
+  <tr><th>Rent</th><td class="num">{{cents .Lease.RentCents}} due on day {{.Lease.DueDay}}</td></tr>
+  <tr><th>Late fee</th><td>
+    {{if eq .Lease.LateFeeKind "flat"}}{{cents .Lease.LateFeeFlatCents}}
+    {{else if eq .Lease.LateFeeKind "percent"}}{{.Lease.LateFeeBps}} bps of unpaid rent
+    {{else}}none{{end}}
+    {{if .Lease.LateFeeCapCents.Valid}}, capped at {{cents .Lease.LateFeeCapCents}}{{end}}
+    after {{.Lease.GraceDays}} grace days</td></tr>
+  <tr><th>Deposit</th><td class="num">{{cents .Lease.DepositCents}}</td></tr>
+  <tr><th>Tenants</th><td>{{range .Tenants}}{{.FullName}}{{if .IsPrimary}} (primary){{end}}<br>{{else}}<span class="muted">none</span>{{end}}</td></tr>
+  <tr><th>Balance today</th><td class="num">{{cents $.Data.Balance}}</td></tr>
+</table>
+{{end}}
+
+{{$status := .Data.Detail.Lease.Status}}
+{{$id := uuid .Data.Detail.Lease.ID}}
+<p>
+  {{if ne $status "draft"}}<a href="/leases/{{$id}}/ledger">Ledger and statement</a>{{end}}
+  {{if and $canEdit (eq $status "active")}} · <a href="/leases/{{$id}}/end">End lease</a>{{end}}
+</p>
+
+{{if and $canEdit (eq $status "draft")}}
+<form method="post" action="/leases/{{$id}}/activate" class="inline">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <button type="submit">Activate lease</button>
+</form>
+<form method="post" action="/leases/{{$id}}/delete" class="inline">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <button type="submit">Delete draft</button>
+</form>
+
+<h2>Edit draft</h2>
+{{template "field_error" index .Errors "_form"}}
+<form method="post" action="/leases/{{$id}}" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "lease_terms" .}}
+  {{template "lease_fees" .}}
+  {{template "lease_tenants" .}}
+  <button type="submit">Save draft</button>
+</form>
+{{else if and $canEdit (eq $status "active")}}
+<h2>Edit late fees and tenants</h2>
+<p class="muted">Rent and dates cannot change on an active lease. Fee changes apply to fees assessed from now on.</p>
+{{template "field_error" index .Errors "_form"}}
+<form method="post" action="/leases/{{$id}}" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "lease_fees" .}}
+  {{template "lease_tenants" .}}
+  <button type="submit">Save</button>
+</form>
+{{end}}
+<p><a href="/leases">All leases</a></p>
+{{end}}

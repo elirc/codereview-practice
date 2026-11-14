@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Leases</h1>
+{{if can .User "edit"}}<p><a href="/leases/new">New lease</a></p>{{end}}
+<table>
+  <thead><tr><th>Property</th><th>Unit</th><th>Primary tenant</th><th>Status</th><th>Start</th><th>End</th><th class="num">Rent</th><th>Due day</th></tr></thead>
+  <tbody>
+  {{range .Data}}
+    <tr>
+      <td>{{.PropertyName}}</td><td><a href="/leases/{{uuid .ID}}">{{.UnitLabel}}</a></td><td>{{.PrimaryTenantName.String}}</td>
+      <td>{{.Status}}</td><td>{{date .StartDate}}</td><td>{{with date .EndDate}}{{.}}{{else}}<span class="muted">month-to-month</span>{{end}}</td>
+      <td class="num">{{cents .RentCents}}</td><td>{{.DueDay}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="8" class="muted">No leases yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

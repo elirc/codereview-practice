@@ -1,0 +1,31 @@
+{{define "content"}}
+{{with .Data.Tenant}}
+<h1>{{.FullName}}</h1>
+<p>{{with .Email.String}}{{.}}{{end}} {{with .Phone.String}}· {{.}}{{end}}</p>
+{{end}}
+
+<h2>Leases</h2>
+<table>
+  <thead><tr><th>Property</th><th>Unit</th><th>Status</th><th>Start</th><th>End</th><th>Primary</th></tr></thead>
+  <tbody>
+  {{range .Data.Leases}}
+    <tr>
+      <td>{{.PropertyName}}</td><td><a href="/leases/{{uuid .ID}}">{{.UnitLabel}}</a></td><td>{{.Status}}</td>
+      <td>{{date .StartDate}}</td><td>{{date .EndDate}}</td><td>{{if .IsPrimary}}yes{{end}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="6" class="muted">Not on any lease.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if can .User "edit"}}
+<h2>Edit tenant</h2>
+<form method="post" action="/tenants/{{uuid .Data.Tenant.ID}}" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "tenant_fields" .}}
+  <button type="submit">Save tenant</button>
+</form>
+{{end}}
+<p><a href="/tenants">All tenants</a></p>
+{{end}}

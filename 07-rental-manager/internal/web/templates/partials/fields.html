@@ -1,0 +1,73 @@
+{{define "tenant_fields"}}
+<label>Full name <input name="full_name" value="{{.Form.Get "full_name"}}" required maxlength="120">
+  {{template "field_error" index .Errors "full_name"}}</label>
+<label>Email <input name="email" type="email" value="{{.Form.Get "email"}}" maxlength="254">
+  {{template "field_error" index .Errors "email"}}</label>
+<label>Phone <input name="phone" value="{{.Form.Get "phone"}}" maxlength="40">
+  {{template "field_error" index .Errors "phone"}}</label>
+{{end}}
+
+{{define "lease_terms"}}
+<label>Unit
+  <select name="unit_id" required>
+    <option value="">Choose a unit</option>
+    {{range .Data.Options.Units}}
+    <option value="{{uuid .ID}}" {{if eq ($.Form.Get "unit_id") (uuid .ID)}}selected{{end}}>{{.PropertyName}} – {{.Label}}</option>
+    {{end}}
+  </select>
+  {{template "field_error" index .Errors "unit_id"}}
+</label>
+<label>Start date <input name="start_date" type="date" value="{{.Form.Get "start_date"}}" required>
+  {{template "field_error" index .Errors "start_date"}}</label>
+<label>End date (last day of occupancy; blank for month-to-month) <input name="end_date" type="date" value="{{.Form.Get "end_date"}}">
+  {{template "field_error" index .Errors "end_date"}}</label>
+<label>Monthly rent <input name="rent" value="{{.Form.Get "rent"}}" placeholder="1250.00" required>
+  {{template "field_error" index .Errors "rent"}}</label>
+<label>Due day of month (1–31) <input name="due_day" type="number" min="1" max="31" value="{{.Form.Get "due_day"}}" required>
+  {{template "field_error" index .Errors "due_day"}}</label>
+<label>Security deposit <input name="deposit" value="{{.Form.Get "deposit"}}" placeholder="0.00">
+  {{template "field_error" index .Errors "deposit"}}</label>
+{{end}}
+
+{{define "lease_fees"}}
+<fieldset>
+  <legend>Late fees</legend>
+  <label>Grace days (0–15) <input name="grace_days" type="number" min="0" max="15" value="{{.Form.Get "grace_days"}}" required>
+    {{template "field_error" index .Errors "grace_days"}}</label>
+  <label>Kind
+    <select name="late_fee_kind">
+      {{$kind := .Form.Get "late_fee_kind"}}
+      <option value="none" {{if eq $kind "none"}}selected{{end}}>none</option>
+      <option value="flat" {{if eq $kind "flat"}}selected{{end}}>flat amount</option>
+      <option value="percent" {{if eq $kind "percent"}}selected{{end}}>percent of unpaid rent</option>
+    </select>
+    {{template "field_error" index .Errors "late_fee_kind"}}
+  </label>
+  <label>Flat fee <input name="late_fee_flat" value="{{.Form.Get "late_fee_flat"}}" placeholder="50.00">
+    {{template "field_error" index .Errors "late_fee_flat"}}</label>
+  <label>Percent fee in basis points (1–2500) <input name="late_fee_bps" type="number" min="0" max="2500" value="{{.Form.Get "late_fee_bps"}}">
+    {{template "field_error" index .Errors "late_fee_bps"}}</label>
+  <label>Fee cap (optional) <input name="late_fee_cap" value="{{.Form.Get "late_fee_cap"}}">
+    {{template "field_error" index .Errors "late_fee_cap"}}</label>
+</fieldset>
+{{end}}
+
+{{define "lease_tenants"}}
+<label>Tenants
+  <select name="tenant_ids" multiple size="5">
+    {{range .Data.Options.Tenants}}
+    <option value="{{uuid .ID}}" {{if has $.Form "tenant_ids" (uuid .ID)}}selected{{end}}>{{.FullName}}</option>
+    {{end}}
+  </select>
+  {{template "field_error" index .Errors "tenant_ids"}}
+</label>
+<label>Primary tenant
+  <select name="primary_tenant_id">
+    <option value="">None</option>
+    {{range .Data.Options.Tenants}}
+    <option value="{{uuid .ID}}" {{if eq ($.Form.Get "primary_tenant_id") (uuid .ID)}}selected{{end}}>{{.FullName}}</option>
+    {{end}}
+  </select>
+  {{template "field_error" index .Errors "primary_tenant_id"}}
+</label>
+{{end}}

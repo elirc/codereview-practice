@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Properties</h1>
+<table>
+  <thead><tr><th>Name</th><th>Address</th><th class="num">Units</th></tr></thead>
+  <tbody>
+  {{range .Data}}
+    <tr><td><a href="/properties/{{uuid .ID}}">{{.Name}}</a></td><td>{{.Address}}</td><td class="num">{{.UnitCount}}</td></tr>
+  {{else}}
+    <tr><td colspan="3" class="muted">No properties yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if can .User "edit"}}
+<h2>Add a property</h2>
+<form method="post" action="/properties" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <label>Name <input name="name" value="{{.Form.Get "name"}}" required maxlength="120">
+    {{template "field_error" index .Errors "name"}}</label>
+  <label>Address <input name="address" value="{{.Form.Get "address"}}" required maxlength="240">
+    {{template "field_error" index .Errors "address"}}</label>
+  <button type="submit">Create property</button>
+</form>
+{{end}}
+{{end}}
