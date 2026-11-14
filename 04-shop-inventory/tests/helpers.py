@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 
+from django.db import transaction
 from django.db.models import Sum
 
 from catalog.models import Product
 from inventory.models import StockItem, StockMovement
 from orders.models import Order
-from orders.services import LineRequest, place_order, request_payment
+from orders.services import LineRequest, pay_pending_order, place_order, request_payment
 
 NOW = datetime(2026, 3, 2, 12, 0, tzinfo=UTC)
 
@@ -35,6 +36,13 @@ def create_order(
     order = place_order(email=email, lines=lines, now=now)
     order, _ = request_payment(order.number, now=now)
     return order
+
+
+def pay(order: Order, *, now: datetime = NOW) -> Order:
+    with transaction.atomic():
+        locked = Order.objects.select_for_update().get(pk=order.pk)
+        pay_pending_order(locked, amount_paid_minor=locked.total_minor, now=now)
+    return locked
 
 
 def checkout(client, lines: list[dict], key: str = "checkout-key-1", **extra):

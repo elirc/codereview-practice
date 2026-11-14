@@ -85,3 +85,21 @@ class OrderDetailView(APIView):
             return Response(StaffOrderSerializer(order).data)
         order = services.get_order_for_customer(number, request.query_params.get("token", ""))
         return Response(PublicOrderSerializer(order).data)
+
+
+class OrderCancelView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def post(self, request: Request, number: str) -> Response:
+        order = get_object_or_404(Order, number=number)
+        services.cancel_order(order.pk, now=clock.now(), actor=request.user)
+        return Response(StaffOrderSerializer(_orders().get(pk=order.pk)).data)
+
+
+class OrderFulfilView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def post(self, request: Request, number: str) -> Response:
+        order = get_object_or_404(Order, number=number)
+        services.fulfil_order(order.pk)
+        return Response(StaffOrderSerializer(_orders().get(pk=order.pk)).data)

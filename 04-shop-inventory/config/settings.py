@@ -126,7 +126,9 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
-CELERY_BEAT_SCHEDULE: dict[str, dict] = {}
+CELERY_BEAT_SCHEDULE = {
+    "expire-reservations": {"task": "orders.expire_reservations", "schedule": 60.0},
+}
 
 DJANGO_STRUCTLOG_CELERY_ENABLED = True
 
