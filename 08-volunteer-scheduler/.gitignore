@@ -1,0 +1,6 @@
+/data/
+/build/
+/.svelte-kit/
+/node_modules/
+*.sqlite-wal
+*.sqlite-shm
