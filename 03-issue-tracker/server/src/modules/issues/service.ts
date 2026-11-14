@@ -1,8 +1,9 @@
 import type { AppDeps } from '../../app.js';
 import type { Database } from '../../db/index.js';
 import type { IssueStatus } from '../../db/types.js';
+import { buildPage, decodeCursor } from '../../lib/cursor.js';
 import { conflict, invalidReference, notFound } from '../../lib/errors.js';
-import { formatIdentifier } from '../../lib/identifier.js';
+import { formatIdentifier, isStorableIssueNumber, parseIdentifier } from '../../lib/identifier.js';
 import { assertCan } from '../../lib/permissions.js';
 import type { TenantContext } from '../../plugins/tenant.js';
 import { lockLabelIds, type LabelRow } from '../labels/repo.js';
@@ -17,11 +18,15 @@ import {
   findLabelsForIssues,
   insertIssue,
   listIssueLabelIds,
+  listIssuesPage,
   replaceIssueLabels,
   updateIssueIfVersion,
   type IssueChanges,
   type IssueDetailRow,
+  type IssueFilters,
   type IssueRow,
+  type IssueSort,
+  type IssueSummaryRow,
 } from './repo.js';
 
 type Deps = Pick<AppDeps, 'db' | 'clock'>;
@@ -65,6 +70,17 @@ export interface CreateIssueInput {
   labelIds?: string[];
 }
 
+export interface ListIssuesInput {
+  projectKey?: string;
+  status?: IssueStatus[];
+  assigneeId?: string;
+  labelId?: string[];
+  q?: string;
+  sort?: IssueSort;
+  limit?: number;
+  cursor?: string;
+}
+
 export interface PatchIssueInput {
   version: number;
   title?: string;
@@ -82,25 +98,31 @@ class StaleVersion extends Error {
   }
 }
 
-function toIssueDetail(row: IssueDetailRow, labels: LabelRow[]): IssueDetailView {
+function toIssueSummary(row: IssueSummaryRow, labels: LabelRow[]): IssueSummaryView {
   return {
     id: row.id,
     identifier: formatIdentifier(row.project_key, row.number),
     projectKey: row.project_key,
     number: row.number,
     title: row.title,
-    description: row.description,
     status: row.status,
     priority: row.priority,
     assignee:
       row.assignee_id && row.assignee_name !== null
         ? { id: row.assignee_id, name: row.assignee_name }
         : null,
-    reporter: { id: row.reporter_id, name: row.reporter_name },
     labels,
     version: row.version,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function toIssueDetail(row: IssueDetailRow, labels: LabelRow[]): IssueDetailView {
+  return {
+    ...toIssueSummary(row, labels),
+    description: row.description,
+    reporter: { id: row.reporter_id, name: row.reporter_name },
   };
 }
 
@@ -143,6 +165,47 @@ async function assertAssignable(orgId: string, userId: string, db: Database): Pr
 async function assertLabelsExist(orgId: string, labelIds: string[], db: Database): Promise<void> {
   const found = await lockLabelIds(orgId, labelIds, db);
   if (found.length !== labelIds.length) throw invalidReference('labelIds');
+}
+
+/**
+ * Lists the org's issues. `q` is either a `KEY-n` identifier lookup or a full-text query;
+ * both use the same ordering and cursors as the unfiltered list.
+ */
+export async function listIssues(deps: Deps, tenant: TenantContext, query: ListIssuesInput) {
+  const sort = query.sort ?? 'created';
+  const limit = query.limit ?? 25;
+  const after = query.cursor ? decodeCursor(query.cursor, sort) : null;
+  const filters: IssueFilters = {
+    projectKey: query.projectKey,
+    statuses: query.status,
+    assignee: query.assigneeId,
+    labelIds: query.labelId,
+  };
+  const q = query.q?.trim();
+  if (q) {
+    const identifier = parseIdentifier(q);
+    if (identifier && !isStorableIssueNumber(identifier.number)) {
+      return { items: [], nextCursor: null };
+    }
+    if (identifier) filters.identifier = identifier;
+    else filters.text = q;
+  }
+
+  const rows = await listIssuesPage(tenant.orgId, filters, sort, after, limit + 1, deps.db);
+  const page = buildPage(rows, limit, (row) => ({
+    s: sort,
+    v: sort === 'priority' ? Number(row.sort_value) : row.sort_value,
+    id: row.id,
+  }));
+  const labels = await findLabelsForIssues(
+    tenant.orgId,
+    page.rows.map((row) => row.id),
+    deps.db,
+  );
+  return {
+    items: page.rows.map((row) => toIssueSummary(row, labels.get(row.id) ?? [])),
+    nextCursor: page.nextCursor,
+  };
 }
 
 export async function getIssue(

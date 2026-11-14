@@ -1,5 +1,14 @@
 import { Type } from '@sinclair/typebox';
-import { Nullable, OrgParams, StrictObject, UserSummary, Uuid } from '../../lib/schemas.js';
+import {
+  CursorParam,
+  Limit,
+  Nullable,
+  OrgParams,
+  Page,
+  StrictObject,
+  UserSummary,
+  Uuid,
+} from '../../lib/schemas.js';
 import { Label } from '../labels/schemas.js';
 import { ProjectKeyParam } from '../projects/schemas.js';
 
@@ -20,8 +29,26 @@ export const LabelIds = Type.Array(Uuid, { maxItems: 20, uniqueItems: true });
 
 export const IssueNumberParam = Type.Integer({ minimum: 1, maximum: 2_147_483_647 });
 
+export const IssuesParams = OrgParams({});
 export const ProjectIssuesParams = OrgParams({ projectKey: ProjectKeyParam });
 export const IssueParams = OrgParams({ projectKey: ProjectKeyParam, number: IssueNumberParam });
+
+export const IssueSort = Type.Union([
+  Type.Literal('created'),
+  Type.Literal('updated'),
+  Type.Literal('priority'),
+]);
+
+export const ListIssuesQuery = StrictObject({
+  projectKey: Type.Optional(ProjectKeyParam),
+  status: Type.Optional(Type.Array(IssueStatus, { maxItems: 5 })),
+  assigneeId: Type.Optional(Type.Union([Type.Literal('none'), Uuid])),
+  labelId: Type.Optional(Type.Array(Uuid, { maxItems: 20 })),
+  q: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: '\\S' })),
+  sort: Type.Optional(IssueSort),
+  limit: Type.Optional(Limit),
+  cursor: Type.Optional(CursorParam),
+});
 
 export const CreateIssueBody = StrictObject({
   title: Title,
@@ -66,3 +93,5 @@ export const IssueDetail = Type.Object({
   description: Type.String(),
   reporter: UserSummary,
 });
+
+export const IssuePage = Page(IssueSummary);

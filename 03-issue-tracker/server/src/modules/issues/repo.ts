@@ -1,6 +1,8 @@
 import { sql } from 'kysely';
 import type { Database } from '../../db/index.js';
+import { isoMicros } from '../../db/sql.js';
 import type { IssueStatus } from '../../db/types.js';
+import type { Cursor } from '../../lib/cursor.js';
 import type { LabelRow } from '../labels/repo.js';
 
 export interface IssueRow {
@@ -17,12 +19,32 @@ export interface IssueRow {
   version: number;
 }
 
-export interface IssueDetailRow extends IssueRow {
-  reporter_id: string;
-  reporter_name: string;
+export interface IssueSummaryRow extends IssueRow {
   assignee_name: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface IssueDetailRow extends IssueSummaryRow {
+  reporter_id: string;
+  reporter_name: string;
+}
+
+export interface IssueListRow extends IssueSummaryRow {
+  sort_value: string;
+}
+
+export type IssueSort = 'created' | 'updated' | 'priority';
+
+export interface IssueFilters {
+  projectKey?: string;
+  statuses?: IssueStatus[];
+  /** A member id, or `none` for unassigned issues. */
+  assignee?: string;
+  /** Issues must carry every one of these labels. */
+  labelIds?: string[];
+  identifier?: { key: string; number: number };
+  text?: string;
 }
 
 export interface IssueChanges {
@@ -86,6 +108,65 @@ export async function findIssueDetail(
     ])
     .where('i.id', '=', issueId)
     .executeTakeFirst();
+}
+
+const SORT_COLUMNS = {
+  created: 'i.created_at',
+  updated: 'i.updated_at',
+  priority: 'i.priority',
+} as const;
+
+/**
+ * One page of the org's issues, newest first by `sort` with id as the tie-breaker, starting
+ * strictly after `after`. `sort_value` is the cursor value for each row.
+ */
+export async function listIssuesPage(
+  orgId: string,
+  filters: IssueFilters,
+  sort: IssueSort,
+  after: Cursor | null,
+  take: number,
+  db: Database,
+): Promise<IssueListRow[]> {
+  const column = SORT_COLUMNS[sort];
+  const sortValue = sort === 'priority' ? sql<string>`i.priority::text` : isoMicros(column);
+  let query = issueWithProject(orgId, db)
+    .leftJoin('users as a', 'a.id', 'i.assignee_id')
+    .select(['a.name as assignee_name', 'i.created_at', 'i.updated_at', sortValue.as('sort_value')]);
+
+  if (filters.projectKey !== undefined) {
+    query = query.where('p.key', '=', filters.projectKey);
+  }
+  if (filters.statuses && filters.statuses.length > 0) {
+    query = query.where('i.status', 'in', filters.statuses);
+  }
+  if (filters.assignee === 'none') {
+    query = query.where('i.assignee_id', 'is', null);
+  } else if (filters.assignee !== undefined) {
+    query = query.where('i.assignee_id', '=', filters.assignee);
+  }
+  for (const labelId of filters.labelIds ?? []) {
+    query = query.where(
+      sql<boolean>`exists (select 1 from issue_labels il where il.org_id = ${orgId} and il.issue_id = i.id and il.label_id = ${labelId})`,
+    );
+  }
+  if (filters.identifier) {
+    query = query
+      .where('p.key', '=', filters.identifier.key)
+      .where('i.number', '=', filters.identifier.number);
+  }
+  if (filters.text !== undefined) {
+    query = query.where(sql<boolean>`i.search @@ websearch_to_tsquery('english', ${filters.text})`);
+  }
+  if (after) {
+    query =
+      sort === 'priority'
+        ? query.where(sql<boolean>`(i.priority, i.id) < (${after.v}::int, ${after.id}::uuid)`)
+        : query.where(
+            sql<boolean>`(${sql.ref(column)}, i.id) < (${after.v}::timestamptz, ${after.id}::uuid)`,
+          );
+  }
+  return query.orderBy(column, 'desc').orderBy('i.id', 'desc').limit(take).execute();
 }
 
 /** Labels for each of the given issues, keyed by issue id, alphabetical within an issue. */

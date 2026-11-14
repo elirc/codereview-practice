@@ -52,3 +52,11 @@ edit and delete. Moving an issue into an archived project is refused the same wa
 
 `labelIds` must not contain duplicates (`400`, via `uniqueItems`) and may hold at most 20 ids.
 Unknown and foreign ids both give `422 invalid_reference` with `details.field = "labelIds"`.
+
+## Identifier search and other filters
+
+A `q` of the form `KEY-n` is an identifier lookup. It is applied together with any other filters
+in the same request (so `q=ENG-1&projectKey=OPS` is empty) rather than ignoring them, which keeps
+every filter meaning the same thing in every request. List filters that name nothing in the org
+(an unknown `projectKey`, `assigneeId` or `labelId`) return an empty list instead of an error,
+since they narrow a list rather than reference a record.

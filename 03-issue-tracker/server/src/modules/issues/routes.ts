@@ -4,16 +4,32 @@ import { EmptyBody } from '../../lib/schemas.js';
 import {
   CreateIssueBody,
   IssueDetail,
+  IssuePage,
   IssueParams,
+  IssuesParams,
+  ListIssuesQuery,
   PatchIssueBody,
   ProjectIssuesParams,
   PutLabelsBody,
 } from './schemas.js';
-import { createIssue, deleteIssue, getIssue, patchIssue, replaceLabels } from './service.js';
+import {
+  createIssue,
+  deleteIssue,
+  getIssue,
+  listIssues,
+  patchIssue,
+  replaceLabels,
+} from './service.js';
 
 const ISSUE_PATH = '/projects/:projectKey/issues/:number';
 
 export const issueRoutes: FastifyPluginAsyncTypebox = async (app) => {
+  app.get(
+    '/issues',
+    { schema: { params: IssuesParams, querystring: ListIssuesQuery, response: { 200: IssuePage } } },
+    async (request) => listIssues(app.deps, request.tenant, request.query),
+  );
+
   app.post(
     '/projects/:projectKey/issues',
     { schema: { params: ProjectIssuesParams, body: CreateIssueBody, response: { 201: IssueDetail } } },
