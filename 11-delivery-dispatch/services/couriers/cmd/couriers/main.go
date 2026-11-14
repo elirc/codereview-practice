@@ -1,7 +1,8 @@
 // Command couriers runs the couriers service.
 //
-//	couriers serve          HTTP API, outbox relay, consumers and loops
+//	couriers serve        HTTP API, outbox relay, consumers and loops
 //	couriers migrate up|down|status
+//	couriers seed         idempotent demo data and seed tokens
 package main
 
 import (
@@ -23,6 +24,7 @@ import (
 	"deliverydispatch/pkg/migrate"
 	"deliverydispatch/pkg/natsx"
 	"deliverydispatch/services/couriers/app"
+	couriersseed "deliverydispatch/services/couriers/internal/seed"
 	"deliverydispatch/services/couriers/migrations"
 )
 
@@ -35,7 +37,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: couriers serve | migrate up|down|status")
+		return errors.New("usage: couriers serve | migrate up|down|status | seed")
 	}
 	cfg, err := app.LoadConfig(os.LookupEnv)
 	if err != nil {
@@ -57,6 +59,8 @@ func run(args []string) error {
 			command = args[1]
 		}
 		return migrate.Run(ctx, cfg.DatabaseURL, migrations.FS, command)
+	case "seed":
+		return seed(ctx, cfg)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -110,4 +114,13 @@ func serve(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 	stopWorkers()
 	<-workers
 	return result
+}
+
+func seed(ctx context.Context, cfg app.Config) error {
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer pool.Close()
+	return couriersseed.Run(ctx, pool, []byte(cfg.Common.JWTSecret), clock.System{}.Now(), os.Stdout)
 }

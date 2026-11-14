@@ -1,7 +1,8 @@
 // Command dispatch runs the dispatch service.
 //
-//	dispatch serve          HTTP API, outbox relay, consumers and loops
+//	dispatch serve        HTTP API, outbox relay, consumers and loops
 //	dispatch migrate up|down|status
+//	dispatch seed         idempotent demo data and seed tokens
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"deliverydispatch/pkg/auth"
 	"deliverydispatch/pkg/clock"
 	"deliverydispatch/pkg/idgen"
 	"deliverydispatch/pkg/logging"
@@ -35,7 +37,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: dispatch serve | migrate up|down|status")
+		return errors.New("usage: dispatch serve | migrate up|down|status | seed")
 	}
 	cfg, err := app.LoadConfig(os.LookupEnv)
 	if err != nil {
@@ -57,6 +59,8 @@ func run(args []string) error {
 			command = args[1]
 		}
 		return migrate.Run(ctx, cfg.DatabaseURL, migrations.FS, command)
+	case "seed":
+		return seed(ctx, cfg)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -110,4 +114,13 @@ func serve(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 	stopWorkers()
 	<-workers
 	return result
+}
+
+// seed prints tokens only: dispatch data is built from events.
+func seed(_ context.Context, cfg app.Config) error {
+	fmt.Println("dispatch has no seed data; couriers appear once they start a shift")
+	return auth.PrintSeedTokens(os.Stdout, []byte(cfg.Common.JWTSecret), clock.System{}.Now(), map[string]auth.Principal{
+		"ops":       auth.SeedOps,
+		"courier-1": {Subject: auth.SeedCourierIDs[0], Role: auth.RoleCourier},
+	})
 }

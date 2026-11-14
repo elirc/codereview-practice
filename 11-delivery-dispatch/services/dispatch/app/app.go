@@ -22,9 +22,9 @@ import (
 	"deliverydispatch/pkg/opsapi"
 	"deliverydispatch/pkg/outbox"
 	"deliverydispatch/pkg/runner"
+	"deliverydispatch/services/dispatch/internal/consumers"
 	"deliverydispatch/services/dispatch/internal/httpapi"
 	"deliverydispatch/services/dispatch/internal/loops"
-	"deliverydispatch/services/dispatch/internal/consumers"
 	"deliverydispatch/services/dispatch/internal/service"
 )
 
