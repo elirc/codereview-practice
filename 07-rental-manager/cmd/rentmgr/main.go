@@ -29,7 +29,9 @@ type command struct {
 }
 
 func commands() map[string]command {
-	return map[string]command{}
+	return map[string]command{
+		"migrate": {summary: "apply database migrations: migrate [up|down|status]", run: runMigrate},
+	}
 }
 
 var errUsage = errors.New("usage: rentmgr <command> [arguments]")
