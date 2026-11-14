@@ -1,0 +1,101 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  color: #222;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #ccc;
+}
+
+main {
+  padding: 1rem;
+}
+
+.card {
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+}
+
+.inline {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+td,
+th {
+  border-bottom: 1px solid #eee;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+
+.error {
+  color: #b00;
+}
+
+.notice {
+  background: #ffd;
+  padding: 0.5rem;
+}
+
+.doc-layout {
+  display: grid;
+  grid-template-columns: 1fr 22rem;
+  gap: 1rem;
+}
+
+.editor textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.95rem;
+}
+
+.status,
+.presence {
+  color: #555;
+}
+
+.panel {
+  border: 1px solid #ddd;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.thread {
+  border-top: 1px solid #eee;
+  padding: 0.25rem 0;
+}
+
+.thread.resolved {
+  opacity: 0.6;
+}
+
+blockquote {
+  margin: 0;
+  padding-left: 0.5rem;
+  border-left: 3px solid #fc3;
+  cursor: pointer;
+}
+
+.preview {
+  white-space: pre-wrap;
+  background: #f6f6f6;
+  padding: 0.5rem;
+}
