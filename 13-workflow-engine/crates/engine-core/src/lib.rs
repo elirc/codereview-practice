@@ -3,9 +3,11 @@
 //!
 //! Nothing in this crate touches the database or the network.
 
+pub mod authz;
 pub mod backoff;
 pub mod clock;
 pub mod limits;
 pub mod names;
 pub mod outcome;
+pub mod secrets;
 pub mod state;

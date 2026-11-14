@@ -2,6 +2,11 @@
 
 pub mod db;
 pub mod error;
+pub mod jobs;
+pub mod models;
+pub mod page;
+pub mod queues;
+pub mod tokens;
 
 pub use error::StoreError;
 

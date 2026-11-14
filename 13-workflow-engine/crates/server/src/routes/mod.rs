@@ -1,20 +1,37 @@
 use axum::body::Body;
 use axum::http::Request;
 use axum::middleware;
-use axum::routing::get;
+use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tracing::{Level, Span};
 
+use crate::auth;
 use crate::error::ApiError;
 use crate::request_id::{assign_request_id, RequestId};
 use crate::state::AppState;
 
 mod health;
+mod jobs;
+mod queues;
+mod tokens;
 
 /// Builds the application router with every route and middleware.
 pub fn build_router(state: AppState) -> Router {
-    let api = Router::new().route("/healthz", get(health::healthz));
+    let api = Router::new()
+        .route("/queues", get(queues::list).post(queues::create))
+        .route("/queues/:name", get(queues::show).patch(queues::update))
+        .route("/queues/:name/pause", post(queues::pause))
+        .route("/queues/:name/resume", post(queues::resume))
+        .route("/jobs", get(jobs::list).post(jobs::enqueue))
+        .route("/jobs/:id", get(jobs::show))
+        .route("/tokens", post(tokens::create))
+        .route("/tokens/:id", delete(tokens::revoke))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_token,
+        ))
+        .route("/healthz", get(health::healthz));
 
     Router::new()
         .nest("/api", api)

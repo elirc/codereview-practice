@@ -1,0 +1,15 @@
+# Decisions
+
+Short records of places where the spec left a choice open.
+
+- **Health route path.** The API table lists `GET /healthz` under the `/api` prefix, while the admin
+  page is served at `/`. The health check is served at `/api/healthz`, without authentication.
+- **Duplicate names.** No error code is listed for a queue or schedule name that already exists.
+  These return `400 validation_failed` with a field error on `name`, the same shape as other
+  invalid input.
+- **What a submitter may read.** The permission table grants submitters jobs, runs and queues in
+  their list. Schedules and workflow definitions are not mentioned, so submitters get
+  `403 forbidden` for them; viewers, operators and admins may read them.
+- **Queue lists on non-submitter tokens.** Only submitter tokens are limited to queues, so creating
+  a viewer, operator or admin token with a non-empty `queues` list is rejected with
+  `400 validation_failed` instead of silently ignoring the list.
