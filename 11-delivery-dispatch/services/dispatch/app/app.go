@@ -19,6 +19,7 @@ import (
 	"deliverydispatch/pkg/idgen"
 	"deliverydispatch/pkg/inbox"
 	"deliverydispatch/pkg/natsx"
+	"deliverydispatch/pkg/opsapi"
 	"deliverydispatch/pkg/outbox"
 	"deliverydispatch/pkg/runner"
 	"deliverydispatch/services/dispatch/internal/httpapi"
@@ -76,6 +77,7 @@ func (a *App) router() http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(auth.NewVerifier([]byte(a.cfg.Common.JWTSecret), a.deps.Clock), logger))
 		httpapi.New(a.Service, logger).Mount(r)
+		opsapi.New(a.deps.Pool, a.processorList(), logger).Mount(r)
 	})
 	return r
 }
@@ -88,6 +90,14 @@ func (a *App) Processors() map[natsx.Stream]*inbox.Processor {
 
 func (a *App) processor(s natsx.Stream, handlers map[string]inbox.Handler) *inbox.Processor {
 	return inbox.NewProcessor(a.deps.Pool, natsx.DurableName(ServiceName, s), handlers, a.deps.Clock, a.deps.IDs, a.deps.Logger)
+}
+
+func (a *App) processorList() []*inbox.Processor {
+	out := make([]*inbox.Processor, 0, len(a.processors))
+	for _, p := range a.processors {
+		out = append(out, p)
+	}
+	return out
 }
 
 // Loops returns the service's periodic loops.

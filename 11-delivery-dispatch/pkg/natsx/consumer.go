@@ -92,3 +92,30 @@ func pause(ctx context.Context, d time.Duration) {
 	case <-t.C:
 	}
 }
+
+// Drain handles every message currently available to p's durable consumer
+// on s, one at a time, and returns how many it settled. It is used by tools
+// and tests that step the system without background consumers.
+func Drain(ctx context.Context, js jetstream.JetStream, s Stream, p *inbox.Processor, logger *slog.Logger) (int, error) {
+	cons, err := EnsureConsumer(ctx, js, s, p.Consumer(), p.Types())
+	if err != nil {
+		return 0, err
+	}
+	log := logger.With("consumer", p.Consumer(), "stream", s.Name)
+	total := 0
+	for {
+		batch, err := cons.FetchNoWait(FetchBatch)
+		if err != nil {
+			return total, err
+		}
+		n := 0
+		for msg := range batch.Messages() {
+			settle(ctx, msg, p, log)
+			n++
+		}
+		total += n
+		if n == 0 {
+			return total, nil
+		}
+	}
+}
