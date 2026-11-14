@@ -15,6 +15,7 @@ public static class ApiSetup
         services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         services.AddExceptionHandler<ApiExceptionHandler>();
         services.AddValidators();
+        services.AddScoped<IdempotentExecutor>();
         return services;
     }
 
@@ -31,6 +32,7 @@ public static class ApiSetup
         v1.MapCustomerEndpoints();
         v1.MapCatalogEndpoints();
         v1.MapInvoiceEndpoints();
+        v1.MapSubscriptionEndpoints();
 
         app.MapFallback(_ => throw DomainException.NotFound("The requested resource"));
         return app;

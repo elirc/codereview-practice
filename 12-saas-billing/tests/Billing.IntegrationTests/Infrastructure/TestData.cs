@@ -82,6 +82,33 @@ public sealed class TestData(BillingApp app)
         Ensure(response, 201);
     }
 
+    public async Task<ApiResponse> TrySubscribeAsync(Guid customerId, string planCode, int quantity = 1, int? trialDays = null, string? idempotencyKey = null) =>
+        await (await ServiceAsync()).PostAsync(
+            "/v1/subscriptions",
+            new { customerId, planCode, quantity, trialDays },
+            idempotencyKey ?? $"sub-{Guid.NewGuid():N}");
+
+    public async Task<Guid> SubscribeAsync(Guid customerId, string planCode, int quantity = 1, int? trialDays = null)
+    {
+        var response = await TrySubscribeAsync(customerId, planCode, quantity, trialDays);
+        Ensure(response, 201);
+        return response.Id;
+    }
+
+    public async Task<JsonElement> SubscriptionAsync(Guid id) => (await (await ServiceAsync()).GetAsync($"/v1/subscriptions/{id}")).Json;
+
+    /// <summary>Returns every invoice of the subscription, oldest first.</summary>
+    public async Task<IReadOnlyList<JsonElement>> InvoicesAsync(Guid subscriptionId)
+    {
+        var customerId = (await SubscriptionAsync(subscriptionId)).GetProperty("customerId").GetGuid();
+        var page = await (await ServiceAsync()).GetAsync($"/v1/invoices?customerId={customerId}&limit=200");
+        return page["data"].EnumerateArray()
+            .Where(i => i.GetProperty("subscriptionId").ValueKind != JsonValueKind.Null && i.GetProperty("subscriptionId").GetGuid() == subscriptionId)
+            .OrderBy(i => i.GetProperty("createdAt").GetString(), StringComparer.Ordinal)
+            .ThenBy(i => i.GetProperty("number").GetString(), StringComparer.Ordinal)
+            .ToList();
+    }
+
     public static void Ensure(ApiResponse response, int status)
     {
         if (response.Status != status)

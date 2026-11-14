@@ -63,6 +63,22 @@ public sealed class EventRecorder(BillingDbContext db, TimeProvider clock, Reque
         await RecordAsync(type, "invoice", invoiceId, view, extra, ct);
     }
 
+    /// <summary>Records a subscription event whose object is the subscription as given.</summary>
+    public async Task SubscriptionAsync(string type, Subscription subscription, IReadOnlyDictionary<string, object?>? extra, CancellationToken ct)
+    {
+        await db.SaveChangesAsync(ct);
+        var view = await views.SubscriptionAsync(subscription, ct);
+        await RecordAsync(type, "subscription", subscription.Id, view, extra, ct);
+    }
+
+    /// <summary>Records a <c>subscription.updated</c> event carrying the state before the change.</summary>
+    public Task SubscriptionUpdatedAsync(Subscription subscription, SubscriptionSnapshot previous, CancellationToken ct) =>
+        SubscriptionAsync(
+            EventTypes.SubscriptionUpdated,
+            subscription,
+            new Dictionary<string, object?> { ["previous"] = previous },
+            ct);
+
     /// <summary>Records an event with the given object representation and extra data fields.</summary>
     public async Task RecordAsync(
         string type,

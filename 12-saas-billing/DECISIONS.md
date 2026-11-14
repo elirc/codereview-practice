@@ -9,3 +9,5 @@ Points the spec leaves open, the choice made, and why.
 - **Duplicate natural keys.** A second customer with the same `externalId`, plan with the same `code` or meter with the same `code` is `409 already_exists`; the spec names no code for these.
 - **Clearing a customer's region.** `PATCH /customers/{id}` treats a missing or null field as "leave unchanged", so an empty string clears `region`.
 - **Customer payment token in responses.** The token is not returned; customer representations carry `hasPaymentMethod` instead.
+- **Idempotency-Key format.** A missing header is `400 idempotency_key_required`; a header outside 8–128 characters is `400 validation_failed` on the `Idempotency-Key` path. Keys are scoped to the API key that sent them. `404` responses are not stored, since the spec lists only `2xx`, `409` and `422`.
+- **Unknown plan code or customer on subscribe.** `404 not_found`; `422 plan_incompatible` is kept for plans that exist but are retired or in another currency.

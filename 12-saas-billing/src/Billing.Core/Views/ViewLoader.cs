@@ -30,6 +30,23 @@ public sealed class ViewLoader(BillingDbContext db)
         return invoices.Select(i => InvoiceView.From(i, attemptsByInvoice[i.Id], notesByInvoice[i.Id])).ToList();
     }
 
+    /// <summary>Returns the view of a subscription as given, resolving its plan codes.</summary>
+    public async Task<SubscriptionView> SubscriptionAsync(Subscription subscription, CancellationToken ct) =>
+        (await SubscriptionsAsync([subscription], ct))[0];
+
+    /// <summary>Returns views of the subscriptions as given, in the given order.</summary>
+    public async Task<IReadOnlyList<SubscriptionView>> SubscriptionsAsync(IReadOnlyList<Subscription> subscriptions, CancellationToken ct)
+    {
+        var planIds = subscriptions
+            .SelectMany(s => s.PendingPlanId is { } pending ? new[] { s.PlanId, pending } : new[] { s.PlanId })
+            .Distinct()
+            .ToList();
+        var codes = await db.Plans.AsNoTracking()
+            .Where(p => planIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Code, ct);
+        return subscriptions.Select(s => SubscriptionView.From(s, codes)).ToList();
+    }
+
     /// <summary>Returns the credit note with its lines, or null when it does not exist.</summary>
     public async Task<CreditNoteView?> CreditNoteAsync(Guid id, CancellationToken ct)
     {

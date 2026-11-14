@@ -32,6 +32,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DocumentNumberer>();
         services.AddScoped<InvoiceFinalizer>();
         services.AddScoped<InvoiceService>();
+        services.AddScoped<SubscriptionCycle>();
+        services.AddScoped<SubscriptionService>();
 
         return services;
     }
