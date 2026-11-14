@@ -42,3 +42,16 @@ replays the stored response. The unique `(scope, key)` constraint is still what 
 single record. A record that is found unfinished while holding the lock belongs to a request
 that died mid-way; it is discarded and the request runs again (an order left behind by such a
 crash has no payment intent and is released by the expiry task).
+
+## Refund idempotency covers the order number
+
+`(scope, key)` is unique per endpoint, and the refund endpoint is per order. The request hash
+for refunds is computed over `{order, body}`, so reusing a key on a different order with the
+same body is rejected as `422 idempotency_key_reused` instead of replaying another order's
+refund.
+
+## Payments business logic is a package
+
+The spec asks for `services.py` per app. Payments has three distinct areas (webhook intake,
+event processing, refunds), so it uses a `payments/services/` package with one module each to
+keep files focused. Views and tasks stay thin and call into these modules.

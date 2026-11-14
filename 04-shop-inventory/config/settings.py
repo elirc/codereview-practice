@@ -42,6 +42,9 @@ _require(
 RESERVATION_MINUTES = env.int("RESERVATION_MINUTES", default=30)
 _require(RESERVATION_MINUTES > 0, "RESERVATION_MINUTES must be a positive number of minutes")
 
+CLERK_REFUND_LIMIT_MINOR = env.int("CLERK_REFUND_LIMIT_MINOR", default=5000)
+_require(CLERK_REFUND_LIMIT_MINOR >= 0, "CLERK_REFUND_LIMIT_MINOR must not be negative")
+
 PAYMENT_PROVIDER = env.str("PAYMENT_PROVIDER", default="fake")
 _require(PAYMENT_PROVIDER in {"fake"}, "PAYMENT_PROVIDER must be 'fake'")
 

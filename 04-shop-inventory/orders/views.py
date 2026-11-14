@@ -22,7 +22,7 @@ from .serializers import (
 
 
 def _orders() -> QuerySet[Order]:
-    return Order.objects.prefetch_related("lines")
+    return Order.objects.prefetch_related("lines", "refunds")
 
 
 class OrderListCreateView(generics.ListAPIView):

@@ -37,6 +37,14 @@ def clock(monkeypatch) -> FixedClock:
 
 
 @pytest.fixture(autouse=True)
+def published(monkeypatch) -> list[tuple[str, tuple[str, ...]]]:
+    """Tasks published by the code under test, recorded instead of sent to the broker."""
+    calls: list[tuple[str, tuple[str, ...]]] = []
+    monkeypatch.setattr("core.jobs.publish", lambda name, *args: calls.append((name, args)))
+    return calls
+
+
+@pytest.fixture(autouse=True)
 def provider():
     get_provider.cache_clear()
     yield get_provider()

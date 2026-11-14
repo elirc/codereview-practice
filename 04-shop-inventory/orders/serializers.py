@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from payments.services.refunds import refund_progress
+
 from .models import Order, OrderLine
 from .services import LineRequest, merge_lines
 
@@ -59,17 +61,28 @@ class PublicOrderSerializer(serializers.ModelSerializer):
 
 
 class StaffOrderSerializer(PublicOrderSerializer):
+    refunded_minor = serializers.SerializerMethodField()
+    refund_state = serializers.SerializerMethodField()
+
     class Meta(PublicOrderSerializer.Meta):
         fields = [
             "id",
             *PublicOrderSerializer.Meta.fields,
             "amount_paid_minor",
+            "refunded_minor",
+            "refund_state",
             "payment_intent_id",
             "last_payment_event_at",
             "needs_review",
             "review_reason",
             "updated_at",
         ]
+
+    def get_refunded_minor(self, obj: Order) -> int:
+        return refund_progress(obj)[0]
+
+    def get_refund_state(self, obj: Order) -> str:
+        return refund_progress(obj)[1]
 
 
 class OrderFilterSerializer(serializers.Serializer):
