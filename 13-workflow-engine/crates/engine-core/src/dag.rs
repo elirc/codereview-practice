@@ -58,7 +58,7 @@ fn check_range(
     field: &str,
 ) {
     if let Some(v) = value {
-        if v < min || v > max {
+        if !(min..=max).contains(&v) {
             problems.push(Problem::new(
                 "invalid_limit",
                 Some(&step.key),

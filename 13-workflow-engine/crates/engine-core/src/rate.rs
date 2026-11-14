@@ -33,7 +33,8 @@ pub fn refill(bucket: Bucket, per_minute: i32, burst: i32, now: DateTime<Utc>) -
             refilled_at: now,
         };
     }
-    let accounted_ms = (added.saturating_mul(60) + per_minute - 1) / per_minute;
+    let produced = added.saturating_mul(60);
+    let accounted_ms = produced / per_minute + i64::from(produced % per_minute != 0);
     Bucket {
         tokens_milli: total,
         refilled_at: bucket.refilled_at + Duration::milliseconds(accounted_ms),

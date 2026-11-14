@@ -23,7 +23,7 @@ impl Problems {
     /// Records `message` for `path` when `value` is set and outside `min..=max`.
     pub fn range<T: PartialOrd + Copy>(&mut self, value: Option<T>, min: T, max: T, path: &str) {
         if let Some(v) = value {
-            if v < min || v > max {
+            if !(min..=max).contains(&v) {
                 self.0.push(FieldError::new(path, "is out of range"));
             }
         }

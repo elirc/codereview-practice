@@ -45,3 +45,14 @@ Short records of places where the spec left a choice open.
 - **Purging jobs of finished runs.** Only standalone jobs are purged on their own. Jobs that belong
   to a workflow run are deleted together with the run once the run finished longer ago than the
   retention, so a failed run can still be retried and its detail page keeps its job ids.
+- **Worker host name.** No host-name crate is in the pinned dependency list, so the `<hostname>`
+  part of the worker id comes from `HOSTNAME`, then `COMPUTERNAME`, then `/etc/hostname`, and
+  falls back to `worker`.
+- **Worker tests that depend on durations.** Paused Tokio time advances on its own whenever the
+  runtime is idle, including while it waits on database sockets, which would fire pool timeouts.
+  Worker tests for heartbeats, cancellation, abandonment and shutdown therefore run the real
+  runner and claim loop against an in-memory `WorkerStore`; outcome tests (success, retry,
+  permanent failure, panic) run against Postgres without paused time.
+- **Seed tokens.** API tokens are normally random and shown once. `wfe-server seed` upserts four
+  fixed development tokens (listed in the README) so a fresh checkout can use the API and the
+  admin page; they must not be used outside local development.

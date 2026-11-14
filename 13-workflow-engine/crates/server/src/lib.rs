@@ -9,6 +9,7 @@ pub mod loops;
 pub mod pagination;
 pub mod request_id;
 pub mod routes;
+pub mod seed;
 pub mod shutdown;
 pub mod state;
 pub mod validate;

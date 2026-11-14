@@ -16,7 +16,8 @@ async fn main() -> anyhow::Result<()> {
     match command.as_str() {
         "serve" => serve(config).await,
         "migrate" => migrate(config).await,
-        other => anyhow::bail!("unknown command {other:?}; expected serve or migrate"),
+        "seed" => seed(config).await,
+        other => anyhow::bail!("unknown command {other:?}; expected serve, migrate or seed"),
     }
 }
 
@@ -29,6 +30,17 @@ async fn migrate(config: Config) -> anyhow::Result<()> {
         .await
         .context("migration failed")?;
     tracing::info!("migrations applied");
+    pool.close().await;
+    Ok(())
+}
+
+async fn seed(config: Config) -> anyhow::Result<()> {
+    let pool = engine_store::db::connect(&config.database_url, 2)
+        .await
+        .context("could not connect to the database")?;
+    wfe_server::seed::run(&pool, SystemClock.now())
+        .await
+        .context("seeding failed")?;
     pool.close().await;
     Ok(())
 }
