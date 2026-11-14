@@ -1,0 +1,9 @@
+<% content_for :title, "Edit #{@promo_code.code}" %>
+
+<h1>Edit <%= @promo_code.code %></h1>
+
+<p class="muted">Redeemed <%= @promo_code.redemptions_count %> times.</p>
+
+<%= render "form", event: @event, promo_code: @promo_code %>
+
+<p><%= link_to "Back", manage_event_promo_codes_path(@event) %></p>

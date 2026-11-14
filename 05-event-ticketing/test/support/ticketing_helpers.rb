@@ -21,6 +21,15 @@ module TicketingHelpers
   def place_hold(user, tier, quantity, now: NOW)
     Holds::Create.call(user:, tier:, quantity:, now:)
   end
+
+  def create_promo(code, event: events(:concert), percent_off: nil, amount_off_cents: nil, **attributes)
+    kind = percent_off ? "percent" : "fixed"
+    PromoCode.create!(event:, code:, kind:, percent_off:, amount_off_cents:, **attributes)
+  end
+
+  def apply_promo(hold, code, user: hold.user, now: NOW)
+    Promos::Apply.call(hold:, user:, code:, now:)
+  end
 end
 
 ActiveSupport.on_load(:active_support_test_case) do

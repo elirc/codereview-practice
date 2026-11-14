@@ -1,0 +1,29 @@
+<%= turbo_frame_tag "quote" do %>
+  <table class="quote">
+    <tbody>
+      <tr><th>Subtotal</th><td><%= format_cents(quote.subtotal_cents) %></td></tr>
+      <% quote.lines.each do |line| %>
+        <tr data-promo-code="<%= line.promo_code.code %>">
+          <th>Code <%= line.promo_code.code %></th>
+          <td>
+            −<%= format_cents(line.amount_cents) %>
+            <%= button_to "Remove", hold_promo_path(hold, line.promo_code.id), method: :delete, form_class: "inline-form" %>
+          </td>
+        </tr>
+      <% end %>
+      <tr><th>Total</th><td><strong id="quote-total"><%= format_cents(quote.total_cents) %></strong></td></tr>
+    </tbody>
+  </table>
+
+  <% if error %>
+    <p class="error" data-error-code="<%= error.code %>"><%= error.message %></p>
+  <% end %>
+
+  <% if quote.lines.size < PromoCode::MAX_PER_HOLD %>
+    <%= form_with url: hold_promos_path(hold), class: "inline-form" do |form| %>
+      <%= form.label :code, "Promo code" %>
+      <%= form.text_field :code, maxlength: 40, autocomplete: "off" %>
+      <%= form.submit "Apply" %>
+    <% end %>
+  <% end %>
+<% end %>

@@ -4,6 +4,8 @@ class Hold < ApplicationRecord
   belongs_to :user
   belongs_to :ticket_tier
   belongs_to :order, optional: true
+  has_many :hold_promos, dependent: :delete_all
+  has_many :promo_codes, through: :hold_promos
 
   enum :status, { active: "active", converted: "converted", released: "released", expired: "expired" }
   enum :source, { direct: "direct", waitlist: "waitlist" }, prefix: true

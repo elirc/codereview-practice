@@ -1,0 +1,71 @@
+<% url = promo_code.new_record? ? manage_event_promo_codes_path(event) : manage_event_promo_code_path(event, promo_code) %>
+<%= form_with model: promo_code, url: url do |form| %>
+  <%= render "shared/form_errors", record: promo_code %>
+
+  <div class="field">
+    <%= form.label :code %>
+    <%= form.text_field :code, required: true, maxlength: 40 %>
+    <p class="muted">Stored in upper case; customers can type it in any case.</p>
+  </div>
+
+  <div class="field">
+    <%= form.label :kind %>
+    <%= form.select :kind, [ [ "Percent off", "percent" ], [ "Fixed amount off", "fixed" ] ] %>
+  </div>
+
+  <div class="field">
+    <%= form.label :percent_off, "Percent off (1–100, percent codes)" %>
+    <%= form.number_field :percent_off, min: 1, max: 100, step: 1 %>
+  </div>
+
+  <div class="field">
+    <%= form.label :amount_off_cents, "Amount off in cents (fixed codes)" %>
+    <%= form.number_field :amount_off_cents, min: 1, step: 1 %>
+  </div>
+
+  <div class="field">
+    <%= form.label :stackable do %>
+      <%= form.check_box :stackable %> Can be combined with one other stackable code
+    <% end %>
+  </div>
+
+  <div class="field">
+    <%= form.label :max_redemptions, "Total redemptions allowed (blank for unlimited)" %>
+    <%= form.number_field :max_redemptions, min: 1, step: 1 %>
+  </div>
+
+  <div class="field">
+    <%= form.label :per_user_limit, "Uses per customer" %>
+    <%= form.number_field :per_user_limit, min: 1, step: 1, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :min_subtotal_cents, "Minimum subtotal in cents" %>
+    <%= form.number_field :min_subtotal_cents, min: 0, step: 1, required: true %>
+  </div>
+
+  <div class="field">
+    <%= form.label :starts_at_local, "Valid from (#{event.time_zone})" %>
+    <%= form.datetime_local_field :starts_at_local, value: promo_code.starts_at_local %>
+  </div>
+
+  <div class="field">
+    <%= form.label :ends_at_local, "Valid until (#{event.time_zone})" %>
+    <%= form.datetime_local_field :ends_at_local, value: promo_code.ends_at_local %>
+  </div>
+
+  <fieldset class="field">
+    <legend>Applies to tiers (none selected means all tiers)</legend>
+    <%= form.collection_check_boxes :ticket_tier_ids, event.ticket_tiers, :id, :name do |box| %>
+      <label><%= box.check_box %> <%= box.text %></label>
+    <% end %>
+  </fieldset>
+
+  <div class="field">
+    <%= form.label :active do %>
+      <%= form.check_box :active %> Active
+    <% end %>
+  </div>
+
+  <%= form.submit %>
+<% end %>

@@ -14,6 +14,7 @@
 
 <p>
   <%= link_to "Public page", event_path(@event) %>
+  | <%= link_to "Promo codes", manage_event_promo_codes_path(@event) %>
   <% unless @event.cancelled? %>
     | <%= link_to "Edit", edit_manage_event_path(@event) %>
   <% end %>

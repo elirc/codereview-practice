@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_14_090600) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_14_090700) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -30,6 +30,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090600) do
     t.index ["status", "starts_at"], name: "index_events_on_status_and_starts_at"
     t.check_constraint "(ends_at > starts_at)", name: "events_ends_after_start"
     t.check_constraint "((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'cancelled'::character varying])::text[]))", name: "events_status_valid"
+  end
+
+  create_table "hold_promos", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "hold_id", null: false
+    t.uuid "promo_code_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["hold_id", "promo_code_id"], name: "index_hold_promos_on_hold_id_and_promo_code_id", unique: true
+    t.index ["promo_code_id"], name: "index_hold_promos_on_promo_code_id"
   end
 
   create_table "holds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -72,6 +81,54 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090600) do
     t.check_constraint "((subtotal_cents >= 0) AND (discount_cents >= 0) AND (total_cents >= 0))", name: "orders_amounts_nonnegative"
     t.check_constraint "((status)::text = ANY ((ARRAY['paid'::character varying, 'refunded'::character varying])::text[]))", name: "orders_status_valid"
     t.check_constraint "(total_cents = (subtotal_cents - discount_cents))", name: "orders_total_matches"
+  end
+
+  create_table "promo_code_tiers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "promo_code_id", null: false
+    t.uuid "ticket_tier_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["promo_code_id", "ticket_tier_id"], name: "index_promo_code_tiers_on_promo_code_id_and_ticket_tier_id", unique: true
+    t.index ["ticket_tier_id"], name: "index_promo_code_tiers_on_ticket_tier_id"
+  end
+
+  create_table "promo_codes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "event_id"
+    t.string "code", null: false
+    t.string "kind", null: false
+    t.integer "percent_off"
+    t.integer "amount_off_cents"
+    t.boolean "stackable", default: false, null: false
+    t.integer "max_redemptions"
+    t.integer "redemptions_count", default: 0, null: false
+    t.integer "per_user_limit", default: 1, null: false
+    t.datetime "starts_at"
+    t.datetime "ends_at"
+    t.integer "min_subtotal_cents", default: 0, null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id", "code"], name: "index_promo_codes_on_event_id_and_code", unique: true, where: "(event_id IS NOT NULL)"
+    t.index ["code"], name: "index_promo_codes_site_wide_code", unique: true, where: "(event_id IS NULL)"
+    t.check_constraint "(((kind)::text = 'percent'::text) AND (percent_off >= 1) AND (percent_off <= 100) AND (amount_off_cents IS NULL)) OR (((kind)::text = 'fixed'::text) AND (amount_off_cents > 0) AND (percent_off IS NULL))", name: "promo_codes_discount_matches_kind"
+    t.check_constraint "((per_user_limit > 0) AND ((max_redemptions IS NULL) OR (max_redemptions > 0)))", name: "promo_codes_limits_positive"
+    t.check_constraint "(min_subtotal_cents >= 0)", name: "promo_codes_min_subtotal_nonnegative"
+    t.check_constraint "((redemptions_count >= 0) AND ((max_redemptions IS NULL) OR (redemptions_count <= max_redemptions)))", name: "promo_codes_redemptions_within_max"
+    t.check_constraint "((starts_at IS NULL) OR (ends_at IS NULL) OR (ends_at > starts_at))", name: "promo_codes_window_valid"
+  end
+
+  create_table "promo_redemptions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "promo_code_id", null: false
+    t.uuid "order_id", null: false
+    t.uuid "user_id", null: false
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["order_id"], name: "index_promo_redemptions_on_order_id"
+    t.index ["promo_code_id", "order_id"], name: "index_promo_redemptions_on_promo_code_id_and_order_id", unique: true
+    t.index ["promo_code_id", "user_id"], name: "index_promo_redemptions_on_promo_code_id_and_user_id"
+    t.index ["user_id"], name: "index_promo_redemptions_on_user_id"
+    t.check_constraint "(amount_cents >= 0)", name: "promo_redemptions_amount_nonnegative"
   end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -249,11 +306,19 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090600) do
   end
 
   add_foreign_key "events", "users", column: "organizer_id"
+  add_foreign_key "hold_promos", "holds"
+  add_foreign_key "hold_promos", "promo_codes"
   add_foreign_key "holds", "orders"
   add_foreign_key "holds", "ticket_tiers"
   add_foreign_key "holds", "users"
   add_foreign_key "orders", "events"
   add_foreign_key "orders", "users"
+  add_foreign_key "promo_code_tiers", "promo_codes", on_delete: :cascade
+  add_foreign_key "promo_code_tiers", "ticket_tiers", on_delete: :cascade
+  add_foreign_key "promo_codes", "events"
+  add_foreign_key "promo_redemptions", "orders"
+  add_foreign_key "promo_redemptions", "promo_codes"
+  add_foreign_key "promo_redemptions", "users"
   add_foreign_key "sessions", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

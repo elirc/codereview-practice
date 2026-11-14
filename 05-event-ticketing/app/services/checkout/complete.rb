@@ -30,11 +30,14 @@ module Checkout
         end
 
         verify_hold!(tier)
-        amounts = { subtotal_cents: @hold.subtotal_cents, discount_cents: 0, total_cents: @hold.subtotal_cents }
-        charge = collect_payment(amounts[:total_cents])
+        promo_codes = lock_promo_codes
+        Promos::Validation.new(hold: @hold, user: @user, now: @now).verify!(promo_codes)
+        quote = Pricing::Quote.call(@hold, promo_codes)
+        charge = collect_payment(quote.total_cents)
 
         tier.adjust_counts!(held: -@hold.quantity, sold: @hold.quantity)
-        order = create_order(tier, amounts, charge)
+        order = create_order(tier, quote, charge)
+        redeem(order, quote)
         @hold.update!(status: :converted, order:)
         order
       end
@@ -55,6 +58,10 @@ module Checkout
         raise DomainError.new(:event_cancelled) if tier.event.cancelled?
       end
 
+      def lock_promo_codes
+        PromoCode.where(id: @hold.hold_promos.select(:promo_code_id)).order(:id).lock.to_a
+      end
+
       def collect_payment(total_cents)
         return nil unless total_cents.positive?
 
@@ -64,19 +71,28 @@ module Checkout
         charge
       end
 
-      def create_order(tier, amounts, charge)
+      def create_order(tier, quote, charge)
         order = Order.create!(
           user: @user,
           event_id: tier.event_id,
           number: "ORD-#{@token_generator.call(8)}",
           status: :paid,
-          payment_reference: charge&.reference,
-          **amounts
+          subtotal_cents: quote.subtotal_cents,
+          discount_cents: quote.discount_cents,
+          total_cents: quote.total_cents,
+          payment_reference: charge&.reference
         )
         @hold.quantity.times do
           order.tickets.create!(ticket_tier: tier, code: @token_generator.call(12), status: :valid)
         end
         order
+      end
+
+      def redeem(order, quote)
+        quote.lines.each do |line|
+          order.promo_redemptions.create!(promo_code: line.promo_code, user: @user, amount_cents: line.amount_cents)
+          line.promo_code.increment!(:redemptions_count)
+        end
       end
   end
 end

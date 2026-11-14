@@ -11,6 +11,7 @@ Rails.application.routes.draw do
   end
 
   resources :holds, only: %i[ show destroy ] do
+    resources :promos, only: %i[ create destroy ], param: :promo_code_id
     resource :checkout, only: :create
   end
 
@@ -23,6 +24,7 @@ Rails.application.routes.draw do
       end
 
       resources :tiers, only: %i[ new create edit update ]
+      resources :promo_codes, only: %i[ index new create edit update ]
     end
   end
 

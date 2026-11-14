@@ -12,7 +12,7 @@
     <%= format_in_zone(@hold.expires_at, @event.time_zone) %>.
   </p>
 
-  <p>Total: <strong><%= format_cents(@hold.subtotal_cents) %></strong></p>
+  <%= render "holds/quote", hold: @hold, quote: @quote, error: nil %>
 
   <%= form_with url: hold_checkout_path(@hold), id: "checkout-form" do |form| %>
     <div class="field">

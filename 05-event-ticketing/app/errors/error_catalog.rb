@@ -14,7 +14,14 @@ module ErrorCatalog
     event_limit_exceeded: [ 422, "You can hold or buy at most 8 tickets for one event." ],
     insufficient_capacity: [ 409, "Not enough tickets are available." ],
     hold_expired: [ 409, "Your hold has expired." ],
-    payment_declined: [ 422, "Your payment was declined. Your tickets are still held." ]
+    payment_declined: [ 422, "Your payment was declined. Your tickets are still held." ],
+    promo_not_found: [ 422, "That promo code is not valid for this event." ],
+    promo_not_active: [ 422, "That promo code is not active right now." ],
+    promo_not_applicable: [ 422, "That promo code does not apply to these tickets." ],
+    promo_min_not_met: [ 422, "Your order does not reach the minimum for that promo code." ],
+    promo_exhausted: [ 422, "That promo code has been fully redeemed." ],
+    promo_user_limit: [ 422, "You have already used that promo code the maximum number of times." ],
+    promo_not_stackable: [ 422, "That promo code cannot be combined with the codes already applied." ]
   }.freeze
 
   def self.status_for(code)

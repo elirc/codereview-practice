@@ -15,6 +15,7 @@ class HoldsController < ApplicationController
     @tier = @hold.ticket_tier
     @event = @tier.event
     @now = Time.current
+    @quote = Pricing::Quote.call(@hold, @hold.promo_codes.to_a)
   end
 
   def destroy

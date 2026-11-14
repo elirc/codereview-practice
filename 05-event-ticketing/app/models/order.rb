@@ -4,6 +4,7 @@ class Order < ApplicationRecord
   belongs_to :user
   belongs_to :event
   has_many :tickets, dependent: :restrict_with_exception
+  has_many :promo_redemptions, dependent: :restrict_with_exception
   has_one :hold, dependent: :restrict_with_exception
 
   enum :status, { paid: "paid", refunded: "refunded" }

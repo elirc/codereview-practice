@@ -4,6 +4,7 @@ class Event < ApplicationRecord
   belongs_to :organizer, class_name: "User"
   has_many :ticket_tiers, -> { order(:position, :created_at) }, dependent: :destroy, inverse_of: :event
   has_many :orders, dependent: :restrict_with_exception
+  has_many :promo_codes, dependent: :destroy
 
   enum :status, { draft: "draft", published: "published", cancelled: "cancelled" }, default: :draft
 
