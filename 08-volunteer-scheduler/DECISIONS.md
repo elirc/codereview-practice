@@ -31,3 +31,13 @@ Choices made where the spec left room for interpretation.
 
 **Unclear:** whether exceptions can be changed after they are created.
 **Chosen:** one exception per occurrence. A `modified` exception can be modified again or turned into a cancellation; a `cancelled` occurrence is final (`occurrence_cancelled`). Editing a series occurrence on the shift page writes a `modified` exception, so only location, time, duration and capacity can change there; the title belongs to the series.
+
+## Sign-ups on an over-capacity shift
+
+**Unclear:** a shift whose capacity was lowered below its confirmed count "takes no new signups", while the sign-up algorithm waitlists whenever the confirmed count is at or above capacity.
+**Chosen:** follow the algorithm: new sign-ups are waitlisted (never confirmed) and promotions stay suspended until the confirmed count drops below capacity. The roster and the volunteer list show the shift as full or over capacity.
+
+## Coordinators cancelling their own signups
+
+**Unclear:** the two-hour cut-off is described for volunteers and the until-end rule for coordinators removing anyone.
+**Chosen:** the rule follows the actor's role, so a coordinator or admin may cancel any signup, including their own, until the shift ends. The `signup-cancelled` notice is only sent when the actor is not the signup's owner.

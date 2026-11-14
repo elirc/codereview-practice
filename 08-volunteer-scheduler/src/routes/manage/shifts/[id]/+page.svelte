@@ -94,9 +94,26 @@
 {/if}
 
 <h2>Roster</h2>
+{#if !data.ended && shift.status === 'scheduled'}
+	<form method="POST" action="?/add" use:enhance>
+		<label class="check">
+			Add volunteer by email
+			<input name="email" type="email" required value={valueOr(form, 'email', '')} />
+		</label>
+		<button type="submit">Add</button>
+	</form>
+{/if}
 <table>
 	<thead>
-		<tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Signed up</th></tr>
+		<tr>
+			<th>Name</th>
+			<th>Email</th>
+			<th>Phone</th>
+			<th>Status</th>
+			<th>Signed up</th>
+			<th>Attended</th>
+			<th></th>
+		</tr>
 	</thead>
 	<tbody>
 		{#each data.roster.filter((entry) => entry.status !== 'cancelled') as entry (entry.signupId)}
@@ -106,9 +123,29 @@
 				<td>{entry.phone ?? ''}</td>
 				<td>{entry.status}{entry.status === 'waitlisted' ? ` #${entry.waitlistSeq}` : ''}</td>
 				<td>{entry.signedUpLabel}</td>
+				<td>
+					{#if data.started && entry.status === 'confirmed'}
+						<form method="POST" action="?/attendance" class="inline" use:enhance>
+							<input type="hidden" name="signupId" value={entry.signupId} />
+							<input type="hidden" name="attended" value={entry.attended ? 'false' : 'true'} />
+							{entry.attended === null ? '—' : entry.attended ? 'yes' : 'no'}
+							<button type="submit">{entry.attended ? 'Mark absent' : 'Mark present'}</button>
+						</form>
+					{:else}
+						{entry.attended === null ? '' : entry.attended ? 'yes' : 'no'}
+					{/if}
+				</td>
+				<td>
+					{#if !data.ended}
+						<form method="POST" action="?/remove" class="inline" use:enhance>
+							<input type="hidden" name="signupId" value={entry.signupId} />
+							<button type="submit">Remove</button>
+						</form>
+					{/if}
+				</td>
 			</tr>
 		{:else}
-			<tr><td colspan="5">Nobody has signed up yet.</td></tr>
+			<tr><td colspan="7">Nobody has signed up yet.</td></tr>
 		{/each}
 	</tbody>
 </table>

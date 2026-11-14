@@ -75,3 +75,28 @@ export function issueInvite(ctx: AppContext, userId: string): string {
 		return createInvite(tx, userId, now);
 	}, IMMEDIATE);
 }
+
+export interface ProfileInput {
+	name: string;
+	phone: string | null;
+	emailOptIn: boolean;
+	smsOptIn: boolean;
+}
+
+export function updateProfile(ctx: AppContext, userId: string, input: ProfileInput): UserRow {
+	if (input.smsOptIn && !input.phone) {
+		throw new DomainError(
+			'sms_requires_phone',
+			422,
+			'Add a phone number to receive text messages.',
+			{ fields: [{ path: 'phone', message: 'Required for text messages.' }] }
+		);
+	}
+	const updated = ctx.db.update(users).set(input).where(eq(users.id, userId)).returning().get();
+	if (!updated) throw notFound('User not found.');
+	return updated;
+}
+
+export function findUserByEmail(ctx: AppContext, email: string): UserRow | undefined {
+	return ctx.db.select().from(users).where(eq(users.email, email)).get();
+}

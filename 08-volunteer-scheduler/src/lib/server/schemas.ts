@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isCivilDate, isWallTime } from '../domain/dates';
+import { normalizePhone } from '../domain/phone';
 import { WEEKDAYS, type Weekday } from '../domain/recurrence';
 import { EXCEPTION_KINDS, FREQUENCIES } from './db/schema';
 import type { SeriesInput } from './services/series';
@@ -136,4 +137,37 @@ export const shiftFilterSchema = z.object({
 	to: optional(civilDateField),
 	status: optional(z.enum(['scheduled', 'cancelled'])),
 	q: optional(z.string().trim().max(100))
+});
+
+export const shiftIdSchema = z.object({ shiftId: uuidField });
+export const signupIdSchema = z.object({ signupId: uuidField });
+export const emailField = z.string().trim().toLowerCase().email('Enter a valid email address.');
+export const rosterAddSchema = z.object({ email: emailField });
+
+export const attendanceSchema = z.object({
+	signupId: uuidField,
+	attended: z.enum(['true', 'false']).transform((value) => value === 'true')
+});
+
+const checkbox = z.preprocess((value) => value === 'on' || value === 'true', z.boolean());
+
+export const phoneField = z
+	.string()
+	.trim()
+	.max(40, 'Too long.')
+	.transform((value, ctx) => {
+		if (value === '') return null;
+		const phone = normalizePhone(value);
+		if (!phone) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid phone number.' });
+			return z.NEVER;
+		}
+		return phone;
+	});
+
+export const profileSchema = z.object({
+	name: z.string().trim().min(1, 'Required.').max(120, 'Too long.'),
+	phone: phoneField.default(''),
+	emailOptIn: checkbox,
+	smsOptIn: checkbox
 });

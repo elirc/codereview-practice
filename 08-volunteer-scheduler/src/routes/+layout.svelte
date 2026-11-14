@@ -11,6 +11,9 @@
 	<strong>Volunteer Scheduler</strong>
 	{#if data.user}
 		<nav>
+			<a href="/">Upcoming</a>
+			<a href="/my">My signups</a>
+			<a href="/my/profile">Profile</a>
 			{#if manager}
 				<a href="/manage/shifts">Shifts</a>
 				<a href="/manage/series">Series</a>
