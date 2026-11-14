@@ -74,4 +74,16 @@ class AccountController(
         @RequestParam(required = false) after: String?,
         @RequestParam(required = false) limit: Int?
     ): Page<AccountPosting> = accounts.postings(caller, id, PageRequest.of(after, limit))
+
+    @PostMapping("/{id}/freeze")
+    fun freeze(caller: Caller, @PathVariable id: UUID, request: HttpServletRequest): ResponseEntity<JsonNode> =
+        idempotent.run(caller, request, null) { ApiResult(HttpStatus.OK.value(), accounts.freeze(caller, id)) }
+
+    @PostMapping("/{id}/unfreeze")
+    fun unfreeze(caller: Caller, @PathVariable id: UUID, request: HttpServletRequest): ResponseEntity<JsonNode> =
+        idempotent.run(caller, request, null) { ApiResult(HttpStatus.OK.value(), accounts.unfreeze(caller, id)) }
+
+    @PostMapping("/{id}/close")
+    fun close(caller: Caller, @PathVariable id: UUID, request: HttpServletRequest): ResponseEntity<JsonNode> =
+        idempotent.run(caller, request, null) { ApiResult(HttpStatus.OK.value(), accounts.close(caller, id)) }
 }

@@ -14,6 +14,8 @@ import ledger.domain.Page
 import ledger.domain.PageRequest
 import ledger.domain.Role
 import ledger.domain.validationFailed
+import ledger.outbox.LedgerEvents
+import ledger.settlement.BankExpectations
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -44,6 +46,8 @@ class AccountService(
     private val accounts: Accounts,
     private val balances: BalanceStore,
     private val entries: EntryQueries,
+    private val expectations: BankExpectations,
+    private val events: LedgerEvents,
     private val ids: IdSource,
     private val clock: Clock
 ) {
@@ -115,6 +119,59 @@ class AccountService(
         val rows = entries.postingsForAccount(id, after, page.limit + 1)
         return Page.fromFetched(rows, page.limit) { it.cursor }
     }
+
+    /** Freezes an active account: it keeps receiving credits but its debits are refused. */
+    fun freeze(caller: Caller, id: UUID): Account =
+        changeStatus(caller, id) { locked ->
+            if (locked.account.status != AccountStatus.ACTIVE) throw invalidTransition(locked.account, AccountStatus.FROZEN)
+            AccountStatus.FROZEN
+        }
+
+    /** Returns a frozen account to active. */
+    fun unfreeze(caller: Caller, id: UUID): Account =
+        changeStatus(caller, id) { locked ->
+            if (locked.account.status != AccountStatus.FROZEN) throw invalidTransition(locked.account, AccountStatus.ACTIVE)
+            AccountStatus.ACTIVE
+        }
+
+    /** Closes an account that holds no money, has nothing held and no open bank expectation. */
+    fun close(caller: Caller, id: UUID): Account =
+        changeStatus(caller, id) { locked ->
+            if (locked.account.status == AccountStatus.CLOSED) throw invalidTransition(locked.account, AccountStatus.CLOSED)
+            val balance = locked.balance
+            if (balance.postedMinor != 0L || balance.heldMinor != 0L || expectations.hasOpenFor(id)) {
+                throw BusinessRuleException(
+                    "account_not_empty",
+                    "Account $id still has a balance, held funds or an open bank expectation.",
+                    mapOf("postedMinor" to balance.postedMinor, "heldMinor" to balance.heldMinor)
+                )
+            }
+            AccountStatus.CLOSED
+        }
+
+    private fun changeStatus(caller: Caller, id: UUID, decide: (LockedAccount) -> AccountStatus): Account {
+        caller.require(Role.OPERATOR)
+        return tx.inTx {
+            val locked = balances.lock(listOf(id))[id]
+            if (locked.account.type == AccountType.SYSTEM) {
+                throw Errors.invalidAccountType("System account status cannot be changed.")
+            }
+            val previous = locked.account.status
+            val next = decide(locked)
+            accounts.updateStatus(id, next)
+            val row = balances.bumpVersion(id)
+            val changed = locked.account.copy(status = next)
+            events.statusChanged(changed, previous, row.version, clock.instant())
+            changed
+        }
+    }
+
+    private fun invalidTransition(account: Account, target: AccountStatus) =
+        ConflictException(
+            "invalid_state",
+            "Account ${account.id} is ${account.status.wire} and cannot become ${target.wire}.",
+            mapOf("status" to account.status)
+        )
 
     /** Returns [account] when the caller may see it; merchants see only their own accounts. */
     fun visible(caller: Caller, account: Account): Account {

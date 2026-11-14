@@ -1,6 +1,7 @@
 package ledger.outbox
 
 import com.fasterxml.jackson.annotation.JsonValue
+import ledger.domain.AccountStatus
 import ledger.domain.WireValue
 import ledger.holds.Hold
 import ledger.ledger.Account
@@ -61,6 +62,23 @@ class LedgerEvents(private val outbox: OutboxWriter) {
                 "availableMinor" to balance.availableMinor,
                 "causeType" to causeType,
                 "causeId" to causeId
+            )
+        )
+    }
+
+    fun statusChanged(account: Account, previous: AccountStatus, version: Long, occurredAt: Instant) {
+        outbox.record(
+            topic = Topics.ACCOUNTS,
+            partitionKey = account.id.toString(),
+            type = "account.status_changed",
+            aggregateType = "account",
+            aggregateId = account.id.toString(),
+            sequence = version,
+            occurredAt = occurredAt,
+            data = mapOf(
+                "accountId" to account.id,
+                "status" to account.status,
+                "previousStatus" to previous
             )
         )
     }
