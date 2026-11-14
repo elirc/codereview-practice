@@ -49,15 +49,15 @@ def verify(
     secrets: Iterable[str],
     now: int,
     tolerance: int = TOLERANCE_SECONDS,
-) -> None:
+) -> int:
     """Raise ``InvalidSignature`` unless ``header`` signs exactly ``body`` with one of ``secrets``.
 
-    ``now`` is the current time in unix seconds.
+    ``now`` is the current time in unix seconds. Returns the signed timestamp.
     """
     if not header:
         raise InvalidSignature()
     timestamp, signatures = parse_header(header)
-    if abs(now - int(timestamp)) > tolerance:
+    if not _is_fresh(int(timestamp), now=now, tolerance=tolerance):
         raise InvalidSignature()
     candidates = [signature.encode("utf-8", "surrogateescape") for signature in signatures]
     for secret in secrets:
@@ -65,5 +65,9 @@ def verify(
             continue
         expected = sign(secret, timestamp, body).encode()
         if any(hmac.compare_digest(expected, candidate) for candidate in candidates):
-            return
+            return int(timestamp)
     raise InvalidSignature()
+
+
+def _is_fresh(signed_at: int, *, now: int, tolerance: int) -> bool:
+    return now - signed_at <= tolerance

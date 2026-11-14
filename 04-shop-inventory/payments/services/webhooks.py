@@ -6,16 +6,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from django.conf import settings
 from django.db import DataError, IntegrityError, transaction
 
 from core.errors import InvalidState, NotFound, flatten_errors
 from core.jobs import enqueue_on_commit
 
+from ..client import PaymentsClient
 from ..exceptions import InvalidPayload
 from ..models import WebhookEvent
 from ..serializers import WebhookEnvelopeSerializer
-from ..signature import verify
 
 logger = structlog.get_logger(__name__)
 
@@ -27,12 +26,7 @@ STALE_AFTER = timedelta(minutes=5)
 
 def receive_webhook(*, body: bytes, signature_header: str | None, now: datetime) -> str:
     """Verify and store a delivery, returning ``accepted`` or ``duplicate``."""
-    verify(
-        signature_header,
-        body,
-        secrets=[settings.PAYMENT_WEBHOOK_SECRET, settings.PAYMENT_WEBHOOK_SECRET_PREVIOUS],
-        now=int(now.timestamp()),
-    )
+    PaymentsClient().verify_webhook(signature_header, body, now=now)
     payload, envelope = _parse(body)
     try:
         with transaction.atomic():

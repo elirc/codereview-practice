@@ -219,21 +219,26 @@ def _refund_event(event: WebhookEvent, data: EventData, *, succeeded: bool) -> s
             return _record_provider_refund(order, data)
         return WebhookEvent.Status.IGNORED
 
-    if refund.status == Refund.Status.PENDING:
-        if succeeded:
-            refunds.complete_refund(refund, order)
-        else:
-            refunds.mark_refund_failed(refund, reason=data.failure_reason or "Refund failed.")
-        return WebhookEvent.Status.PROCESSED
-
     reported = Refund.Status.SUCCEEDED if succeeded else Refund.Status.FAILED
     if refund.status == reported:
         return WebhookEvent.Status.IGNORED
+    if refund.status == Refund.Status.PENDING or event.provider_created_at > refund.updated_at:
+        _apply_refund_outcome(refund, order, data, succeeded=succeeded)
+        return WebhookEvent.Status.PROCESSED
     _flag_for_review(
         order,
         f"Refund {refund.id} is {refund.status} but the provider sent {event.type}.",
     )
     return WebhookEvent.Status.PROCESSED
+
+
+def _apply_refund_outcome(
+    refund: Refund, order: Order, data: EventData, *, succeeded: bool
+) -> None:
+    if succeeded:
+        refunds.complete_refund(refund, order)
+    else:
+        refunds.mark_refund_failed(refund, reason=data.failure_reason or "Refund failed.")
 
 
 def _refund_succeeded(event: WebhookEvent, data: EventData, now: datetime) -> str:

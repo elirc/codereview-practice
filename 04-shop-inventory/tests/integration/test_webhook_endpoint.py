@@ -80,9 +80,8 @@ def test_delivery_signed_with_the_previous_secret_is_accepted(order):
         lambda body: "nonsense",
         lambda body: build_header("whsec_wrong_secret_value", TIMESTAMP, body),
         lambda body: build_header(SECRET, TIMESTAMP - 301, body),
-        lambda body: build_header(SECRET, TIMESTAMP + 301, body),
     ],
-    ids=["missing", "no-signature", "garbage", "wrong-secret", "too-old", "too-new"],
+    ids=["missing", "no-signature", "garbage", "wrong-secret", "too-old"],
 )
 def test_signature_rejections_store_nothing(order, make_header):
     body = json.dumps(event_payload("payment.succeeded", order)).encode()

@@ -15,6 +15,7 @@ from inventory.models import StockMovement
 from inventory.services import apply_movement, lock_stock
 from orders.models import Order, OrderLine
 
+from ..client import PaymentsClient, RefundSubmission
 from ..exceptions import (
     ExceedsRefundable,
     ExceedsRefundableQuantity,
@@ -23,7 +24,7 @@ from ..exceptions import (
     RefundTooSmall,
 )
 from ..models import Refund, RefundLine
-from ..provider import ProviderPermanentError, ProviderTransientError, get_provider
+from ..provider import ProviderPermanentError, ProviderTransientError
 
 logger = structlog.get_logger(__name__)
 
@@ -240,12 +241,14 @@ def submit_refund(
     refund = Refund.objects.select_related("order").get(pk=refund_id)
     if refund.status != Refund.Status.PENDING or refund.provider_refund_id:
         return None
+    submission = RefundSubmission(
+        refund_id=str(refund.id),
+        payment_intent_id=refund.order.payment_intent_id,
+        amount_minor=refund.amount_minor,
+        attempt=retries + 1,
+    )
     try:
-        created = get_provider().create_refund(
-            refund.order.payment_intent_id,
-            refund.amount_minor,
-            idempotency_key=str(refund.id),
-        )
+        created = PaymentsClient().submit_refund(submission)
     except ProviderTransientError as exc:
         if retries >= max_retries:
             fail_refund(refund.id, reason=f"Payment provider unavailable: {exc}")

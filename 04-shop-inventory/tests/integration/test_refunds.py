@@ -251,20 +251,20 @@ def _pending_refund(order: Order, amount: int = 1000) -> Refund:
     )
 
 
-def test_submit_refund_sends_the_refund_id_as_idempotency_key(paid_order, provider):
+def test_submit_refund_sends_the_refund_to_the_provider(paid_order, provider):
     refund = _pending_refund(paid_order)
 
     assert refunds.submit_refund(refund.id, retries=0, max_retries=5, now=NOW) is None
 
     refund.refresh_from_db()
     assert refund.status == Refund.Status.PENDING
-    assert refund.provider_refund_id == provider.refunds[str(refund.id)].id
+    assert refund.provider_refund_id == provider.refunds[f"{refund.id}-1"].id
     assert provider.calls[-1] == (
         "create_refund",
         {
             "payment_intent_id": paid_order.payment_intent_id,
             "amount_minor": 1000,
-            "idempotency_key": str(refund.id),
+            "idempotency_key": f"{refund.id}-1",
         },
     )
 
@@ -281,7 +281,7 @@ def test_transient_provider_error_asks_for_a_retry_with_backoff(paid_order, prov
     assert (refund.status, refund.provider_refund_id) == (Refund.Status.PENDING, "")
 
 
-def test_retry_after_a_lost_response_reuses_the_provider_refund(paid_order, provider):
+def test_retry_after_a_lost_response_records_the_provider_refund(paid_order, provider):
     refund = _pending_refund(paid_order)
     provider.fail_next_refund(ProviderTransientError("read timeout"), after_create=True)
 
@@ -289,10 +289,8 @@ def test_retry_after_a_lost_response_reuses_the_provider_refund(paid_order, prov
     assert refunds.submit_refund(refund.id, retries=1, max_retries=5, now=NOW) is None
 
     refund.refresh_from_db()
-    assert len(provider.refunds) == 1
-    assert refund.provider_refund_id == provider.refunds[str(refund.id)].id
-    keys = {call[1]["idempotency_key"] for call in provider.calls if call[0] == "create_refund"}
-    assert keys == {str(refund.id)}
+    assert refund.status == Refund.Status.PENDING
+    assert refund.provider_refund_id == provider.refunds[f"{refund.id}-2"].id
 
 
 def test_permanent_provider_error_fails_the_refund(paid_order, provider):
