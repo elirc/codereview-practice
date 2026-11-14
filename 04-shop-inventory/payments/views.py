@@ -2,16 +2,18 @@ from django.conf import settings
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from core import idempotency
+from core import clock, idempotency
 from core.permissions import CLERK, IsStaffMember, role_of
 from orders.models import Order
 
 from .models import Refund
 from .serializers import RefundCreateSerializer, RefundSerializer
-from .services import refunds
+from .services import refunds, webhooks
 
 
 def _refunds() -> QuerySet[Refund]:
@@ -59,3 +61,16 @@ class OrderRefundListCreateView(generics.ListAPIView):
             action=create,
         )
         return Response(result.body, status=result.status)
+
+
+class PaymentWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        outcome = webhooks.receive_webhook(
+            body=request.body,
+            signature_header=request.headers.get("X-Pay-Signature"),
+            now=clock.now(),
+        )
+        return Response({"status": outcome})

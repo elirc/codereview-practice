@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.authtoken.views import obtain_auth_token
 
+from payments.views import PaymentWebhookView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/token/", obtain_auth_token, name="auth-token"),
@@ -9,4 +11,5 @@ urlpatterns = [
     path("api/", include("inventory.urls")),
     path("api/", include("orders.urls")),
     path("api/", include("payments.urls")),
+    path("webhooks/payments/", PaymentWebhookView.as_view(), name="payment-webhook"),
 ]

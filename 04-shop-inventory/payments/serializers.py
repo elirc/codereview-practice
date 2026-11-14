@@ -3,6 +3,7 @@ from rest_framework import serializers
 from .models import Refund, RefundLine
 
 MAX_REFUND_MINOR = 10**12
+MAX_EVENT_TIMESTAMP = 253402300799
 
 
 class RefundLineInputSerializer(serializers.Serializer):
@@ -70,3 +71,10 @@ class EventDataSerializer(serializers.Serializer):
     refund_id = serializers.CharField(max_length=255, allow_blank=True, default="")
     refund_reference = serializers.CharField(max_length=255, allow_blank=True, default="")
     failure_reason = serializers.CharField(max_length=500, allow_blank=True, default="")
+
+
+class WebhookEnvelopeSerializer(serializers.Serializer):
+    id = serializers.CharField(max_length=255)
+    type = serializers.CharField(max_length=100)
+    created = serializers.IntegerField(min_value=0, max_value=MAX_EVENT_TIMESTAMP)
+    data = serializers.DictField()

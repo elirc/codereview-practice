@@ -73,3 +73,11 @@ event for a paid or fulfilled order is `ignored`. `paid_at` is the time the even
 Only `payment.succeeded` is specified as retryable when no order carries the payment intent.
 `payment.failed` and the refund events look the order up the same way and are retried the same
 way, since the most likely cause is the intent id not being stored yet.
+
+## Signature header parsing
+
+The header format is `t=<unix seconds>,v1=<hex>[,v1=<hex>…]`. Parsing is strict about the parts
+it understands: an element without `=`, an empty value, a repeated or non-numeric `t`, or no
+`v1` at all rejects the request. Elements with other scheme names (for example `v0`) are
+ignored. Signatures are compared exactly as lowercase hex, which is what the signer produces.
+The timestamp is signed exactly as it appears in the header.

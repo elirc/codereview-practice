@@ -33,3 +33,15 @@ class OrderNotFoundYet(Exception):
 
 class InvalidEventData(Exception):
     """The event's ``data`` object does not have the fields its type requires."""
+
+
+class InvalidSignature(DomainError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    code = "invalid_signature"
+    message = "The webhook signature is missing, malformed, expired or does not match."
+
+
+class InvalidPayload(DomainError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    code = "invalid_payload"
+    message = "The webhook body is not a valid event."

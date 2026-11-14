@@ -47,6 +47,9 @@ _require(CLERK_REFUND_LIMIT_MINOR >= 0, "CLERK_REFUND_LIMIT_MINOR must not be ne
 
 PAYMENT_PROVIDER = env.str("PAYMENT_PROVIDER", default="fake")
 _require(PAYMENT_PROVIDER in {"fake"}, "PAYMENT_PROVIDER must be 'fake'")
+PAYMENT_WEBHOOK_SECRET = env.str("PAYMENT_WEBHOOK_SECRET")
+_require(len(PAYMENT_WEBHOOK_SECRET) >= 16, "PAYMENT_WEBHOOK_SECRET must be at least 16 characters")
+PAYMENT_WEBHOOK_SECRET_PREVIOUS = env.str("PAYMENT_WEBHOOK_SECRET_PREVIOUS", default="")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
