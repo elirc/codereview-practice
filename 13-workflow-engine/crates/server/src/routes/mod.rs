@@ -16,6 +16,7 @@ mod jobs;
 mod queues;
 mod schedules;
 mod tokens;
+mod workflows;
 
 /// Builds the application router with every route and middleware.
 pub fn build_router(state: AppState) -> Router {
@@ -37,6 +38,16 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/schedules/:id/pause", post(schedules::pause))
         .route("/schedules/:id/resume", post(schedules::resume))
+        .route("/workflow-definitions", post(workflows::create_definition))
+        .route(
+            "/workflow-definitions/:name",
+            get(workflows::show_definition),
+        )
+        .route(
+            "/workflow-runs",
+            get(workflows::list_runs).post(workflows::start_run),
+        )
+        .route("/workflow-runs/:id", get(workflows::show_run))
         .route("/tokens", post(tokens::create))
         .route("/tokens/:id", delete(tokens::revoke))
         .route_layer(middleware::from_fn_with_state(

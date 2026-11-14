@@ -1,3 +1,5 @@
+use engine_core::dag::Problem;
+
 /// Errors returned by store operations.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -17,6 +19,8 @@ pub enum StoreError {
     LeaseLost,
     #[error("invalid cron expression: {0}")]
     InvalidCron(String),
+    #[error("invalid workflow definition")]
+    InvalidWorkflow(Vec<Problem>),
     #[error("stored data is inconsistent: {0}")]
     Corrupt(String),
     #[error(transparent)]

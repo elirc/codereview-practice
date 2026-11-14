@@ -165,6 +165,9 @@ impl From<StoreError> for ApiError {
             StoreError::UniqueKeyConflict => Self::UniqueKeyConflict,
             StoreError::LeaseLost => Self::InvalidState("The job's lease has changed.".to_string()),
             StoreError::InvalidCron(reason) => Self::InvalidCron(reason),
+            StoreError::InvalidWorkflow(problems) => {
+                Self::InvalidWorkflow(serde_json::to_value(problems).unwrap_or_default())
+            }
             StoreError::Corrupt(message) => {
                 Self::Internal(anyhow::anyhow!("inconsistent stored data: {message}"))
             }

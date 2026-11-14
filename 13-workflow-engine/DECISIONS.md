@@ -26,3 +26,9 @@ Short records of places where the spec left a choice open.
 - **Catch-up search start.** When `next_fire_at` is older than the 24-hour horizon, the pass
   searches for fire times from the horizon start rather than from `next_fire_at`, so a long
   outage does not cost one iteration per missed fire.
+- **Workflow definition names.** The spec gives no pattern. Names appear in the URL
+  `/api/workflow-definitions/{name}`, so they follow the queue-name rule `[a-z0-9_-]{1,64}`.
+  Starting a run of a name or version that does not exist is `404 not_found`.
+- **Which runs a submitter may see.** A run counts as "in its queues" only when every step of the
+  run's definition uses one of the submitter's queues, the same test used to allow starting it.
+  Other runs are `404 not_found` and left out of listings.

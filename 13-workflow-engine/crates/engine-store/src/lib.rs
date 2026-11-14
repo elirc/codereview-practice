@@ -12,6 +12,7 @@ pub mod queues;
 pub mod reaper;
 pub mod schedules;
 pub mod tokens;
+pub mod workflows;
 
 pub use error::StoreError;
 
