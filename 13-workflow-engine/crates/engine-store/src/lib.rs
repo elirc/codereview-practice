@@ -4,3 +4,6 @@ pub mod db;
 pub mod error;
 
 pub use error::StoreError;
+
+/// Schema migrations, applied by `wfe-server migrate`.
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations");

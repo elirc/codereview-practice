@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use engine_core::clock::SystemClock;
-use wfe_server::config::Config;
-use wfe_server::{build_router, logging, shutdown, AppState};
+use wfe_server::{build_router, config::Config, logging, shutdown, AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,8 +11,22 @@ async fn main() -> anyhow::Result<()> {
     let command = std::env::args().nth(1).unwrap_or_else(|| "serve".to_string());
     match command.as_str() {
         "serve" => serve(config).await,
-        other => anyhow::bail!("unknown command {other:?}; expected serve"),
+        "migrate" => migrate(config).await,
+        other => anyhow::bail!("unknown command {other:?}; expected serve or migrate"),
     }
+}
+
+async fn migrate(config: Config) -> anyhow::Result<()> {
+    let pool = engine_store::db::connect(&config.database_url, 2)
+        .await
+        .context("could not connect to the database")?;
+    engine_store::MIGRATOR
+        .run(&pool)
+        .await
+        .context("migration failed")?;
+    tracing::info!("migrations applied");
+    pool.close().await;
+    Ok(())
 }
 
 async fn serve(config: Config) -> anyhow::Result<()> {
