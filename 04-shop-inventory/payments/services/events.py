@@ -141,6 +141,8 @@ def _payment_succeeded(event: WebhookEvent, data: EventData, now: datetime) -> s
 
     if order.status == Order.Status.PENDING_PAYMENT:
         pay_pending_order(order, amount_paid_minor=data.amount_minor, now=now)
+    elif order.amount_paid_minor > 0:
+        return WebhookEvent.Status.IGNORED
     elif not pay_released_order(order, amount_paid_minor=data.amount_minor, now=now):
         order.amount_paid_minor = data.amount_minor
         order.save(update_fields=["amount_paid_minor", "updated_at"])

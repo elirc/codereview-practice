@@ -93,6 +93,8 @@ def test_signature_is_bound_to_the_timestamp():
         f"t={NOW},t={NOW},v1={'a' * 64}",
         f"t={NOW},,v1={'a' * 64}",
         f"t=١٢,v1={'a' * 64}",
+        f"t={'9' * 13},v1={'a' * 64}",
+        f"t={'1' * 5000},v1={'a' * 64}",
     ],
 )
 def test_malformed_headers_are_rejected(header):

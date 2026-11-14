@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from .exceptions import InvalidSignature
 
 TOLERANCE_SECONDS = 300
+MAX_TIMESTAMP_DIGITS = 12
 
 
 def sign(secret: str, timestamp: str, body: bytes) -> str:
@@ -27,7 +28,7 @@ def parse_header(header: str) -> tuple[str, list[str]]:
         if not separator or not value:
             raise InvalidSignature()
         if key == "t":
-            if timestamp is not None or not (value.isascii() and value.isdigit()):
+            if timestamp is not None or not _is_timestamp(value):
                 raise InvalidSignature()
             timestamp = value
         elif key == "v1":
@@ -35,6 +36,10 @@ def parse_header(header: str) -> tuple[str, list[str]]:
     if timestamp is None or not signatures:
         raise InvalidSignature()
     return timestamp, signatures
+
+
+def _is_timestamp(value: str) -> bool:
+    return len(value) <= MAX_TIMESTAMP_DIGITS and value.isascii() and value.isdigit()
 
 
 def verify(

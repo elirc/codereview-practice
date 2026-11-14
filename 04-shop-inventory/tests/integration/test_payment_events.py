@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 
 from inventory.models import StockMovement
-from inventory.services import adjust_stock
+from inventory.services import adjust_stock, receive_stock
 from orders import services as order_services
 from orders.models import Order
 from payments import tasks
@@ -126,6 +126,24 @@ def test_late_payment_with_stock_gone_keeps_status_and_refunds_in_full(
     assert published == [("payments.submit_refund", (str(refund.id),))]
     assert (stock_of(product).on_hand, stock_of(product).reserved) == (1, 0)
     assert not StockMovement.objects.filter(order=order, kind="commit").exists()
+    assert_ledger_balanced(product)
+
+
+def test_second_late_payment_after_a_stock_refund_is_ignored(product):
+    order = create_order((product, 2), now=NOW - timedelta(hours=2))
+    order_services.expire_order(order.pk, now=NOW)
+    adjust_stock(product, delta=-4, reason="sold in store", actor=None)
+    process(store_event("payment.succeeded", order, event_id="evt_first"))
+    receive_stock(product, quantity=10, reason="delivery", actor=None)
+
+    outcome = process(store_event("payment.succeeded", order, event_id="evt_second"))
+
+    assert outcome == WebhookEvent.Status.IGNORED
+    order = reload(order)
+    assert (order.status, order.amount_paid_minor) == ("expired", 2400)
+    assert Refund.objects.filter(order=order).count() == 1
+    assert not StockMovement.objects.filter(order=order, kind="commit").exists()
+    assert (stock_of(product).on_hand, stock_of(product).reserved) == (11, 0)
     assert_ledger_balanced(product)
 
 
