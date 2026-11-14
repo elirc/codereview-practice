@@ -84,3 +84,5 @@ export const scheduleSchema = z
   .strict();
 
 export const changeSlugSchema = z.object({ postId: id, expectedVersion, slug }).strict();
+
+export const deleteMediaSchema = z.object({ mediaId: id }).strict();

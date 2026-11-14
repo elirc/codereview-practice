@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, vi } from "vitest";
 import { closeDb, db } from "@/db/client";
+import type { MemoryMediaStorage } from "@/media/memory-storage";
+import { getMediaStorage } from "@/media/storage-provider";
 import { clock } from "@/services/clock";
 import { resetNextCache } from "./support/fake-next-cache";
 import { FIXED_NOW } from "./support/fixtures";
@@ -27,6 +29,7 @@ vi.mock("next/cache", async () => {
 beforeEach(async () => {
   resetRequestContext();
   resetNextCache();
+  (getMediaStorage() as MemoryMediaStorage).reset();
   vi.spyOn(clock, "now").mockImplementation(() => new Date(FIXED_NOW));
   await db.execute(
     sql`TRUNCATE revision_media, slug_redirects, sessions, revisions, posts, media, users RESTART IDENTITY CASCADE`,
