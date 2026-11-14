@@ -19,12 +19,13 @@ class TicketTier < ApplicationRecord
   end
 
   # Applies counter deltas to a tier the caller has locked in the current
-  # transaction. The in-memory counts are updated only when the row is.
+  # transaction.
   def adjust_counts!(held: 0, sold: 0)
+    available_before = available
     update_columns(held_count: held_count + held, sold_count: sold_count + sold)
   rescue ActiveRecord::StatementInvalid => e
     raise unless e.cause.is_a?(PG::CheckViolation)
 
-    raise DomainError.new(:insufficient_capacity, details: { available: })
+    raise DomainError.new(:insufficient_capacity, details: { available: available_before })
   end
 end

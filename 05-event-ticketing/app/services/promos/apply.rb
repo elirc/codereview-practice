@@ -1,6 +1,5 @@
 module Promos
-  # Attaches a promo code to a live hold after validating it. Nothing is
-  # redeemed here; checkout validates the codes again and redeems them.
+  # Validates a promo code and attaches it to a hold.
   class Apply
     def self.call(...)
       new(...).call

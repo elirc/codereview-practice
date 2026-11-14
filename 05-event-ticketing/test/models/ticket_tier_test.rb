@@ -35,7 +35,7 @@ class TicketTierTest < ActiveSupport::TestCase
     end
 
     assert_equal :insufficient_capacity, error.code
-    assert_equal 0, tier.held_count
+    assert_equal 10, error.details[:available]
     assert_equal 0, tier.reload.held_count
   end
 

@@ -8,7 +8,7 @@ class ErrorEnvelopeTest < ActiveSupport::TestCase
 
     assert_equal "validation_failed", body[:error][:code]
     assert_equal "The request is invalid.", body[:error][:message]
-    assert_equal "req-1", body[:error][:request_id]
+    assert_equal "req-1", body[:error][:requestId]
     assert_equal [ { path: "quantity", message: "is required" } ], body[:error][:details][:fields]
     assert_equal 400, error.status
   end

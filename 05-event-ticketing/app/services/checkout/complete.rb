@@ -1,6 +1,5 @@
 module Checkout
-  # Turns a live hold into a paid order with tickets. Submitting again for a
-  # hold that has already been converted returns the existing order.
+  # Turns a hold into a paid order with tickets.
   class Complete
     def self.call(...)
       new(...).call

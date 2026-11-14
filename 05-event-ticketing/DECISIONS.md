@@ -32,8 +32,6 @@ Places where the spec left room for interpretation, what was chosen, and why.
 
 15. **Mail in production** uses the same log delivery as development, since no mail provider is in scope.
 
-16. **Error envelope key casing.** The shared example shows `requestId`; this is a Ruby project, whose JSON uses snake_case, so the key is `request_id`.
+16. **Money input.** Organiser forms take prices and discounts in integer cents to keep floats out of the money path.
 
-17. **Money input.** Organiser forms take prices and discounts in integer cents to keep floats out of the money path.
-
-18. **Status codes.** Capacity, expiry and duplicate-state conflicts (`insufficient_capacity`, `hold_expired`, `already_waitlisted`, …) are 409; other business-rule failures (`sales_closed`, `quantity_invalid`, promo errors, `payment_declined`, …) are 422.
+17. **Status codes.** Capacity, expiry and duplicate-state conflicts (`insufficient_capacity`, `hold_expired`, `already_waitlisted`, …) are 409; other business-rule failures (`sales_closed`, `quantity_invalid`, promo errors, `payment_declined`, …) are 422.

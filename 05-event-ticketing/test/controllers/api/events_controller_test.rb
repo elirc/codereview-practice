@@ -36,7 +36,7 @@ class Api::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     error = response.parsed_body["error"]
     assert_equal "not_found", error["code"]
-    assert_equal "req-abc-123", error["request_id"]
+    assert_equal "req-abc-123", error["requestId"]
     assert error["message"].present?
   end
 
