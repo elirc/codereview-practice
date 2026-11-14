@@ -16,6 +16,7 @@ from app.models import User
 from tests.conftest import DEFAULT_TEST_DATABASE_URL, SteppingClock
 from tests.fakes import InMemoryStorage
 from tests.integration.factories import signed_in_client
+from tests.integration.workflow_support import Org, build_org
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -68,6 +69,11 @@ def app(
     application = create_app(test_settings, clock=clock, storage=storage)
     yield application
     application.state.engine.dispose()
+
+
+@pytest.fixture
+def org(db: Session) -> Org:
+    return build_org(db)
 
 
 @pytest.fixture
