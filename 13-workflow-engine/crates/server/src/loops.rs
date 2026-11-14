@@ -5,13 +5,21 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use engine_core::clock::{Clock, JitterSource};
-use engine_store::{reaper, StoreError};
+use engine_core::clock::{Clock, JitterSource, SyncedClock};
+use engine_store::{clock_sync, reaper, StoreError};
 use sqlx::PgPool;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 pub const REAPER_INTERVAL: Duration = Duration::from_secs(5);
+pub const CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(30);
+
+/// The clock to keep aligned with the database, and the offset worth a warning.
+#[derive(Clone)]
+pub struct ClockSync {
+    pub clock: Arc<SyncedClock>,
+    pub warn_ms: i64,
+}
 
 /// Dependencies shared by the loops.
 #[derive(Clone)]
@@ -19,6 +27,7 @@ pub struct LoopContext {
     pub pool: PgPool,
     pub clock: Arc<dyn Clock>,
     pub jitter: Arc<dyn JitterSource>,
+    pub clock_sync: Option<ClockSync>,
 }
 
 /// Starts every server loop. They stop after their current pass once `shutdown` is cancelled.
@@ -33,6 +42,25 @@ pub fn spawn_all(ctx: LoopContext, shutdown: CancellationToken) -> Vec<JoinHandl
         }
     };
     handles.push(tokio::spawn(run_every("reaper", REAPER_INTERVAL, shutdown.clone(), reap)));
+
+    if let Some(sync) = ctx.clock_sync.clone() {
+        let pool = ctx.pool.clone();
+        let resync = move || {
+            let pool = pool.clone();
+            let sync = sync.clone();
+            async move {
+                clock_sync::sync_clock(&pool, &sync.clock, sync.warn_ms)
+                    .await
+                    .map(|_| 0)
+            }
+        };
+        handles.push(tokio::spawn(run_every(
+            "clock_sync",
+            CLOCK_SYNC_INTERVAL,
+            shutdown.clone(),
+            resync,
+        )));
+    }
 
     handles
 }

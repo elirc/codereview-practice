@@ -22,6 +22,7 @@ pub struct FakeState {
     pub pending: Vec<ClaimedJob>,
     pub cancel_requested: bool,
     pub heartbeat_fails: bool,
+    pub fail_next_heartbeats: usize,
     pub lease_lost: bool,
     pub report_fails: bool,
     pub heartbeats: usize,
@@ -68,6 +69,10 @@ impl WorkerStore for FakeStore {
     async fn heartbeat(&self, _claim: &ClaimRef, _now: DateTime<Utc>) -> Result<bool, StoreError> {
         let mut state = self.state();
         if state.heartbeat_fails {
+            return Err(db_down());
+        }
+        if state.fail_next_heartbeats > 0 {
+            state.fail_next_heartbeats -= 1;
             return Err(db_down());
         }
         if state.lease_lost {
@@ -148,5 +153,6 @@ pub fn fake_env(store: Arc<FakeStore>, registry: Registry) -> Arc<RunnerEnv> {
         clock: Arc::new(FixedClock::new(t0())),
         registry,
         worker_id: "fake-worker".to_string(),
+        lease_safety_ms: 2000,
     })
 }

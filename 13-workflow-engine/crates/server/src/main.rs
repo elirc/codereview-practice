@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use engine_core::clock::{Clock, RandomJitter, SystemClock};
+use engine_core::clock::{Clock, RandomJitter, SyncedClock, SystemClock};
 use engine_core::secrets::RandomSecrets;
+use engine_store::clock_sync::sync_clock;
 use tokio_util::sync::CancellationToken;
-use wfe_server::loops::{self, LoopContext};
+use wfe_server::loops::{self, ClockSync, LoopContext};
 use wfe_server::{build_router, config::Config, logging, shutdown, AppState};
 
 #[tokio::main]
@@ -36,7 +37,13 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let pool = engine_store::db::connect(&config.database_url, config.db_max_connections)
         .await
         .context("could not connect to the database")?;
-    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let synced = Arc::new(SyncedClock::new(Arc::new(SystemClock)));
+    if config.clock_sync_enabled {
+        if let Err(err) = sync_clock(&pool, &synced, config.clock_skew_warn_ms).await {
+            tracing::warn!(error = %err, "initial clock sync failed; using the local clock");
+        }
+    }
+    let clock: Arc<dyn Clock> = synced.clone();
     let state = AppState::new(pool.clone(), clock.clone(), Arc::new(RandomSecrets));
 
     let loops_shutdown = CancellationToken::new();
@@ -45,6 +52,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
             pool: pool.clone(),
             clock: clock.clone(),
             jitter: Arc::new(RandomJitter),
+            clock_sync: config.clock_sync_enabled.then(|| ClockSync {
+                clock: synced.clone(),
+                warn_ms: config.clock_skew_warn_ms,
+            }),
         };
         loops::spawn_all(ctx, loops_shutdown.clone())
     } else {

@@ -77,8 +77,9 @@ pub async fn find_active_token(
     pool: &PgPool,
     secret: &str,
 ) -> Result<Option<ApiToken>, StoreError> {
-    let sql =
-        format!("SELECT {TOKEN_COLUMNS} FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL");
+    let sql = format!(
+        "SELECT {TOKEN_COLUMNS} FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL"
+    );
     let token = sqlx::query_as::<_, ApiToken>(&sql)
         .bind(hash_token(secret))
         .fetch_optional(pool)

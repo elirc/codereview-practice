@@ -45,6 +45,7 @@ pub fn db_env(pool: &PgPool, clock: Arc<FixedClock>, registry: Registry) -> Arc<
         clock,
         registry,
         worker_id: "test-worker".to_string(),
+        lease_safety_ms: 2000,
     })
 }
 

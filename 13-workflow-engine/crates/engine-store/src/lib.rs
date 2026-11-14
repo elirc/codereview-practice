@@ -1,6 +1,7 @@
 //! Postgres persistence for the workflow engine. Every SQL statement the engine runs lives here.
 
 pub mod claim;
+pub mod clock_sync;
 pub mod db;
 pub mod error;
 pub mod jobs;
