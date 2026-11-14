@@ -177,6 +177,20 @@ abstract class IntegrationTest {
         return mvc.perform(request).andReturn()
     }
 
+    /** Uploads a statement file as `text/csv`. */
+    protected fun upload(
+        bankAccountCode: String,
+        csv: String,
+        key: TestKey = operatorKey,
+        idempotencyKey: String = UUID.randomUUID().toString()
+    ): MvcResult =
+        mvc.perform(
+            MockMvcRequestBuilders.post("/v1/statements?bankAccountCode=$bankAccountCode").auth(key)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType("text/csv")
+                .content(csv.toByteArray(Charsets.UTF_8))
+        ).andReturn()
+
     protected fun put(path: String, key: TestKey, body: Any): MvcResult =
         mvc.perform(
             MockMvcRequestBuilders.put(path).auth(key)
