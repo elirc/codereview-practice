@@ -35,6 +35,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/couriers/me", h.wrap(h.me))
 	r.Post("/couriers/me/shift/start", h.wrap(h.startShift))
 	r.Post("/couriers/me/shift/end", h.wrap(h.endShift))
+	r.Post("/couriers/me/location", h.wrap(h.reportLocation))
 	r.Get("/couriers/{id}", h.wrap(h.byID(h.svc.GetCourier)))
 	r.Post("/couriers/{id}/suspend", h.wrap(h.byID(h.svc.Suspend)))
 	r.Post("/couriers/{id}/reinstate", h.wrap(h.byID(h.svc.Reinstate)))
