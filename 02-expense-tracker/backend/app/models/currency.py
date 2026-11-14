@@ -30,9 +30,7 @@ class Currency(Base):
 class ExchangeRate(Base):
     __tablename__ = "exchange_rates"
     __table_args__ = (
-        UniqueConstraint(
-            "from_currency", "effective_date", name="uq_exchange_rates_currency_date"
-        ),
+        UniqueConstraint("from_currency", "effective_date", name="uq_exchange_rates_currency_date"),
         CheckConstraint("rate > 0", name="rate_positive"),
     )
 

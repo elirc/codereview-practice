@@ -106,7 +106,7 @@ async def read_single_file(request: Request, *, field_name: str, max_bytes: int)
                 raise _too_large(max_bytes)
             if collector.unexpected_field is not None:
                 raise InvalidInput.field(
-                    collector.unexpected_field, f'Send exactly one file in the "{field_name}" field.'
+                    collector.unexpected_field, f'Send one file in the "{field_name}" field.'
                 )
         parser.finalize()
     except MultipartParseError:

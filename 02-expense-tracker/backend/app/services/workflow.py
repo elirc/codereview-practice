@@ -36,9 +36,7 @@ REPORT_WORKFLOW_FIELDS = ("status", "round", "version", "total_base_minor")
 STEP_AUDIT_FIELDS = ("status", "decided_by", "comment")
 
 
-def _report_event(
-    ctx: ServiceContext, report: Report, action: str, before: audit.JsonDict
-) -> None:
+def _report_event(ctx: ServiceContext, report: Report, action: str, before: audit.JsonDict) -> None:
     old, new = audit.changed_fields(before, audit.snapshot(report, REPORT_WORKFLOW_FIELDS))
     audit.record(
         ctx,

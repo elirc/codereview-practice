@@ -225,9 +225,7 @@ def upgrade() -> None:
             "status IN ('pending', 'approved', 'rejected', 'skipped')",
             name="ck_approval_steps_status_valid",
         ),
-        sa.CheckConstraint(
-            "round >= 1 AND position >= 1", name="ck_approval_steps_slot_positive"
-        ),
+        sa.CheckConstraint("round >= 1 AND position >= 1", name="ck_approval_steps_slot_positive"),
         sa.CheckConstraint(
             "(kind = 'manager' AND approver_id IS NOT NULL)"
             " OR (kind = 'finance' AND approver_id IS NULL)",
@@ -258,9 +256,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["paid_by"], ["users.id"], name="fk_reimbursements_paid_by_users"),
         sa.UniqueConstraint("report_id", name="uq_reimbursements_report_id"),
-        sa.CheckConstraint(
-            "amount_base_minor >= 0", name="ck_reimbursements_amount_non_negative"
-        ),
+        sa.CheckConstraint("amount_base_minor >= 0", name="ck_reimbursements_amount_non_negative"),
         sa.CheckConstraint(
             "char_length(payment_reference) BETWEEN 1 AND 64",
             name="ck_reimbursements_payment_reference_length",

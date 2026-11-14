@@ -11,9 +11,7 @@ from app.schemas.receipts import ReceiptOut
 from app.schemas.users import UserSummary
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-Description = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
-]
+Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 OwnerScope = Literal["me", "all"]
 
 

@@ -40,9 +40,7 @@ def test_sanitize_truncates_to_200_characters() -> None:
 
 def test_attachment_disposition_quotes_and_encodes() -> None:
     assert attachment_disposition("") == 'attachment; filename="receipt"'
-    assert attachment_disposition('a"b.pdf') == (
-        "attachment; filename=\"ab.pdf\"; filename*=UTF-8''a%22b.pdf"
-    )
-    assert attachment_disposition("caf\u00e9.png") == (
-        "attachment; filename=\"caf.png\"; filename*=UTF-8''caf%C3%A9.png"
-    )
+    quoted = attachment_disposition('a"b.pdf')
+    accented = attachment_disposition("caf\u00e9.png")
+    assert quoted == "attachment; filename=\"ab.pdf\"; filename*=UTF-8''a%22b.pdf"
+    assert accented == "attachment; filename=\"caf.png\"; filename*=UTF-8''caf%C3%A9.png"

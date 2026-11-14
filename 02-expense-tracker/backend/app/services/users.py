@@ -40,9 +40,7 @@ def update_user(ctx: ServiceContext, user_id: uuid.UUID, changes: UserUpdate) ->
     fields = changes.model_fields_set
 
     if "manager_id" in fields:
-        ctx.db.execute(
-            text("SELECT pg_advisory_xact_lock(:key)"), {"key": MANAGER_GRAPH_LOCK_KEY}
-        )
+        ctx.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MANAGER_GRAPH_LOCK_KEY})
 
     user = ctx.db.scalars(
         select(User)

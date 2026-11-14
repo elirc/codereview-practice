@@ -36,9 +36,7 @@ def next_status(current: str, action: ReportAction) -> ReportStatus:
     try:
         return TRANSITIONS[(ReportStatus(current), action)]
     except KeyError:
-        raise InvalidTransition(
-            details={"status": str(current), "action": action.value}
-        ) from None
+        raise InvalidTransition(details={"status": str(current), "action": action.value}) from None
 
 
 def is_editable(current: str) -> bool:

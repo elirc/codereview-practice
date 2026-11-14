@@ -10,7 +10,9 @@ from app.models import Currency, ExchangeRate, ExpenseLine
 
 
 def currency_exponents(db: Session) -> dict[str, int]:
-    return {code: exponent for code, exponent in db.execute(select(Currency.code, Currency.exponent))}
+    return {
+        code: exponent for code, exponent in db.execute(select(Currency.code, Currency.exponent))
+    }
 
 
 def rate_quotes(

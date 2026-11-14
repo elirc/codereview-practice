@@ -36,13 +36,8 @@ def visible_reports_clause(actor: User) -> ColumnElement[bool]:
 
 
 def can_view_report(ctx: ServiceContext, report_id: uuid.UUID) -> bool:
-    return bool(
-        ctx.db.scalar(
-            select(
-                exists().where(Report.id == report_id, visible_reports_clause(ctx.actor))
-            )
-        )
-    )
+    stmt = select(exists().where(Report.id == report_id, visible_reports_clause(ctx.actor)))
+    return bool(ctx.db.scalar(stmt))
 
 
 def get_visible_report(ctx: ServiceContext, report_id: uuid.UUID, *, lock: bool = False) -> Report:

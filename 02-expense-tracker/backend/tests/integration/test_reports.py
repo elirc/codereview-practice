@@ -183,9 +183,7 @@ def test_estimate_is_null_without_a_rate(db: Session, client_for: ClientFor) -> 
     report = add_line(client, report, amount_minor=1000, currency="EUR")
     report = add_line(client, report, amount_minor=1000, currency="USD")
 
-    estimates = sorted(
-        (line["currency"], line["estimated_base_minor"]) for line in report["lines"]
-    )
+    estimates = sorted((line["currency"], line["estimated_base_minor"]) for line in report["lines"])
     assert estimates == [("EUR", None), ("USD", 1000)]
     assert report["estimated_total_base_minor"] is None
 
@@ -252,6 +250,5 @@ def test_never_submitted_draft_can_be_deleted(db: Session, client_for: ClientFor
     assert response.status_code == 204
     assert db.scalars(select(Report)).all() == []
     assert db.scalars(select(ExpenseLine)).all() == []
-    assert db.scalars(select(AuditEvent.action).order_by(AuditEvent.id)).all()[-1] == (
-        "report.deleted"
-    )
+    actions = db.scalars(select(AuditEvent.action).order_by(AuditEvent.id)).all()
+    assert actions[-1] == "report.deleted"

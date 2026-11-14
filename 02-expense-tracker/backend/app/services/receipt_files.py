@@ -29,9 +29,7 @@ def sniff_type(data: bytes) -> FileType | None:
 
 def sanitize_filename(name: str) -> str:
     """Keep a display-only copy of the client's filename."""
-    kept = (
-        ch for ch in name if ch not in "/\\" and not unicodedata.category(ch).startswith("C")
-    )
+    kept = (ch for ch in name if ch not in "/\\" and not unicodedata.category(ch).startswith("C"))
     return "".join(kept)[:MAX_FILENAME_LENGTH]
 
 
