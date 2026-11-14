@@ -1,4 +1,5 @@
 using System.Globalization;
+using Billing.Api.Commands;
 using Billing.Api.Infrastructure;
 using Billing.Core;
 
@@ -18,6 +19,9 @@ switch (command)
 {
     case null:
         break;
+    case "migrate":
+        Environment.ExitCode = await MigrateCommand.RunAsync(app.Services);
+        return;
     default:
         Console.Error.WriteLine($"Unknown command \"{command}\".");
         Environment.ExitCode = 2;

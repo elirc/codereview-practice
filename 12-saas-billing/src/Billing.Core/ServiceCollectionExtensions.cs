@@ -1,3 +1,6 @@
+using Billing.Core.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -11,6 +14,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(settings);
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<RequestContext>();
+
+        services.AddDbContext<BillingDbContext>(options => options
+            .UseNpgsql(settings.ConnectionString)
+            // The snapshot is maintained by hand next to the migrations; drift is logged by the migrate command.
+            .ConfigureWarnings(w => w.Log(RelationalEventId.PendingModelChangesWarning)));
+
         return services;
     }
 }
