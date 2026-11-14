@@ -47,7 +47,7 @@ async function main(): Promise<void> {
           now: clock.now(),
           enqueueSend: async (reminderId) => {
             const data: ReminderSendJob = { reminderId };
-            await boss.send(QUEUES.remindersSend, data, { singletonKey: reminderId });
+            await boss.send(QUEUES.remindersSend, data);
           },
         });
         log.info(result, "reminders dispatched");

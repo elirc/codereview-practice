@@ -34,7 +34,7 @@ export const instant = z
   .datetime({ offset: true })
   .transform((value) => DateTime.fromISO(value, { setZone: true }).toUTC());
 
-/** Path ids that are not UUIDs cannot exist, so they are reported exactly like missing rows. */
+/** Parses a UUID path parameter. */
 export function parseId(raw: string | undefined, what = "Resource"): string {
   if (!raw || !uuid.safeParse(raw).success) throw notFound(what);
   return raw;

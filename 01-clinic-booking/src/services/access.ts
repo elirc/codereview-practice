@@ -31,7 +31,7 @@ export async function getAppointmentView(id: string): Promise<AppointmentView> {
   return db.appointment.findUniqueOrThrow({ where: { id }, include: appointmentInclude });
 }
 
-/** Loads an appointment the caller may see; anything else is indistinguishable from missing. */
+/** Loads an appointment if the caller may view it. */
 export async function loadVisibleAppointment(actor: Actor, id: string): Promise<AppointmentView> {
   const appointment = await db.appointment.findUnique({
     where: { id },

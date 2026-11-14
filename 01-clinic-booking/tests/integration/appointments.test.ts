@@ -77,7 +77,7 @@ describe("cancellation", () => {
     expect(jobs.publish).toHaveBeenCalledWith(
       "email.cancellation",
       { appointmentId: id },
-      expect.objectContaining({ singletonKey: id, retryLimit: 3 }),
+      expect.objectContaining({ retryLimit: 3 }),
     );
 
     const other = await createPatient();
@@ -155,7 +155,7 @@ describe("rescheduling", () => {
     expect(jobs.publish).toHaveBeenCalledWith(
       "email.rescheduled",
       { appointmentId: moved.id },
-      expect.objectContaining({ singletonKey: moved.id }),
+      expect.objectContaining({ retryLimit: 3 }),
     );
   });
 

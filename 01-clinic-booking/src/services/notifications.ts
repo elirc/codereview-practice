@@ -10,7 +10,7 @@ export async function enqueueAppointmentEmail(
   appointmentId: string,
 ): Promise<void> {
   try {
-    await jobs.publish(queue, { appointmentId }, { singletonKey: appointmentId, ...EMAIL_RETRY });
+    await jobs.publish(queue, { appointmentId }, EMAIL_RETRY);
   } catch (err) {
     logger.error({ err, queue, appointmentId }, "failed to enqueue appointment email");
   }

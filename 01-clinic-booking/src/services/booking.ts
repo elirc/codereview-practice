@@ -30,7 +30,6 @@ const WINDOW_MESSAGES: Record<BookingWindowViolation, string> = {
   beyond_horizon: "This slot is too far in the future to be booked yet.",
 };
 
-/** Locks the patient's row until the surrounding transaction ends. */
 export async function lockPatient(tx: DbClient, patientId: string): Promise<void> {
   const rows = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM patients WHERE id = ${patientId}::uuid FOR UPDATE`;
@@ -50,10 +49,7 @@ export interface InsertBookingArgs {
   now: DateTime;
 }
 
-/**
- * Validates a requested slot and inserts the appointment and its reminders. Must run inside a
- * transaction that already holds the patient lock.
- */
+/** Validates a requested slot and inserts the appointment and its reminders. */
 export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Promise<Appointment> {
   const { actor, now } = args;
   const provider = await tx.provider.findUnique({

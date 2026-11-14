@@ -16,7 +16,7 @@ npm run db:seed                 # idempotent demo data, see "Seed accounts"
 
 Dependencies are pinned to exact versions in `package.json`; the lockfile is created by the first `npm install` and should be committed from there.
 
-The initial migration adds constraints Prisma cannot model (the `btree_gist` exclusion constraints, check constraints and a partial unique index). `prisma migrate dev` reports these as drift; create later migrations with `prisma migrate dev --create-only` and keep those statements out of any generated `DROP`.
+The initial migration adds constraints Prisma cannot model (the `btree_gist` exclusion constraints, check constraints and the partial unique index `appointments_patient_idempotency_key`). `prisma migrate deploy` is the supported way to apply migrations, locally and in CI. `prisma migrate dev` reports drift for these objects and may propose dropping the partial index, so write new migrations with `prisma migrate dev --create-only`, review the generated SQL, and remove any statement that drops or alters them.
 
 ## Run
 
