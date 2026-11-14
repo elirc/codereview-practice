@@ -39,3 +39,30 @@ export const updateUserSchema = z
       value.password !== undefined,
     { message: "Nothing to update." },
   );
+
+export const slug = z
+  .string()
+  .min(1)
+  .max(120)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lower-case letters, digits and single hyphens.");
+
+export const expectedVersion = z.number().int().positive();
+
+const title = z.string().trim().min(1, "A title is required.").max(200);
+
+export const createPostSchema = z.object({ slug, title }).strict();
+
+export const saveRevisionSchema = z
+  .object({
+    postId: id,
+    expectedVersion,
+    title,
+    excerpt: z.string().max(500).default(""),
+    body: z.string().max(200_000).default(""),
+    coverMediaId: id.nullable().default(null),
+  })
+  .strict();
+
+export const restoreRevisionSchema = z
+  .object({ postId: id, revisionId: id, expectedVersion })
+  .strict();
