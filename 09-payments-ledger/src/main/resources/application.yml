@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: payments-ledger
+  main:
+    banner-mode: off
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5461/ledger}
+    username: ${DATABASE_USER:ledger}
+    password: ${DATABASE_PASSWORD:ledger}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_SIZE:10}
+  flyway:
+    enabled: false
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false
+      fail-on-null-for-primitives: true
+    serialization:
+      write-dates-as-timestamps: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:6392}
+  web:
+    resources:
+      add-mappings: false
+  task:
+    scheduling:
+      pool:
+        size: 4
+
+server:
+  port: ${PORT:8090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+ledger:
+  fx-rate-max-age-seconds: ${FX_RATE_MAX_AGE_SECONDS:3600}
+  fx-quote-ttl-seconds: ${FX_QUOTE_TTL_SECONDS:30}
+  default-daily-out-minor: ${DEFAULT_DAILY_OUT_MINOR:USD=1000000,EUR=1000000,GBP=800000,JPY=1500000,KWD=3000000}
+  min-payout-minor: ${MIN_PAYOUT_MINOR:USD=1000,EUR=1000,GBP=1000,JPY=1500,KWD=3000}
+  outbox-retention-hours: ${OUTBOX_RETENTION_HOURS:72}
+  expectation-overdue-days: ${EXPECTATION_OVERDUE_DAYS:3}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: api
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: worker
+  main:
+    web-application-type: none
+  kafka:
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+---
+spring:
+  config:
+    activate:
+      on-profile: migrate
+  main:
+    web-application-type: none
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  flyway:
+    enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: seed
+  main:
+    web-application-type: none
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
