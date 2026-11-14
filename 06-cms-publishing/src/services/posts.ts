@@ -1,9 +1,13 @@
 import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 import { canOnPost, type Actor } from "@/auth/policy";
 import { db } from "@/db/client";
-import { posts, revisions, users, type Post, type PostStatus } from "@/db/schema";
+import { posts, revisions, slugRedirects, users, type Post, type PostStatus } from "@/db/schema";
 import { notFoundError } from "./errors";
+import { assertExpectedVersion, lockPostFor } from "./post-guards";
 import { assertSlugAvailable, lockSlugs } from "./slugs";
+
+/** Identifies public content that changed: the post and every slug whose page may differ. */
+export type PublicChange = { id: string; slugs: string[] };
 
 export type PostState = Pick<
   Post,
@@ -60,6 +64,63 @@ export async function createPost(input: {
       .where(eq(posts.id, post.id))
       .returning();
     return withRevision;
+  });
+}
+
+/**
+ * Moves a post to a new slug. Once a post has been published its old slug keeps working as a
+ * redirect; moving back onto one of the post's own redirects removes that redirect.
+ */
+export async function changeSlug(input: {
+  actor: Actor;
+  postId: string;
+  expectedVersion: number;
+  slug: string;
+  now: Date;
+}): Promise<{ post: Post; publicChange: PublicChange | null }> {
+  const { actor, postId, expectedVersion, slug, now } = input;
+  return db.transaction(async (tx) => {
+    const post = await lockPostFor(tx, actor, postId, "changeSlug");
+    await assertExpectedVersion(tx, post, expectedVersion);
+    if (post.slug === slug) return { post, publicChange: null };
+
+    await lockSlugs(tx, [post.slug, slug]);
+    const { isOwnRedirect } = await assertSlugAvailable(tx, slug, post.id);
+    if (isOwnRedirect) {
+      await tx.delete(slugRedirects).where(eq(slugRedirects.oldSlug, slug));
+    }
+    if (post.firstPublishedAt) {
+      await tx
+        .insert(slugRedirects)
+        .values({ oldSlug: post.slug, postId: post.id, createdAt: now });
+    }
+
+    const [updated] = await tx
+      .update(posts)
+      .set({ slug, version: post.version + 1, updatedAt: now })
+      .where(eq(posts.id, post.id))
+      .returning();
+    const publicChange = post.publishedRevisionId
+      ? { id: post.id, slugs: [post.slug, slug] }
+      : null;
+    return { post: updated, publicChange };
+  });
+}
+
+/** Deletes a post with all of its revisions and redirects. */
+export async function deletePost(input: {
+  actor: Actor;
+  postId: string;
+  expectedVersion: number;
+}): Promise<{ publicChange: PublicChange | null }> {
+  const { actor, postId, expectedVersion } = input;
+  return db.transaction(async (tx) => {
+    const post = await lockPostFor(tx, actor, postId, "delete");
+    await assertExpectedVersion(tx, post, expectedVersion);
+    await tx.delete(posts).where(eq(posts.id, post.id));
+    return {
+      publicChange: post.publishedRevisionId ? { id: post.id, slugs: [post.slug] } : null,
+    };
   });
 }
 

@@ -66,3 +66,21 @@ export const saveRevisionSchema = z
 export const restoreRevisionSchema = z
   .object({ postId: id, revisionId: id, expectedVersion })
   .strict();
+
+export const postCommandSchema = z.object({ postId: id, expectedVersion }).strict();
+
+export const publishSchema = z.object({ postId: id, revisionId: id, expectedVersion }).strict();
+
+export const scheduleSchema = z
+  .object({
+    postId: id,
+    revisionId: id,
+    expectedVersion,
+    scheduledFor: z
+      .string()
+      .datetime({ offset: true })
+      .transform((value) => new Date(value)),
+  })
+  .strict();
+
+export const changeSlugSchema = z.object({ postId: id, expectedVersion, slug }).strict();
