@@ -71,6 +71,11 @@ export const PatchIssueBody = StrictObject({
 
 export const PutLabelsBody = StrictObject({ version: Version, labelIds: LabelIds });
 
+export const BulkStatusBody = StrictObject({
+  issueIds: Type.Array(Uuid, { minItems: 1, maxItems: 100, uniqueItems: true }),
+  status: IssueStatus,
+});
+
 const issueFields = {
   id: Type.String(),
   identifier: Type.String(),
@@ -95,3 +100,5 @@ export const IssueDetail = Type.Object({
 });
 
 export const IssuePage = Page(IssueSummary);
+
+export const BulkStatusResult = Type.Object({ items: Type.Array(IssueSummary) });

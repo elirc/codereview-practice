@@ -98,6 +98,8 @@ export const endpoints = {
     number: number,
     body: { version: number; labelIds: string[] },
   ) => api.put<IssueDetail>(`${issuePath(slug, projectKey, number)}/labels`, body),
+  bulkStatus: (slug: string, body: { issueIds: string[]; status: IssueStatus }) =>
+    api.post<{ items: IssueSummary[] }>(`/orgs/${enc(slug)}/issues/bulk-status`, body),
   deleteIssue: (slug: string, projectKey: string, number: number) =>
     api.delete(issuePath(slug, projectKey, number)),
 

@@ -2,6 +2,8 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import { EmptyBody } from '../../lib/schemas.js';
 import {
+  BulkStatusBody,
+  BulkStatusResult,
   CreateIssueBody,
   IssueDetail,
   IssuePage,
@@ -13,6 +15,7 @@ import {
   PutLabelsBody,
 } from './schemas.js';
 import {
+  bulkUpdateStatus,
   createIssue,
   deleteIssue,
   getIssue,
@@ -30,6 +33,12 @@ export const issueRoutes: FastifyPluginAsyncTypebox = async (app) => {
       schema: { params: IssuesParams, querystring: ListIssuesQuery, response: { 200: IssuePage } },
     },
     async (request) => listIssues(app.deps, request.tenant, request.query),
+  );
+
+  app.post(
+    '/issues/bulk-status',
+    { schema: { params: IssuesParams, body: BulkStatusBody, response: { 200: BulkStatusResult } } },
+    async (request) => bulkUpdateStatus(app.deps, request.tenant, request.body),
   );
 
   app.post(

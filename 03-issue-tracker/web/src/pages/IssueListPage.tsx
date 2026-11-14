@@ -10,6 +10,7 @@ import {
   type IssueSort,
   type IssueStatus,
 } from '../api/types';
+import { BulkStatusBar } from '../issues/BulkStatusBar';
 import { atLeast, useLabels, useMemberOptions, useProjects, useRole } from '../org/queries';
 
 function filtersFrom(params: URLSearchParams): IssueFilters {
@@ -37,6 +38,17 @@ export function IssueListPage() {
   const projects = useProjects(orgSlug);
   const labels = useLabels(orgSlug);
   const members = useMemberOptions(orgSlug);
+  const canEdit = atLeast(useRole(orgSlug), 'member');
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+
+  const toggle = (issueId: string, checked: boolean) => {
+    setSelection((current) => {
+      const next = new Set(current);
+      if (checked) next.add(issueId);
+      else next.delete(issueId);
+      return next;
+    });
+  };
 
   const issues = useInfiniteQuery({
     queryKey: queryKeys.issueList(orgSlug, filters),
@@ -134,9 +146,18 @@ export function IssueListPage() {
       </form>
 
       {issues.error && <p className="error">{issues.error.message}</p>}
+      {canEdit && (
+        <BulkStatusBar
+          orgSlug={orgSlug}
+          filters={filters}
+          issueIds={[...selection]}
+          onDone={() => setSelection(new Set())}
+        />
+      )}
       <table>
         <thead>
           <tr>
+            {canEdit && <th />}
             <th>ID</th>
             <th>Title</th>
             <th>Status</th>
@@ -149,6 +170,16 @@ export function IssueListPage() {
           {issues.data?.pages.flatMap((page) =>
             page.items.map((issue) => (
               <tr key={issue.id}>
+                {canEdit && (
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${issue.identifier}`}
+                      checked={selection.has(issue.id)}
+                      onChange={(e) => toggle(issue.id, e.target.checked)}
+                    />
+                  </td>
+                )}
                 <td>
                   <Link to={`/o/${orgSlug}/issues/${issue.projectKey}/${issue.number}`}>
                     {issue.identifier}

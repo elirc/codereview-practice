@@ -15,11 +15,13 @@ import {
   deleteIssue as deleteIssueRow,
   findIssueByNumber,
   findIssueDetail,
+  findIssuesByIds,
   findLabelsForIssues,
   insertIssue,
   listIssueLabelIds,
   listIssuesPage,
   replaceIssueLabels,
+  setStatusForIssues,
   updateIssueIfVersion,
   type IssueChanges,
   type IssueDetailRow,
@@ -359,4 +361,28 @@ export async function deleteIssue(deps: Deps, tenant: TenantContext, ref: IssueR
   assertCan(tenant.role, 'issue.delete');
   if (issue.archived_at) throw projectArchived();
   await deleteIssueRow(tenant.orgId, issue.id, deps.db);
+}
+
+/**
+ * Sets the status of several issues at once. Ids that no longer resolve are skipped, so a
+ * selection made from a list that has since changed still applies to the rest.
+ */
+export async function bulkUpdateStatus(
+  deps: Deps,
+  tenant: TenantContext,
+  input: { issueIds: string[]; status: IssueStatus },
+): Promise<{ items: IssueSummaryView[] }> {
+  assertCan(tenant.role, 'issue.update');
+  const now = deps.clock.now();
+  const found = await deps.db.transaction().execute(async (trx) => {
+    const issues = await findIssuesByIds(tenant.orgId, input.issueIds, trx);
+    if (issues.some((issue) => issue.archived_at)) throw projectArchived();
+    await setStatusForIssues(input.issueIds, input.status, now, trx);
+    return issues;
+  });
+  const items: IssueSummaryView[] = [];
+  for (const issue of found) {
+    items.push(await loadIssue(deps, tenant.orgId, issue.id));
+  }
+  return { items };
 }

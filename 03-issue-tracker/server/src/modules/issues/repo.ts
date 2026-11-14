@@ -91,6 +91,15 @@ export async function findIssueByNumber(
     .executeTakeFirst();
 }
 
+export async function findIssuesByIds(
+  orgId: string,
+  issueIds: string[],
+  db: Database,
+): Promise<IssueRow[]> {
+  if (issueIds.length === 0) return [];
+  return issueWithProject(orgId, db).where('i.id', 'in', issueIds).orderBy('i.id').execute();
+}
+
 export async function findIssueDetail(
   orgId: string,
   issueId: string,
@@ -288,6 +297,19 @@ export async function updateIssueIfVersion(
     .returning('id')
     .executeTakeFirst();
   return row !== undefined;
+}
+
+export async function setStatusForIssues(
+  issueIds: string[],
+  status: IssueStatus,
+  now: Date,
+  db: Database,
+): Promise<void> {
+  await db
+    .updateTable('issues')
+    .set({ status, updated_at: now })
+    .where('id', 'in', issueIds)
+    .execute();
 }
 
 export async function replaceIssueLabels(
