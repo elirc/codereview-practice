@@ -231,7 +231,8 @@ export function roster(tx: Tx, shiftId: string): RosterEntry[] {
 		.orderBy(
 			sql`case ${signups.status} when 'confirmed' then 0 when 'waitlisted' then 1 else 2 end`,
 			asc(signups.waitlistSeq),
-			asc(signups.createdAt)
+			asc(signups.createdAt),
+			asc(users.name)
 		)
 		.all();
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isCivilDate, isWallTime } from '../domain/dates';
 import { normalizePhone } from '../domain/phone';
 import { WEEKDAYS, type Weekday } from '../domain/recurrence';
-import { EXCEPTION_KINDS, FREQUENCIES } from './db/schema';
+import { EXCEPTION_KINDS, FREQUENCIES, IMPORT_MODES } from './db/schema';
 import type { SeriesInput } from './services/series';
 
 const blankToUndefined = (value: unknown) =>
@@ -171,3 +171,12 @@ export const profileSchema = z.object({
 	emailOptIn: checkbox,
 	smsOptIn: checkbox
 });
+
+export const importModeSchema = z.object({ mode: z.enum(IMPORT_MODES) });
+
+export const exportRangeSchema = z
+	.object({ from: civilDateField, to: civilDateField })
+	.refine((value) => value.to >= value.from, {
+		message: 'The end date must not be before the start date.',
+		path: ['to']
+	});

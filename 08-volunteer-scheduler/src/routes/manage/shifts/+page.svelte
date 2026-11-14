@@ -27,6 +27,11 @@
 	<label class="check">Title <input name="q" value={data.filter.q} /></label>
 	<button type="submit">Filter</button>
 </form>
+<p>
+	<a href="/exports/signups.csv?from={data.filter.from}&to={data.filter.to}" download>
+		Download signups for this date range (CSV)
+	</a>
+</p>
 
 <table>
 	<thead>

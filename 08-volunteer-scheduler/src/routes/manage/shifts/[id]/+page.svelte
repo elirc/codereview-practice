@@ -94,6 +94,7 @@
 {/if}
 
 <h2>Roster</h2>
+<p><a href="/shifts/{shift.id}/roster.csv" download>Download roster (CSV)</a></p>
 {#if !data.ended && shift.status === 'scheduled'}
 	<form method="POST" action="?/add" use:enhance>
 		<label class="check">

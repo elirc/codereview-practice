@@ -17,6 +17,7 @@
 			{#if manager}
 				<a href="/manage/shifts">Shifts</a>
 				<a href="/manage/series">Series</a>
+				<a href="/manage/volunteers">Volunteers</a>
 			{/if}
 			{#if data.user.role === 'admin'}
 				<a href="/admin/users">Users</a>

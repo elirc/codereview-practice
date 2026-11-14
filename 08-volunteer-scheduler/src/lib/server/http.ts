@@ -29,3 +29,13 @@ export async function handleEndpoint(
 		);
 	}
 }
+
+export function csvResponse(filename: string, body: string): Response {
+	return new Response(body, {
+		headers: {
+			'content-type': 'text/csv; charset=utf-8',
+			'content-disposition': `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, '_')}"`,
+			'cache-control': 'no-store'
+		}
+	});
+}

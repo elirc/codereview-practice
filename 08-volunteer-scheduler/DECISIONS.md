@@ -51,3 +51,13 @@ Choices made where the spec left room for interpretation.
 
 **Unclear:** whether spaces before an opening quote make a field unquoted, and how values with leading or trailing blanks survive a round trip when unquoted fields are trimmed.
 **Chosen:** blanks before an opening quote are ignored and the field is parsed as quoted; anything other than a comma or record end after the closing quote (including blanks) is `malformed_quotes`. The writer also quotes values that start or end with a space or tab, and writes a lone empty cell as `""`, so that exported values parse back unchanged.
+
+## Volunteer import details
+
+**Unclear:** what happens to an existing user's phone or SMS preference when the file has no such column, which row counts as "first" for duplicates, and whether file-level failures are saved.
+**Chosen:** an optional column that is absent leaves the existing value alone; a column that is present but empty sets the default (no phone, SMS off). The SMS-needs-phone rule is checked against the values the user would end up with. A row whose email is valid claims that email even if another field is invalid, so later rows with the same email are `duplicate_in_file`. A row can report several errors; `failed` counts rows. File-level errors (`missing_header`, `missing_columns`, `duplicate_columns`, encoding, quoting) are returned as 400 (size and row limits as 413) and are not saved in `import_runs`, because no report exists for them; dry runs and commits both save their report.
+
+## Export contents
+
+**Unclear:** which signups the two exports include.
+**Chosen:** the shift roster lists confirmed and waitlisted volunteers; the date-range export lists every signup (including cancelled ones, with a status column) on shifts that start in the range.
