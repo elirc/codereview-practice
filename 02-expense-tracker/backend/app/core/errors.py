@@ -65,7 +65,7 @@ def error_response(
             "code": code,
             "message": message,
             "details": details or {},
-            "request_id": request_id_of(request),
+            "requestId": request_id_of(request),
         }
     }
     return JSONResponse(status_code=status, content=body)

@@ -22,7 +22,7 @@ def test_unknown_route_uses_error_envelope(test_settings: Settings) -> None:
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["code"] == "not_found"
-    assert error["request_id"] == response.headers["X-Request-Id"]
+    assert error["requestId"] == response.headers["X-Request-Id"]
 
 
 def test_malformed_inbound_request_id_is_replaced(test_settings: Settings) -> None:

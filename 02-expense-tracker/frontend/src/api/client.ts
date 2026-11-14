@@ -5,7 +5,7 @@ const errorEnvelopeSchema = z.object({
     code: z.string(),
     message: z.string(),
     details: z.record(z.unknown()).optional(),
-    request_id: z.string().nullable().optional(),
+    requestId: z.string().nullable().optional(),
   }),
 });
 
@@ -69,8 +69,8 @@ async function toApiError(response: Response): Promise<ApiError> {
   try {
     const parsed = errorEnvelopeSchema.safeParse(await response.json());
     if (parsed.success) {
-      const { code, message, details, request_id } = parsed.data.error;
-      return new ApiError(response.status, code, message, details ?? {}, request_id ?? null);
+      const { code, message, details, requestId } = parsed.data.error;
+      return new ApiError(response.status, code, message, details ?? {}, requestId ?? null);
     }
   } catch {
     // Fall through to a generic error when the body is not JSON.
