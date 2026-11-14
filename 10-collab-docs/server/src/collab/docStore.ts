@@ -117,6 +117,17 @@ export class DocStore {
     });
   }
 
+  /** Returns the current head seq of each listed document that still exists. */
+  async headSeqs(docIds: string[]): Promise<Map<string, number>> {
+    if (docIds.length === 0) return new Map();
+    const rows = await this.db
+      .selectFrom('docs')
+      .select(['id', 'head_seq'])
+      .where('id', 'in', docIds)
+      .execute();
+    return new Map(rows.map((row) => [row.id, row.head_seq]));
+  }
+
   /** Returns the log together with the head seq it reaches, or null for an unknown document. */
   loadAtHead(docId: string): Promise<{ log: DocLog; headSeq: number } | null> {
     return readSnapshot(this.db, (trx) => loadAtHeadIn(trx, docId));

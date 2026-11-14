@@ -94,10 +94,14 @@ export class TestClient {
     });
   }
 
-  /** Connects and waits for the server's hello. */
+  /** Connects and waits for the hello and the initial sync exchange. */
   static async join(baseUrl: string, docId: string, options: ConnectOptions = {}): Promise<TestClient> {
     const client = await TestClient.connect(baseUrl, docId, options);
     await client.waitForControl('hello');
+    await client.waitFor(() => client.frames.some((frame) => frame.type === 'sync-step2'));
+    if (client.canEdit()) {
+      await client.waitFor(() => client.frames.some((frame) => frame.type === 'sync-step1'));
+    }
     return client;
   }
 

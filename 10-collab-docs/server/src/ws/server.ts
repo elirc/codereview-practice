@@ -75,6 +75,7 @@ export class CollabServer extends EventEmitter {
   startLoops(): void {
     if (!this.config.LOOPS_ENABLED) return;
     this.every(this.config.PING_INTERVAL_MS, 'liveness', async () => this.pingOnce());
+    this.every(this.config.CATCHUP_INTERVAL_MS, 'catch-up', () => this.registry.catchUpStale());
     const idleSweepMs = Math.max(1_000, Math.min(this.config.ROOM_IDLE_MS, 5_000));
     this.every(idleSweepMs, 'idle rooms', async () => {
       await this.registry.sweepIdle(this.clock.now());

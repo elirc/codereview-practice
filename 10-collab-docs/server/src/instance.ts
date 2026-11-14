@@ -1,6 +1,8 @@
 import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from './config/config.js';
+import { Bus } from './collab/bus.js';
+import { BusNotifier } from './collab/busNotifier.js';
 import { DocStore } from './collab/docStore.js';
 import { RoomRegistry } from './collab/registry.js';
 import { createDb, type Db } from './db/db.js';
@@ -9,7 +11,6 @@ import { systemClock, type Clock } from './lib/clock.js';
 import { createLogger, type Logger } from './lib/logger.js';
 import { cryptoRandom, type RandomSource } from './lib/random.js';
 import type { ServiceContext } from './services/context.js';
-import { silentNotifier } from './services/notifier.js';
 import { CollabServer } from './ws/server.js';
 
 export interface InstanceOptions {
@@ -23,6 +24,7 @@ export interface Instance {
   config: Config;
   app: FastifyInstance;
   db: Db;
+  bus: Bus;
   store: DocStore;
   registry: RoomRegistry;
   collab: CollabServer;
@@ -41,9 +43,11 @@ export function createInstance(options: InstanceOptions): Instance {
   const logger = options.logger ?? createLogger(config.LOG_LEVEL, { process: 'server' });
 
   const db = createDb(config.DATABASE_URL);
+  const bus = new Bus(config.REDIS_URL, config.INSTANCE_ID ?? random.uuid(), logger);
   const store = new DocStore(db, clock, config.MAX_DOC_BYTES);
-  const registry = new RoomRegistry({ store, logger, roomIdleMs: config.ROOM_IDLE_MS });
-  const ctx: ServiceContext = { db, clock, random, config, notifier: silentNotifier };
+  const registry = new RoomRegistry({ store, bus, logger, roomIdleMs: config.ROOM_IDLE_MS });
+  const notifier = new BusNotifier(bus, logger);
+  const ctx: ServiceContext = { db, clock, random, config, notifier };
   const app = buildApp({ ctx, logger });
   const collab = new CollabServer({ config, db, clock, random, logger, registry });
   collab.attach(app.server);
@@ -53,6 +57,7 @@ export function createInstance(options: InstanceOptions): Instance {
     config,
     app,
     db,
+    bus,
     store,
     registry,
     collab,
@@ -68,6 +73,7 @@ export function createInstance(options: InstanceOptions): Instance {
         const httpClosed = app.close();
         await collab.shutdown();
         await httpClosed;
+        await bus.close();
         await db.destroy();
       })();
       return closing;

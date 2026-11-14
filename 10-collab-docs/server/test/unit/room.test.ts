@@ -52,6 +52,10 @@ class FakeStore implements RoomStore {
     return { snapshot, updates: this.log.updates.filter((entry) => entry.seq > from) };
   }
 
+  async headSeqs(): Promise<Map<string, number>> {
+    return new Map();
+  }
+
   async append(input: AppendInput): Promise<AppendResult> {
     this.appended.push(input);
     return { status: 'ok', seq: this.nextSeq++ };

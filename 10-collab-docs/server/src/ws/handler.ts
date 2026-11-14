@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 import type { Config } from '../config/config.js';
 import type { AppendAuthorizer } from '../collab/docStore.js';
 import type { Room } from '../collab/room.js';
-import { addsNothing, type DecodedUpdate } from '../collab/updates.js';
+import { addsNothing } from '../collab/updates.js';
 import { canEdit } from '../domain/roles.js';
 import type { Clock } from '../lib/clock.js';
 import { resolveDocAccess } from '../services/access.js';
@@ -83,14 +83,15 @@ export class FrameHandler {
       conn.close(CloseCode.TooLarge, 'update too large');
       return;
     }
-    let decoded: DecodedUpdate;
+    let unchanged: boolean;
     try {
-      decoded = Y.decodeUpdate(update);
+      Y.decodeUpdate(update);
+      unchanged = addsNothing(update, room.doc);
     } catch {
       conn.close(CloseCode.Malformed, 'malformed update');
       return;
     }
-    if (addsNothing(decoded, room.doc)) return;
+    if (unchanged) return;
 
     const result = await room.appendFromPeer(conn, update, this.authorizer(conn));
     switch (result.status) {

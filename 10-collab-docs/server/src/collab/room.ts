@@ -9,6 +9,7 @@ export interface RoomStore {
   load(docId: string): Promise<DocLog>;
   readSince(docId: string, afterSeq: number): Promise<DocLog>;
   append(input: AppendInput): Promise<AppendResult>;
+  headSeqs(docIds: string[]): Promise<Map<string, number>>;
 }
 
 /** A local connection joined to a room. */
@@ -23,6 +24,8 @@ export interface RoomOptions {
   workspaceId: string;
   store: RoomStore;
   logger: Logger;
+  /** Called after an update committed by this instance has been integrated. */
+  onCommitted?: (seq: number, update: Uint8Array) => void;
 }
 
 interface Pending {
@@ -47,6 +50,7 @@ export class Room {
 
   protected readonly store: RoomStore;
   protected readonly log: Logger;
+  private readonly onCommitted: ((seq: number, update: Uint8Array) => void) | undefined;
   private loaded = false;
   private early: Array<Pending & { seq: number }> = [];
   private readonly buffer = new Map<number, Pending>();
@@ -58,6 +62,7 @@ export class Room {
     this.workspaceId = options.workspaceId;
     this.store = options.store;
     this.log = options.logger.child({ docId: options.docId });
+    this.onCommitted = options.onCommitted;
     this.doc = new Y.Doc({ gc: true });
     this.doc.on('update', (update: Uint8Array, origin: unknown) => {
       const frame = encodeSyncUpdate(update);
@@ -153,9 +158,10 @@ export class Room {
     });
   }
 
-  /** Integrates an update this instance committed. */
+  /** Integrates an update this instance committed and announces it. */
   committed(seq: number, update: Uint8Array, origin: RoomPeer | null): void {
     this.integrate(seq, update, origin);
+    this.onCommitted?.(seq, update);
   }
 
   /** Returns the encoded state vector of the room's document. */

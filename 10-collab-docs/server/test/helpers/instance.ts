@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { createDb } from '../../src/db/db.js';
 import { createInstance, type Instance } from '../../src/instance.js';
 import { createLogger } from '../../src/lib/logger.js';
@@ -28,6 +29,7 @@ export async function startInstance(
   const clock = options.clock ?? new FakeClock();
   const config = testConfig({ WS_RATE_BURST: '100000', ...options.env });
   const instance = createInstance({ config, clock, logger: createLogger('silent') });
+  if (instance.bus.subscriber.status !== 'ready') await once(instance.bus.subscriber, 'ready');
   const port = await instance.listen(0, '127.0.0.1');
   const started = { instance, url: `ws://127.0.0.1:${port}`, clock };
   running.push(started);

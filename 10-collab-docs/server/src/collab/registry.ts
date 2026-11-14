@@ -1,8 +1,13 @@
+import { fromBase64, toBase64 } from '../lib/bytes.js';
 import type { Logger } from '../lib/logger.js';
+import { CloseCode } from '../ws/codec.js';
+import type { Bus, BusHandler } from './bus.js';
+import { docBusMessage, docChannel, type DocBusMessage } from './busMessages.js';
 import { Room, type RoomPeer, type RoomStore } from './room.js';
 
 export interface RegistryOptions {
   store: RoomStore;
+  bus: Bus;
   logger: Logger;
   roomIdleMs: number;
 }
@@ -11,14 +16,24 @@ export interface RegistryOptions {
 export class RoomRegistry {
   private readonly rooms = new Map<string, Room>();
   private readonly store: RoomStore;
+  private readonly bus: Bus;
   private readonly log: Logger;
   private readonly roomIdleMs: number;
   private readonly ready = new Map<Room, Promise<void>>();
+  private readonly handlers = new Map<Room, BusHandler>();
 
   constructor(options: RegistryOptions) {
     this.store = options.store;
+    this.bus = options.bus;
     this.log = options.logger;
     this.roomIdleMs = options.roomIdleMs;
+    this.bus.onReady(() => {
+      for (const room of this.all()) void room.catchUp();
+    });
+  }
+
+  get instanceId(): string {
+    return this.bus.instanceId;
   }
 
   /** Returns the open room for a document, if this instance has one. */
@@ -66,6 +81,18 @@ export class RoomRegistry {
     if (room.removePeer(peer)) room.idleSince = now;
   }
 
+  /** Catches up every loaded room whose document head is ahead of what it has applied. */
+  async catchUpStale(): Promise<void> {
+    const rooms = this.all().filter((room) => room.isLoaded && !room.closing);
+    if (rooms.length === 0) return;
+    const heads = await this.store.headSeqs(rooms.map((room) => room.docId));
+    await Promise.all(
+      rooms
+        .filter((room) => (heads.get(room.docId) ?? 0) > room.appliedSeq)
+        .map((room) => room.catchUp()),
+    );
+  }
+
   /** Closes rooms that have been empty for at least the idle period; returns how many. */
   async sweepIdle(now: Date): Promise<number> {
     const idle = this.all().filter(
@@ -89,18 +116,26 @@ export class RoomRegistry {
     await Promise.all(this.all().map((room) => this.closeRoom(room)));
   }
 
-  private createRoom(docId: string, workspaceId: string): Room {
-    return new Room({ docId, workspaceId, store: this.store, logger: this.log });
+  /** Publishes an update committed by this instance. */
+  publishUpdate(docId: string, seq: number, update: Uint8Array): void {
+    this.bus
+      .publish(docChannel(docId), {
+        kind: 'update',
+        instanceId: this.bus.instanceId,
+        seq,
+        update: toBase64(update),
+      })
+      .catch((error: unknown) => this.log.warn({ err: error, docId, seq }, 'update publish failed'));
   }
-
-  private async prepare(room: Room): Promise<void> {
-    await room.load();
-  }
-
-  private async release(_room: Room): Promise<void> {}
 
   private open(docId: string, workspaceId: string): Room {
-    const room = this.createRoom(docId, workspaceId);
+    const room = new Room({
+      docId,
+      workspaceId,
+      store: this.store,
+      logger: this.log,
+      onCommitted: (seq, update) => this.publishUpdate(docId, seq, update),
+    });
     this.rooms.set(docId, room);
     const ready = this.prepare(room);
     this.ready.set(room, ready);
@@ -108,9 +143,23 @@ export class RoomRegistry {
       this.log.error({ err: error, docId }, 'room failed to open');
       if (this.rooms.get(docId) === room) this.rooms.delete(docId);
       this.ready.delete(room);
-      void this.release(room).catch(() => undefined);
+      void this.release(room);
     });
     return room;
+  }
+
+  private async prepare(room: Room): Promise<void> {
+    const handler: BusHandler = (raw) => this.onDocMessage(room, raw);
+    this.handlers.set(room, handler);
+    await this.bus.subscribe(docChannel(room.docId), handler);
+    await room.load();
+  }
+
+  private async release(room: Room): Promise<void> {
+    const handler = this.handlers.get(room);
+    if (!handler) return;
+    this.handlers.delete(room);
+    await this.bus.unsubscribe(docChannel(room.docId), handler);
   }
 
   private async closeRoom(room: Room): Promise<void> {
@@ -118,5 +167,35 @@ export class RoomRegistry {
     this.ready.delete(room);
     await room.close();
     await this.release(room);
+  }
+
+  private onDocMessage(room: Room, raw: unknown): void {
+    const parsed = docBusMessage.safeParse(raw);
+    if (!parsed.success) {
+      this.log.warn({ docId: room.docId }, 'ignoring malformed bus message');
+      return;
+    }
+    this.handleDocMessage(room, parsed.data);
+  }
+
+  private handleDocMessage(room: Room, message: DocBusMessage): void {
+    switch (message.kind) {
+      case 'update':
+        if (message.instanceId === this.bus.instanceId) return;
+        room.integrate(message.seq, fromBase64(message.update), null);
+        return;
+      case 'meta':
+        room.broadcastControl({ type: 'meta', title: message.title });
+        return;
+      case 'comments':
+        room.broadcastControl({ type: 'comments_changed' });
+        return;
+      case 'trashed':
+        room.closePeers(CloseCode.Gone, 'document trashed');
+        return;
+      case 'awareness':
+      case 'perm':
+        return;
+    }
   }
 }

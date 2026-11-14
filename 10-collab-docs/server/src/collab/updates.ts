@@ -26,10 +26,11 @@ function covers(ranges: Range[], clock: number, len: number): boolean {
 }
 
 /**
- * Returns true when applying the decoded update to `doc` would change nothing:
- * it carries no structs and every deletion it lists is already deleted in `doc`.
+ * Returns true when applying the update to `doc` would change nothing: every
+ * struct it carries is already in `doc` and every deletion it lists is already applied.
  */
-export function addsNothing(decoded: DecodedUpdate, doc: Y.Doc): boolean {
+export function addsNothing(update: Uint8Array, doc: Y.Doc): boolean {
+  const decoded: DecodedUpdate = Y.decodeUpdate(Y.diffUpdate(update, Y.encodeStateVector(doc)));
   if (decoded.structs.length > 0) return false;
   if (decoded.ds.clients.size === 0) return true;
   const known = Y.createDeleteSetFromStructStore(doc.store);
