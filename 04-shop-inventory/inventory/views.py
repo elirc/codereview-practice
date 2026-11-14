@@ -15,6 +15,7 @@ from .serializers import (
     ReceiveStockSerializer,
     StockLevelSerializer,
     StockMovementSerializer,
+    StocktakeSerializer,
 )
 
 
@@ -66,3 +67,22 @@ class StockMovementListView(generics.ListAPIView):
             .select_related("actor")
             .order_by("-created_at", "-id")
         )
+
+
+class StocktakeView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def post(self, request: Request) -> Response:
+        serializer = StocktakeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        counts = [services.StockCount(**count) for count in serializer.validated_data["counts"]]
+        results = services.apply_stocktake(
+            counts,
+            reason=serializer.validated_data["reason"],
+            actor=request.user,
+        )
+        levels = []
+        for product, item in results:
+            item.product = product
+            levels.append(StockLevelSerializer(item).data)
+        return Response({"results": levels})

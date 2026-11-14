@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("stock/stocktake/", views.StocktakeView.as_view(), name="stocktake"),
     path(
         "products/<str:sku>/stock/receive/",
         views.ReceiveStockView.as_view(),

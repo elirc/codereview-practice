@@ -115,3 +115,58 @@ def test_stock_permissions_by_role(request, client_name, receive, adjust, moveme
     adjust_body = {"delta": 1, "reason": "count"}
     assert client.post(f"{base}/adjust/", adjust_body, format="json").status_code == adjust
     assert client.get(f"{base}/movements/").status_code == movements
+
+
+def test_stocktake_records_the_difference_for_each_counted_product(manager_client, manager):
+    mug = stocked_product(on_hand=10, sku="MUG-01")
+    tea = stocked_product(on_hand=4, sku="TEA-01")
+    pot = stocked_product(on_hand=2, sku="POT-01")
+
+    response = manager_client.post(
+        "/api/stock/stocktake/",
+        {
+            "counts": [
+                {"sku": "MUG-01", "counted": 8},
+                {"sku": "TEA-01", "counted": 6},
+                {"sku": "POT-01", "counted": 2},
+            ],
+            "reason": "quarterly count",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    levels = {row["sku"]: row["on_hand"] for row in response.data["results"]}
+    assert levels == {"MUG-01": 8, "TEA-01": 6, "POT-01": 2}
+    adjustments = StockMovement.objects.filter(kind="adjust").order_by("on_hand_delta")
+    assert [(m.product_id, m.on_hand_delta) for m in adjustments] == [(mug.pk, -2), (tea.pk, 2)]
+    assert all(m.actor == manager and m.reason == "quarterly count" for m in adjustments)
+    for product in (mug, tea, pot):
+        assert_ledger_balanced(product)
+
+
+def test_stocktake_rejects_unknown_skus(manager_client):
+    stocked_product(on_hand=10, sku="MUG-01")
+
+    response = manager_client.post(
+        "/api/stock/stocktake/",
+        {
+            "counts": [{"sku": "MUG-01", "counted": 8}, {"sku": "NOPE", "counted": 1}],
+            "reason": "count",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 422
+    assert response.data["error"]["details"] == {"skus": ["NOPE"]}
+    assert not StockMovement.objects.filter(kind="adjust").exists()
+
+
+def test_anonymous_cannot_submit_a_stocktake(anon_client):
+    response = anon_client.post(
+        "/api/stock/stocktake/",
+        {"counts": [{"sku": "MUG-01", "counted": 1}], "reason": "count"},
+        format="json",
+    )
+
+    assert response.status_code == 401
