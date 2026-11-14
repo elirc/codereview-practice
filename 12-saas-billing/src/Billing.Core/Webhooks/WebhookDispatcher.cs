@@ -50,7 +50,9 @@ public sealed class WebhookDispatcher(
             .FromSql(
                 $"""
                 SELECT d.* FROM webhook_deliveries d
+                JOIN webhook_endpoints e ON e.id = d.endpoint_id
                 WHERE d.status = 'pending' AND d.next_attempt_at <= {now}
+                  AND e.status = 'enabled'
                   AND NOT EXISTS (
                       SELECT 1 FROM webhook_deliveries p
                       WHERE p.endpoint_id = d.endpoint_id

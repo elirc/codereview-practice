@@ -57,7 +57,6 @@ public sealed class InvoiceFinalizer(
             throw DomainException.Unprocessable(ErrorCodes.InvoiceNotFinalizable, "An invoice with a negative total cannot be finalised.");
         }
 
-        // Invoice lines accept changes only while their invoice is still a draft, so they are saved first.
         await db.SaveChangesAsync(ct);
 
         invoice.BillToName = customer.Name;

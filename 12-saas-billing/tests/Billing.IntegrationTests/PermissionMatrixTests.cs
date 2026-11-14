@@ -96,6 +96,18 @@ public sealed class PermissionMatrixTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task ForbiddenRoleIsRefusedBeforeTheBodyIsRead()
+    {
+        var support = await App.ClientAsync(ApiRole.Support);
+
+        var malformed = await support.PostRawAsync("/v1/customers", "{ not json");
+        var unknownField = await support.PostRawAsync("/v1/products", """{"name":"x","extra":1}""");
+
+        Assert.Equal(403, malformed.Status);
+        Assert.Equal(403, unknownField.Status);
+    }
+
+    [Fact]
     public async Task EveryApiRouteRequiresAKey()
     {
         var anonymous = App.AnonymousClient();

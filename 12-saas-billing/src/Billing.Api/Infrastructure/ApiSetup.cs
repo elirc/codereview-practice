@@ -23,6 +23,7 @@ public static class ApiSetup
     {
         app.UseMiddleware<RequestIdMiddleware>();
         app.UseExceptionHandler(_ => { });
+        app.UseRouting();
         app.UseMiddleware<ApiKeyMiddleware>();
 
         app.MapGet("/health", () => Results.Ok(new HealthView("ok")));

@@ -64,7 +64,7 @@ tests/
   Billing.IntegrationTests/  HTTP and loop tests against Postgres
 ```
 
-Request flow: `RequestIdMiddleware` assigns the request id and logging scope → `UseExceptionHandler` with `ApiExceptionHandler` renders every failure as the error envelope → `ApiKeyMiddleware` resolves the bearer key into a `Caller` → the endpoint's `RequireRole` filter, then its validation filter → the handler calls a Core service, which does its work in one transaction. Webhook events are written to `webhook_events` inside that same transaction.
+Request flow: `RequestIdMiddleware` assigns the request id and logging scope → `UseExceptionHandler` with `ApiExceptionHandler` renders every failure as the error envelope → routing → `ApiKeyMiddleware` resolves the bearer key into a `Caller` and checks the roles the endpoint allows (`RequireRole` metadata) → the endpoint's validation filter → the handler calls a Core service, which does its work in one transaction. Webhook events are written to `webhook_events` inside that same transaction.
 
 Job flow: each worker loop creates a scope per pass and calls its runner's `RunOnceAsync(now)`. Runners list due work, then handle each item in its own scope and transaction.
 

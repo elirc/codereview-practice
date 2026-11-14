@@ -42,24 +42,19 @@ public sealed class ApiKeyMiddleware(RequestDelegate next)
 
         context.Features.Set(new Caller(key.Id, key.Role));
         requestContext.ApiKeyId = key.Id;
-        await next(context);
-    }
-}
 
-/// <summary>Rejects callers whose role is not in the allowed set.</summary>
-public sealed class RoleFilter(IReadOnlySet<ApiRole> allowed) : IEndpointFilter
-{
-    public ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
-    {
-        var caller = context.HttpContext.GetCaller();
-        if (!allowed.Contains(caller.Role))
+        var roleSets = context.GetEndpoint()?.Metadata.GetOrderedMetadata<AllowedRoles>() ?? [];
+        if (roleSets.Any(allowed => !allowed.Roles.Contains(key.Role)))
         {
             throw DomainException.Forbidden();
         }
 
-        return next(context);
+        await next(context);
     }
 }
+
+/// <summary>Endpoint metadata listing the roles that may call the endpoint.</summary>
+public sealed record AllowedRoles(IReadOnlySet<ApiRole> Roles);
 
 public static class AuthorizationExtensions
 {
@@ -70,5 +65,5 @@ public static class AuthorizationExtensions
     /// <summary>Allows only the given roles through the endpoints built from this builder.</summary>
     public static TBuilder RequireRole<TBuilder>(this TBuilder builder, params ApiRole[] roles)
         where TBuilder : IEndpointConventionBuilder =>
-        builder.AddEndpointFilter(new RoleFilter(roles.ToHashSet()));
+        builder.WithMetadata(new AllowedRoles(roles.ToHashSet()));
 }
