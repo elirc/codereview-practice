@@ -64,3 +64,8 @@ func notFoundIfNoRows(err error) error {
 	}
 	return err
 }
+
+// Queries returns the pool-backed queries, for tests and seeds.
+func (s *Service) Queries() *db.Queries {
+	return s.q
+}

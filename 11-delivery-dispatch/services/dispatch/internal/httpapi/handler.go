@@ -2,11 +2,13 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"deliverydispatch/pkg/envelope"
 	"deliverydispatch/pkg/httpx"
@@ -31,6 +33,9 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/offers/{id}/accept", h.wrap(h.acceptOffer))
 	r.Post("/offers/{id}/decline", h.wrap(h.declineOffer))
 	r.Get("/deliveries/{id}", h.wrap(h.getDelivery))
+	r.Post("/deliveries/{id}/pickup", h.wrap(h.deliveryAction(h.svc.Pickup)))
+	r.Post("/deliveries/{id}/deliver", h.wrap(h.deliveryAction(h.svc.Deliver)))
+	r.Post("/deliveries/{id}/abandon", h.wrap(h.deliveryAction(h.svc.Abandon)))
 }
 
 func (h *Handler) wrap(fn httpx.HandlerFunc) http.HandlerFunc {
@@ -104,4 +109,19 @@ func (h *Handler) getDelivery(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.WriteJSON(w, http.StatusOK, deliveryJSON(d))
 	return nil
+}
+
+func (h *Handler) deliveryAction(fn func(context.Context, uuid.UUID) (db.Delivery, error)) httpx.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		id, err := httpx.ParseUUID("id", chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		d, err := fn(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		httpx.WriteJSON(w, http.StatusOK, deliveryJSON(d))
+		return nil
+	}
 }

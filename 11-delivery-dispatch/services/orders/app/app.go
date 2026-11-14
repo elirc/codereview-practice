@@ -21,6 +21,7 @@ import (
 	"deliverydispatch/pkg/natsx"
 	"deliverydispatch/pkg/outbox"
 	"deliverydispatch/pkg/runner"
+	"deliverydispatch/services/orders/internal/consumers"
 	"deliverydispatch/services/orders/internal/httpapi"
 	"deliverydispatch/services/orders/internal/loops"
 	"deliverydispatch/services/orders/internal/service"
@@ -45,6 +46,8 @@ type App struct {
 	Service *service.Service
 	Router  http.Handler
 	Relay   *outbox.Relay
+
+	processors map[natsx.Stream]*inbox.Processor
 }
 
 // New wires the orders service from cfg and deps. deps.JS may be nil, in
@@ -52,6 +55,10 @@ type App struct {
 func New(cfg Config, deps Deps) *App {
 	svc := service.New(deps.Pool, cfg.Service, deps.Clock, deps.IDs, deps.Logger)
 	a := &App{cfg: cfg, deps: deps, Service: svc}
+	a.processors = map[natsx.Stream]*inbox.Processor{
+		natsx.StreamDispatch: inbox.NewProcessor(deps.Pool, natsx.DurableName(ServiceName, natsx.StreamDispatch),
+			consumers.DispatchHandlers(svc), deps.Clock, deps.IDs, deps.Logger),
+	}
 	if deps.JS != nil {
 		a.Relay = outbox.NewRelay(deps.Pool, natsx.NewPublisher(deps.JS), deps.Logger)
 	}
@@ -76,7 +83,7 @@ func (a *App) router() http.Handler {
 // Processors returns the inbox processors of the service's consumers, keyed by
 // stream.
 func (a *App) Processors() map[natsx.Stream]*inbox.Processor {
-	return map[natsx.Stream]*inbox.Processor{}
+	return a.processors
 }
 
 // Loops returns the service's periodic loops.

@@ -53,10 +53,31 @@ func onRelease(svc *service.Service) inbox.Handler {
 	}
 }
 
+type deliveredEvent struct {
+	DeliveryID         uuid.UUID `json:"delivery_id"`
+	CourierID          uuid.UUID `json:"courier_id"`
+	CourierPayoutMinor *int64    `json:"courier_payout_minor"`
+}
+
+func onDelivered(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		var d deliveredEvent
+		if err := env.DecodeData(&d); err != nil {
+			return err
+		}
+		if d.DeliveryID == uuid.Nil || d.CourierID == uuid.Nil || d.CourierPayoutMinor == nil || *d.CourierPayoutMinor < 0 {
+			return fmt.Errorf("%w: %s needs delivery_id, courier_id and courier_payout_minor", errInvalidData, env.Type)
+		}
+		return svc.HandleDelivered(ctx, tx, d.DeliveryID, d.CourierID, *d.CourierPayoutMinor)
+	}
+}
+
 // DispatchHandlers returns the handlers of the couriers-on-DISPATCH consumer.
 func DispatchHandlers(svc *service.Service) map[string]inbox.Handler {
 	return map[string]inbox.Handler{
 		"delivery.courier_requested": onCourierRequested(svc),
 		"delivery.courier_released":  onRelease(svc),
+		"delivery.unassigned":        onRelease(svc),
+		"delivery.delivered":         onDelivered(svc),
 	}
 }

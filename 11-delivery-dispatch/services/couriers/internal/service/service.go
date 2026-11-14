@@ -137,3 +137,8 @@ func notFoundIfNoRows(err error) error {
 	}
 	return err
 }
+
+// Currency returns the currency earnings are recorded in.
+func (s *Service) Currency() string {
+	return s.currency
+}
