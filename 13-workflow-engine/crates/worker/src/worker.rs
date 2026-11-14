@@ -1,13 +1,21 @@
-//! The claim loop: polls the configured queues and runs claimed jobs on spawned tasks.
+//! The claim loop: polls the configured queues, runs claimed jobs on spawned tasks and shuts
+//! down in stages.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use engine_store::claim::ClaimRef;
+use engine_store::StoreError;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::runner::{run_job, RunOutcome, RunnerEnv};
+
+/// How long running handlers get after their tokens are cancelled at shutdown.
+pub const CANCEL_WAIT: Duration = Duration::from_secs(5);
 
 /// Settings for the claim loop.
 #[derive(Debug, Clone)]
@@ -15,20 +23,36 @@ pub struct WorkerSettings {
     pub queues: Vec<String>,
     pub concurrency: usize,
     pub poll_interval: Duration,
+    pub shutdown_grace: Duration,
+}
+
+type Held = Arc<Mutex<HashMap<Uuid, ClaimRef>>>;
+
+fn lock(held: &Held) -> MutexGuard<'_, HashMap<Uuid, ClaimRef>> {
+    held.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 /// A worker process's claim loop.
 pub struct Worker {
     env: Arc<RunnerEnv>,
     settings: WorkerSettings,
+    held: Held,
+    hard_stop: CancellationToken,
 }
 
 impl Worker {
     pub fn new(env: Arc<RunnerEnv>, settings: WorkerSettings) -> Self {
-        Self { env, settings }
+        Self {
+            env,
+            settings,
+            held: Arc::new(Mutex::new(HashMap::new())),
+            hard_stop: CancellationToken::new(),
+        }
     }
 
-    /// Claims and runs jobs until `shutdown` is cancelled, then waits for running jobs.
+    /// Claims and runs jobs until `shutdown` is cancelled, then stops: running jobs get the
+    /// grace period to finish, then their tokens are cancelled, and claims still held after
+    /// a further [`CANCEL_WAIT`] are released.
     pub async fn run(self, shutdown: CancellationToken) {
         let slots = Arc::new(Semaphore::new(self.settings.concurrency));
         let mut tasks: JoinSet<RunOutcome> = JoinSet::new();
@@ -50,8 +74,7 @@ impl Worker {
                 }
             }
         }
-        tracing::info!(running = tasks.len(), "claiming stopped");
-        while tasks.join_next().await.is_some() {}
+        self.drain(tasks).await;
         tracing::info!("worker stopped");
     }
 
@@ -92,10 +115,14 @@ impl Worker {
                     Err(_) => break,
                 };
                 claimed += 1;
+                let job_id = job.id;
+                lock(&self.held).insert(job_id, job.claim_ref());
                 let env = self.env.clone();
-                let cancel = CancellationToken::new();
+                let held = self.held.clone();
+                let cancel = self.hard_stop.child_token();
                 tasks.spawn(async move {
                     let outcome = run_job(env, job, cancel).await;
+                    lock(&held).remove(&job_id);
                     drop(permit);
                     outcome
                 });
@@ -103,4 +130,47 @@ impl Worker {
         }
         claimed
     }
+
+    async fn drain(&self, mut tasks: JoinSet<RunOutcome>) {
+        tracing::info!(running = tasks.len(), "claiming stopped");
+        let finished = tokio::time::timeout(self.settings.shutdown_grace, join_all(&mut tasks))
+            .await
+            .is_ok();
+        if !finished {
+            tracing::warn!(running = tasks.len(), "grace period over; cancelling running jobs");
+            self.hard_stop.cancel();
+            if tokio::time::timeout(CANCEL_WAIT, join_all(&mut tasks))
+                .await
+                .is_err()
+            {
+                tracing::warn!(running = tasks.len(), "jobs did not stop; releasing their claims");
+                tasks.abort_all();
+                join_all(&mut tasks).await;
+            }
+        }
+        let remaining: Vec<ClaimRef> = lock(&self.held).drain().map(|(_, c)| c).collect();
+        for claim in remaining {
+            self.release(&claim).await;
+        }
+    }
+
+    async fn release(&self, claim: &ClaimRef) {
+        match self.env.store.release(claim, self.env.clock.now()).await {
+            Ok(state) => tracing::info!(
+                job_id = %claim.job_id,
+                state = state.as_str(),
+                "claim released"
+            ),
+            Err(StoreError::LeaseLost) => {
+                tracing::warn!(job_id = %claim.job_id, "claim no longer held; not released")
+            }
+            Err(err) => {
+                tracing::error!(job_id = %claim.job_id, error = %err, "could not release claim")
+            }
+        }
+    }
+}
+
+async fn join_all(tasks: &mut JoinSet<RunOutcome>) {
+    while tasks.join_next().await.is_some() {}
 }

@@ -42,3 +42,6 @@ Short records of places where the spec left a choice open.
 - **Retrying a run.** Failed and cancelled steps reuse their existing job (requeued as in 5.5),
   since a run has at most one job per step; that job keeps the payload it was created with,
   whose parent outputs have not changed.
+- **Purging jobs of finished runs.** Only standalone jobs are purged on their own. Jobs that belong
+  to a workflow run are deleted together with the run once the run finished longer ago than the
+  retention, so a failed run can still be retried and its detail page keeps its job ids.

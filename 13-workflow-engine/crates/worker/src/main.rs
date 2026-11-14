@@ -53,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         queues: config.queues.clone(),
         concurrency: config.concurrency,
         poll_interval: config.poll_interval,
+        shutdown_grace: config.shutdown_grace,
     };
 
     let stop = CancellationToken::new();

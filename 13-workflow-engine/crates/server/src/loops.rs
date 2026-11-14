@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use engine_core::clock::{Clock, JitterSource, SyncedClock};
-use engine_store::{clock_sync, reaper, schedules, StoreError};
+use engine_store::{clock_sync, purge, reaper, schedules, StoreError};
 use sqlx::PgPool;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 pub const SCHEDULER_INTERVAL: Duration = Duration::from_secs(1);
 pub const REAPER_INTERVAL: Duration = Duration::from_secs(5);
 pub const CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(30);
+pub const PURGE_INTERVAL: Duration = Duration::from_secs(3600);
 
 /// The clock to keep aligned with the database, and the offset worth a warning.
 #[derive(Clone)]
@@ -29,6 +30,8 @@ pub struct LoopContext {
     pub clock: Arc<dyn Clock>,
     pub jitter: Arc<dyn JitterSource>,
     pub clock_sync: Option<ClockSync>,
+    /// How long finished jobs and runs are kept.
+    pub retention: chrono::Duration,
 }
 
 /// Starts every server loop. They stop after their current pass once `shutdown` is cancelled.
@@ -55,6 +58,18 @@ pub fn spawn_all(ctx: LoopContext, shutdown: CancellationToken) -> Vec<JoinHandl
         }
     };
     handles.push(tokio::spawn(run_every("reaper", REAPER_INTERVAL, shutdown.clone(), reap)));
+
+    let purge_ctx = ctx.clone();
+    let purge_old = move || {
+        let ctx = purge_ctx.clone();
+        async move { purge::purge_finished(&ctx.pool, ctx.clock.now(), ctx.retention).await }
+    };
+    handles.push(tokio::spawn(run_every(
+        "purge",
+        PURGE_INTERVAL,
+        shutdown.clone(),
+        purge_old,
+    )));
 
     if let Some(sync) = ctx.clock_sync.clone() {
         let pool = ctx.pool.clone();

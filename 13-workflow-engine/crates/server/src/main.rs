@@ -56,6 +56,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
                 clock: synced.clone(),
                 warn_ms: config.clock_skew_warn_ms,
             }),
+            retention: chrono::Duration::days(config.retention_days),
         };
         loops::spawn_all(ctx, loops_shutdown.clone())
     } else {
