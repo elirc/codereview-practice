@@ -29,3 +29,8 @@ func Offers(svc *service.Service) runner.Loop {
 func OfferExpiry(svc *service.Service) runner.Loop {
 	return loop("offer-expiry", time.Second, svc.ExpireOffers)
 }
+
+// ReservationExpiry releases reservations past their deadline.
+func ReservationExpiry(svc *service.Service) runner.Loop {
+	return loop("reservation-expiry", 2*time.Second, svc.ExpireReservations)
+}

@@ -95,6 +95,7 @@ func (a *App) Loops() []runner.Loop {
 	return []runner.Loop{
 		loops.Offers(a.Service),
 		loops.OfferExpiry(a.Service),
+		loops.ReservationExpiry(a.Service),
 		{Name: "purge", Interval: time.Hour, RunOnce: a.purge},
 	}
 }

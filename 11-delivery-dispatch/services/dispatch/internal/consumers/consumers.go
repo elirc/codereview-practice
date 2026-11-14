@@ -138,6 +138,45 @@ func onCourierLocationUpdated(svc *service.Service) inbox.Handler {
 	}
 }
 
+type courierReservation struct {
+	CourierID  uuid.UUID `json:"courier_id"`
+	DeliveryID uuid.UUID `json:"delivery_id"`
+}
+
+func decodeReservation(env envelope.Envelope) (courierReservation, error) {
+	var d courierReservation
+	if err := env.DecodeData(&d); err != nil {
+		return d, err
+	}
+	if d.CourierID == uuid.Nil {
+		return d, invalid(env.Type, "courier_id")
+	}
+	if d.DeliveryID == uuid.Nil {
+		return d, invalid(env.Type, "delivery_id")
+	}
+	return d, nil
+}
+
+func onCourierReserved(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		d, err := decodeReservation(env)
+		if err != nil {
+			return err
+		}
+		return svc.HandleReserved(ctx, tx, d.CourierID, d.DeliveryID)
+	}
+}
+
+func onReservationRejected(svc *service.Service) inbox.Handler {
+	return func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		d, err := decodeReservation(env)
+		if err != nil {
+			return err
+		}
+		return svc.HandleReservationRejected(ctx, tx, d.CourierID, d.DeliveryID)
+	}
+}
+
 // OrdersHandlers returns the handlers of the dispatch-on-ORDERS consumer.
 func OrdersHandlers(svc *service.Service) map[string]inbox.Handler {
 	return map[string]inbox.Handler{
@@ -148,7 +187,9 @@ func OrdersHandlers(svc *service.Service) map[string]inbox.Handler {
 // CouriersHandlers returns the handlers of the dispatch-on-COURIERS consumer.
 func CouriersHandlers(svc *service.Service) map[string]inbox.Handler {
 	return map[string]inbox.Handler{
-		"courier.status_changed":   onCourierStatusChanged(svc),
-		"courier.location_updated": onCourierLocationUpdated(svc),
+		"courier.status_changed":       onCourierStatusChanged(svc),
+		"courier.location_updated":     onCourierLocationUpdated(svc),
+		"courier.reserved":             onCourierReserved(svc),
+		"courier.reservation_rejected": onReservationRejected(svc),
 	}
 }
