@@ -227,8 +227,7 @@ describe('memberships', () => {
         cookie: f.users.vic.cookie,
       });
       expect(res.statusCode).toBe(204);
-      const after = await call(ctx, 'GET', '/api/orgs/acme', { cookie: f.users.vic.cookie });
-      expect(after.statusCode).toBe(404);
+      expect(await roleOf(f.acme.id, f.users.vic.id)).toBeUndefined();
     });
 
     it('does not let the last owner leave', async () => {

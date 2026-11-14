@@ -3,6 +3,7 @@ import { notFound } from '../lib/errors.js';
 import type { Role } from '../lib/permissions.js';
 import { findMembershipBySlug } from '../modules/orgs/repo.js';
 import { currentUser } from './auth.js';
+import { cachedMembership, rememberMembership } from './membership-cache.js';
 
 export interface TenantContext {
   orgId: string;
@@ -24,9 +25,15 @@ export function registerTenantContext(app: FastifyInstance): void {
 export async function resolveTenant(request: FastifyRequest): Promise<void> {
   const user = currentUser(request);
   const { orgSlug } = request.params as { orgSlug: string };
-  const membership = await findMembershipBySlug(orgSlug, user.id, request.server.deps.db);
+  const { db, clock } = request.server.deps;
+  const now = clock.now();
+  let membership = cachedMembership(orgSlug, user.id, now);
   if (!membership) {
-    throw notFound();
+    membership = await findMembershipBySlug(orgSlug, user.id, db);
+    if (!membership) {
+      throw notFound();
+    }
+    rememberMembership(orgSlug, user.id, membership, now);
   }
   request.tenant = { orgId: membership.orgId, role: membership.role, userId: user.id };
 }

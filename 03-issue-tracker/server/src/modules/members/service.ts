@@ -5,6 +5,7 @@ import type { DB } from '../../db/types.js';
 import { buildPage, decodeCursor } from '../../lib/cursor.js';
 import { conflict, forbidden, notFound, unprocessable } from '../../lib/errors.js';
 import { assertCan, canManageMember, type Role } from '../../lib/permissions.js';
+import { forgetMembership } from '../../plugins/membership-cache.js';
 import type { TenantContext } from '../../plugins/tenant.js';
 import { normalizeEmail } from '../auth/service.js';
 import {
@@ -127,6 +128,7 @@ export async function changeMemberRole(
     }
     await updateMembershipRole(tenant.orgId, userId, role, trx);
   });
+  forgetMembership(tenant.orgId, userId);
   return loadMember(deps, tenant.orgId, userId);
 }
 
@@ -144,4 +146,5 @@ export async function removeMember(
     await unassignMemberIssues(tenant.orgId, userId, deps.clock.now(), trx);
     await deleteMembership(tenant.orgId, userId, trx);
   });
+  forgetMembership(tenant.orgId, userId);
 }
