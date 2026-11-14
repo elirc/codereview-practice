@@ -20,6 +20,8 @@
 			{/if}
 			{#if data.user.role === 'admin'}
 				<a href="/admin/users">Users</a>
+				<a href="/admin/outbox">Outbox</a>
+				<a href="/admin/jobs">Jobs</a>
 			{/if}
 		</nav>
 		<span class="muted">{data.user.name} ({data.user.role})</span>

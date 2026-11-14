@@ -11,6 +11,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"start": "node build",
+		"worker": "tsx src/worker/main.ts",
 		"db:migrate": "tsx scripts/migrate.ts",
 		"db:generate": "drizzle-kit generate",
 		"prepare": "svelte-kit sync || echo ''",

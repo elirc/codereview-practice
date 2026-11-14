@@ -41,3 +41,8 @@ Choices made where the spec left room for interpretation.
 
 **Unclear:** the two-hour cut-off is described for volunteers and the until-end rule for coordinators removing anyone.
 **Chosen:** the rule follows the actor's role, so a coordinator or admin may cancel any signup, including their own, until the shift ends. The `signup-cancelled` notice is only sent when the actor is not the signup's owner.
+
+## Job failure backoff
+
+**Unclear:** whether `60 × 2^consecutiveFailures` uses the failure count before or after the failure being recorded.
+**Chosen:** after: the counter is incremented first, so the first failure waits 120 s, the second 240 s, and so on, never more than the job's interval.
