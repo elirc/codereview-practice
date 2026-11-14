@@ -110,6 +110,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/tenants/{id}", s.showTenant)
 			r.Get("/leases", s.listLeases)
 			r.Get("/leases/{id}", s.showLease)
+			r.Get("/leases/{id}/ledger", s.showLedger)
+			r.Get("/reports/rent-roll", s.rentRoll)
+			r.Get("/reports/aging", s.aging)
+			r.Get("/api/leases/{id}/statement", s.apiStatement)
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.require(auth.PermEdit))
@@ -126,6 +130,25 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/leases/{id}/end", s.endLeaseForm)
 				r.Post("/leases/{id}/end", s.endLease)
 				r.Post("/leases/{id}/delete", s.deleteLease)
+				r.Post("/leases/{id}/entries", s.createEntry)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(s.require(auth.PermReverse))
+				r.Post("/entries/{id}/reverse", s.reverseEntry)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(s.require(auth.PermRunJobs))
+				r.Get("/admin/jobs", s.listJobs)
+				r.Post("/admin/jobs/{name}/run", s.runJob)
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(s.require(auth.PermManageUsers))
+				r.Get("/admin/users", s.listUsers)
+				r.Post("/admin/users", s.createUser)
+				r.Post("/admin/users/{id}", s.updateUser)
 			})
 		})
 	})

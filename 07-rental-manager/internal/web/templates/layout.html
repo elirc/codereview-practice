@@ -17,6 +17,10 @@
     <a href="/properties">Properties</a>
     <a href="/tenants">Tenants</a>
     <a href="/leases">Leases</a>
+    <a href="/reports/rent-roll">Rent roll</a>
+    <a href="/reports/aging">Aging</a>
+    {{if can . "jobs"}}<a href="/admin/jobs">Jobs</a>{{end}}
+    {{if can . "users"}}<a href="/admin/users">Users</a>{{end}}
   </nav>
   <form method="post" action="/logout" class="inline">
     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
