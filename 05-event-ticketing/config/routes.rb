@@ -6,6 +6,12 @@ Rails.application.routes.draw do
 
   resources :events, only: :show
 
+  resources :tiers, only: [] do
+    resources :holds, only: :create
+  end
+
+  resources :holds, only: %i[ show destroy ]
+
   namespace :manage do
     resources :events do
       member do

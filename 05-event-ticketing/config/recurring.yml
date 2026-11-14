@@ -1,0 +1,11 @@
+default: &default
+  sweep_expired_holds:
+    class: SweepExpiredHoldsJob
+    queue: default
+    schedule: every minute
+
+development:
+  <<: *default
+
+production:
+  <<: *default

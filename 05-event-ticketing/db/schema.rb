@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_11_14_090400) do
+ActiveRecord::Schema[8.0].define(version: 2026_11_14_090500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -30,6 +30,26 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090400) do
     t.index ["status", "starts_at"], name: "index_events_on_status_and_starts_at"
     t.check_constraint "(ends_at > starts_at)", name: "events_ends_after_start"
     t.check_constraint "((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'cancelled'::character varying])::text[]))", name: "events_status_valid"
+  end
+
+  create_table "holds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.uuid "ticket_tier_id", null: false
+    t.integer "quantity", null: false
+    t.integer "unit_price_cents", null: false
+    t.string "status", default: "active", null: false
+    t.string "source", default: "direct", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["status", "expires_at"], name: "index_holds_on_status_and_expires_at"
+    t.index ["ticket_tier_id"], name: "index_holds_on_ticket_tier_id"
+    t.index ["user_id"], name: "index_holds_on_user_id"
+    t.index ["user_id", "ticket_tier_id"], name: "index_holds_one_active_per_user_and_tier", unique: true, where: "((status)::text = 'active'::text)"
+    t.check_constraint "(quantity > 0)", name: "holds_quantity_positive"
+    t.check_constraint "((source)::text = ANY ((ARRAY['direct'::character varying, 'waitlist'::character varying])::text[]))", name: "holds_source_valid"
+    t.check_constraint "((status)::text = ANY ((ARRAY['active'::character varying, 'converted'::character varying, 'released'::character varying, 'expired'::character varying])::text[]))", name: "holds_status_valid"
+    t.check_constraint "(unit_price_cents >= 0)", name: "holds_unit_price_nonnegative"
   end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -194,6 +214,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_11_14_090400) do
   end
 
   add_foreign_key "events", "users", column: "organizer_id"
+  add_foreign_key "holds", "ticket_tiers"
+  add_foreign_key "holds", "users"
   add_foreign_key "sessions", "users"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

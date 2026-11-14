@@ -2,5 +2,16 @@
   <td><%= tier.name %></td>
   <td><%= format_cents(tier.price_cents) %></td>
   <td><%= tier.available.positive? ? "#{tier.available} available" : "Sold out" %></td>
-  <td></td>
+  <td>
+    <% if event.published? && tier.available.positive? %>
+      <% if authenticated? %>
+        <%= form_with url: tier_holds_path(tier), class: "inline-form" do |form| %>
+          <%= form.number_field :quantity, value: 1, min: 1, max: tier.per_order_limit, step: 1 %>
+          <%= form.submit "Hold tickets" %>
+        <% end %>
+      <% else %>
+        <%= link_to "Sign in to buy", new_session_path %>
+      <% end %>
+    <% end %>
+  </td>
 </tr>

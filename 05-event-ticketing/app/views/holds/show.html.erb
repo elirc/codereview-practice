@@ -1,0 +1,21 @@
+<% content_for :title, "Checkout" %>
+
+<h1>Checkout — <%= @event.title %></h1>
+
+<p>
+  <%= @hold.quantity %> × <%= @tier.name %> at <%= format_cents(@hold.unit_price_cents) %> each
+</p>
+
+<% if @hold.live?(@now) %>
+  <p>
+    Your tickets are held until
+    <%= format_in_zone(@hold.expires_at, @event.time_zone) %>.
+  </p>
+
+  <p>Subtotal: <strong><%= format_cents(@hold.subtotal_cents) %></strong></p>
+
+  <%= button_to "Release tickets", hold_path(@hold), method: :delete %>
+<% else %>
+  <p class="flash alert" data-error-code="hold_expired">This hold is no longer active.</p>
+  <p><%= link_to "Back to the event", event_path(@event) %></p>
+<% end %>

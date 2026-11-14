@@ -27,6 +27,18 @@ class TicketTierTest < ActiveSupport::TestCase
     end
   end
 
+  test "counter changes rejected by the database raise insufficient capacity" do
+    tier = ticket_tiers(:vip)
+
+    error = assert_raises(DomainError) do
+      TicketTier.transaction(requires_new: true) { tier.adjust_counts!(held: 11) }
+    end
+
+    assert_equal :insufficient_capacity, error.code
+    assert_equal 0, tier.held_count
+    assert_equal 0, tier.reload.held_count
+  end
+
   test "validates prices and limits" do
     tier = TicketTier.new(event: events(:concert), name: "", price_cents: -1, capacity: 1, per_order_limit: 0)
 
