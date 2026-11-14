@@ -86,6 +86,29 @@ describe('worker crashes', () => {
 		]);
 	});
 
+	it('leaves a delivered row in sending when recording the result fails', async () => {
+		const row = queueOne();
+		ctx.connection.sqlite.exec(`
+			CREATE TRIGGER block_sent BEFORE UPDATE ON outbox
+			WHEN NEW.status = 'sent'
+			BEGIN SELECT RAISE(ABORT, 'disk full'); END;
+		`);
+		const providers = recordingProviders();
+		const result = await dispatchOnce({ ctx, ...providers });
+		expect(result.outcomes[row.id]).toBe('lost');
+		expect(providers.email.calls).toHaveLength(1);
+		const stuck = ctx.db.select().from(outbox).where(eq(outbox.id, row.id)).get();
+		expect(stuck).toMatchObject({ status: 'sending', attempts: 1, lastError: null });
+
+		ctx.connection.sqlite.exec('DROP TRIGGER block_sent');
+		ctx.advance(SENDING_LOCK_MS + 1);
+		await dispatchOnce({ ctx, ...providers });
+		const sent = ctx.db.select().from(outbox).where(eq(outbox.id, row.id)).get();
+		expect(sent).toMatchObject({ status: 'sent', attempts: 2 });
+		const keys = new Set(providers.email.calls.map((call) => call.options.idempotencyKey));
+		expect(keys.size).toBe(1);
+	});
+
 	it('lets another worker take over a job whose runner died', async () => {
 		createSeries(ctx, {
 			title: 'Daily sort',

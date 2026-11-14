@@ -3,7 +3,7 @@ import type { SQLiteUpdateSetSource } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
 import { IMMEDIATE, isBusyError } from '../db/client';
 import { outbox, type OutboxRow } from '../db/schema';
-import { PermanentProviderError, type Providers } from './providers';
+import { PermanentProviderError, type Providers, type SendResult } from './providers';
 import { PayloadError, prepareDelivery, type Delivery, type RenderedMessage } from './render';
 import { backoffMs, isQuietHours, MAX_ATTEMPTS, quietHoursEnd } from './schedule';
 
@@ -54,7 +54,6 @@ export function claimBatch(ctx: AppContext, limit = BATCH_SIZE): OutboxRow[] {
 
 type RowUpdate = SQLiteUpdateSetSource<typeof outbox>;
 
-/** Applies an update only while this worker still holds the row. */
 function record(ctx: AppContext, id: string, values: RowUpdate): boolean {
 	const result = ctx.db
 		.update(outbox)
@@ -120,17 +119,9 @@ export async function processRow(deps: DispatcherDeps, row: OutboxRow): Promise<
 		return ok ? 'deferred' : 'lost';
 	}
 
+	let result: SendResult;
 	try {
-		const result = await send(deps, row, delivery.message);
-		const ok = record(ctx, row.id, {
-			status: 'sent',
-			lockedAt: null,
-			sentAt: ctx.now(),
-			providerMessageId: result.providerMessageId,
-			lastError: null
-		});
-		log.info({ providerMessageId: result.providerMessageId }, 'notification sent');
-		return ok ? 'sent' : 'lost';
+		result = await send(deps, row, delivery.message);
 	} catch (err) {
 		const finished = ctx.now();
 		if (err instanceof PermanentProviderError) {
@@ -153,6 +144,21 @@ export async function processRow(deps: DispatcherDeps, row: OutboxRow): Promise<
 		});
 		return ok ? 'retry' : 'lost';
 	}
+
+	log.info({ providerMessageId: result.providerMessageId }, 'notification sent');
+	try {
+		const ok = record(ctx, row.id, {
+			status: 'sent',
+			lockedAt: null,
+			sentAt: ctx.now(),
+			providerMessageId: result.providerMessageId,
+			lastError: null
+		});
+		return ok ? 'sent' : 'lost';
+	} catch (err) {
+		log.error({ err }, 'could not record a sent notification');
+		return 'lost';
+	}
 }
 
 /** One dispatcher tick: claim a batch and process every row in it. */
@@ -174,7 +180,6 @@ export async function dispatchOnce(deps: DispatcherDeps): Promise<DispatchResult
 		try {
 			outcomes[row.id] = await processRow(deps, row);
 		} catch (err) {
-			// The row stays in `sending` and is retried once its lock expires.
 			ctx.logger.error({ err, outboxId: row.id }, 'outbox row processing failed');
 			outcomes[row.id] = 'lost';
 		}
