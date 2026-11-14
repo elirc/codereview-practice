@@ -1,0 +1,38 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[2345]..","swap":true}]}'>
+<title>{{.Title}} · Rental Manager</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/vendor/htmx.min.js" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+<header>
+  <strong>Rental Manager</strong>
+  {{with .User}}
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/properties">Properties</a>
+    <a href="/tenants">Tenants</a>
+    <a href="/leases">Leases</a>
+    <a href="/reports/rent-roll">Rent roll</a>
+    <a href="/reports/aging">Aging</a>
+    {{if can . "jobs"}}<a href="/admin/jobs">Jobs</a>{{end}}
+    {{if can . "users"}}<a href="/admin/users">Users</a>{{end}}
+  </nav>
+  <form method="post" action="/logout" class="inline">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+    <span>{{.Name}} ({{.Role}})</span>
+    <button type="submit">Sign out</button>
+  </form>
+  {{end}}
+</header>
+<main>
+  <div id="flash">{{template "flash" .}}</div>
+  {{template "content" .}}
+</main>
+</body>
+</html>
+{{end}}

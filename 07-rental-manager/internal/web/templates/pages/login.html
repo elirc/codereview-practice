@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>Sign in</h1>
+<form method="post" action="/login" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <label>Email
+    <input type="email" name="email" value="{{.Form.Get "email"}}" required autofocus>
+    {{template "field_error" index .Errors "email"}}
+  </label>
+  <label>Password
+    <input type="password" name="password" required>
+    {{template "field_error" index .Errors "password"}}
+  </label>
+  <button type="submit">Sign in</button>
+</form>
+{{end}}

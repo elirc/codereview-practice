@@ -1,0 +1,80 @@
+{{define "content"}}
+{{with .Data.Detail}}
+<h1>Ledger: {{.Property.Name}} · {{.Unit.Label}}</h1>
+<p><a href="/leases/{{uuid .Lease.ID}}">Back to the lease</a> · status {{.Lease.Status}}</p>
+{{end}}
+{{template "ledger_panel" .}}
+{{end}}
+
+{{define "ledger_panel"}}
+{{$id := uuid .Data.Detail.Lease.ID}}
+{{$st := .Data.Statement}}
+<div id="ledger-panel">
+  {{with .Data.Notice}}<p class="flash">{{.}}</p>{{end}}
+  <form method="get" action="/leases/{{$id}}/ledger" class="inline"
+    hx-get="/leases/{{$id}}/ledger" hx-target="#ledger-panel" hx-swap="outerHTML">
+    <label>From <input type="date" name="from" value="{{date $st.From}}"></label>
+    <label>To <input type="date" name="to" value="{{date $st.To}}"></label>
+    <button type="submit">Show</button>
+    <a href="/api/leases/{{$id}}/statement?from={{date $st.From}}&amp;to={{date $st.To}}">JSON</a>
+  </form>
+
+  <table class="ledger">
+    <thead><tr><th>#</th><th>Date</th><th>Kind</th><th>Period</th><th>Memo</th><th class="num">Amount</th><th class="num">Balance</th><th></th></tr></thead>
+    <tbody>
+      <tr><td colspan="6">Opening balance</td><td class="num">{{cents $st.Opening}}</td><td></td></tr>
+      {{range .Data.Lines}}
+      <tr>
+        <td>{{.ID}}</td><td>{{date .Date}}</td><td>{{kind .Kind}}</td><td>{{.Period}}</td>
+        <td>{{.Memo}}
+          {{if .ReversesID}}<span class="muted">(reverses #{{.ReversesID}})</span>{{end}}
+          {{if .ReversedBy}}<span class="muted">(reversed by #{{.ReversedBy}})</span>{{end}}</td>
+        <td class="num">{{cents .Amount}}</td><td class="num">{{cents .Balance}}</td>
+        <td>
+          {{if .Reversible}}
+          <form method="post" action="/entries/{{.ID}}/reverse" class="inline"
+            hx-post="/entries/{{.ID}}/reverse" hx-target="#ledger-panel" hx-swap="outerHTML">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="from" value="{{date $st.From}}">
+            <input type="hidden" name="to" value="{{date $st.To}}">
+            <input name="memo" placeholder="Reason" required maxlength="200" size="12">
+            <button type="submit">Reverse</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+      <tr><td colspan="6">Closing balance</td><td class="num">{{cents $st.Closing}}</td><td></td></tr>
+    </tbody>
+  </table>
+
+  {{if and (can .User "edit") (ne .Data.Detail.Lease.Status "draft")}}
+  <h2>Record an entry</h2>
+  {{template "field_error" index .Errors "_form"}}
+  <form method="post" action="/leases/{{$id}}/entries" class="stacked"
+    hx-post="/leases/{{$id}}/entries" hx-target="#ledger-panel" hx-swap="outerHTML">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="idempotency_key" value="{{.Data.Key}}">
+    <input type="hidden" name="from" value="{{date $st.From}}">
+    <input type="hidden" name="to" value="{{date $st.To}}">
+    {{$kind := .Form.Get "kind"}}
+    <label>Kind
+      <select name="kind">
+        <option value="payment" {{if eq $kind "payment"}}selected{{end}}>Payment</option>
+        <option value="credit" {{if eq $kind "credit"}}selected{{end}}>Credit</option>
+        <option value="other_charge" {{if eq $kind "other_charge"}}selected{{end}}>Other charge</option>
+      </select>
+      {{template "field_error" index .Errors "kind"}}
+    </label>
+    <label>Amount <input name="amount" value="{{.Form.Get "amount"}}" placeholder="1250.00" required>
+      {{template "field_error" index .Errors "amount"}}</label>
+    <label>Date <input name="entry_date" type="date" value="{{.Form.Get "entry_date"}}" required>
+      {{template "field_error" index .Errors "entry_date"}}</label>
+    <label>Memo <input name="memo" value="{{.Form.Get "memo"}}" maxlength="200">
+      {{template "field_error" index .Errors "memo"}}</label>
+    {{template "field_error" index .Errors "idempotency_key"}}
+    <button type="submit">Record entry</button>
+  </form>
+  {{end}}
+</div>
+{{end}}

@@ -1,0 +1,10 @@
+{{define "flash"}}{{with .Flash}}<p class="flash">{{.}}</p>{{end}}{{end}}
+
+{{define "error_message"}}
+<div class="flash error" role="alert">
+  <p>{{.Data.Message}} <code>{{.Data.Code}}</code></p>
+  {{with .Data.Fields}}<ul>{{range .}}<li>{{.Path}} {{.Message}}</li>{{end}}</ul>{{end}}
+</div>
+{{end}}
+
+{{define "field_error"}}{{with .}}<span class="field-error">{{.}}</span>{{end}}{{end}}

@@ -1,0 +1,49 @@
+{{define "content"}}
+<h1>Users</h1>
+{{$failed := .Data.Failed}}
+<table>
+  <thead><tr><th>Email</th><th>Name / role / status / new password</th></tr></thead>
+  <tbody>
+  {{range .Data.Users}}
+    {{$id := uuid .ID}}
+    {{$mine := eq $failed $id}}
+    <tr>
+      <td>{{.Email}}</td>
+      <td>
+        <form method="post" action="/admin/users/{{$id}}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input name="name" value="{{if $mine}}{{$.Form.Get "name"}}{{else}}{{.Name}}{{end}}" required maxlength="120">
+          {{$role := printf "%s" .Role}}{{if $mine}}{{$role = $.Form.Get "role"}}{{end}}
+          <select name="role">
+            {{range $.Data.Roles}}<option value="{{.}}" {{if eq $role (printf "%s" .)}}selected{{end}}>{{.}}</option>{{end}}
+          </select>
+          <label><input type="checkbox" name="active" value="on" {{if .Active}}checked{{end}}> active</label>
+          <input type="password" name="password" placeholder="New password" autocomplete="new-password">
+          <button type="submit">Save</button>
+          {{if $mine}}{{range $field, $msg := $.Errors}}<span class="field-error">{{if ne $field "_form"}}{{$field}} {{end}}{{$msg}}</span>{{end}}{{end}}
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+
+<h2>Add a user</h2>
+{{$new := eq $failed "new"}}
+<form method="post" action="/admin/users" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <label>Email <input type="email" name="email" value="{{if $new}}{{.Form.Get "email"}}{{end}}" required>
+    {{if $new}}{{template "field_error" index .Errors "email"}}{{end}}</label>
+  <label>Name <input name="name" value="{{if $new}}{{.Form.Get "name"}}{{end}}" required maxlength="120">
+    {{if $new}}{{template "field_error" index .Errors "name"}}{{end}}</label>
+  <label>Role
+    {{$role := .Form.Get "role"}}
+    <select name="role">
+      {{range .Data.Roles}}<option value="{{.}}" {{if eq $role (printf "%s" .)}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    {{if $new}}{{template "field_error" index .Errors "role"}}{{end}}</label>
+  <label>Password (at least 10 characters) <input type="password" name="password" required autocomplete="new-password">
+    {{if $new}}{{template "field_error" index .Errors "password"}}{{end}}</label>
+  <button type="submit">Create user</button>
+</form>
+{{end}}

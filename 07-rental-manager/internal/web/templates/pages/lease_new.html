@@ -1,0 +1,13 @@
+{{define "content"}}
+<h1>New lease</h1>
+<p class="muted">New leases start as drafts. Activate a draft to start billing.</p>
+{{template "field_error" index .Errors "_form"}}
+<form method="post" action="/leases" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "lease_terms" .}}
+  {{template "lease_fees" .}}
+  {{template "lease_tenants" .}}
+  <button type="submit">Create draft lease</button>
+</form>
+<p><a href="/leases">All leases</a></p>
+{{end}}

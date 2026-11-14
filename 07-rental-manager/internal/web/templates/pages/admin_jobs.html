@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Jobs</h1>
+<p class="muted">The worker runs each job once per day. A manual run uses the same rules; entries already posted are skipped.</p>
+{{template "field_error" index .Errors "_form"}}
+{{range .Data.Names}}
+<form method="post" action="/admin/jobs/{{.}}/run" class="inline">
+  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+  <strong>{{.}}</strong>
+  <label>as of <input type="date" name="as_of" value="{{$.Form.Get "as_of"}}"></label>
+  <button type="submit">Run now</button>
+</form>
+<br>
+{{end}}
+{{template "field_error" index .Errors "as_of"}}
+
+<h2>Recent runs</h2>
+<table>
+  <thead><tr><th>Job</th><th>As of</th><th>Started</th><th>Finished</th><th>Status</th><th class="num">Leases</th><th class="num">Entries</th><th>Errors</th></tr></thead>
+  <tbody>
+  {{range .Data.Runs}}
+    <tr>
+      <td>{{.Job}}</td><td>{{date .AsOf}}</td><td>{{ts .StartedAt}}</td><td>{{ts .FinishedAt}}</td>
+      <td class="status-{{.Status}}">{{.Status}}</td><td class="num">{{.LeasesProcessed}}</td><td class="num">{{.EntriesPosted}}</td>
+      <td>{{range .LeaseErrors}}<div>{{with .LeaseID}}<a href="/leases/{{.}}">{{.}}</a>: {{end}}{{.Error}}</div>{{end}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="8" class="muted">No runs yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

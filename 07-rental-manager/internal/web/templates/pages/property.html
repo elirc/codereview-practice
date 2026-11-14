@@ -1,0 +1,65 @@
+{{define "content"}}
+{{$canEdit := can .User "edit"}}
+{{with .Data.Property}}
+<h1>{{.Name}}</h1>
+<p>{{.Address}}</p>
+{{end}}
+
+{{if $canEdit}}
+<h2>Edit property</h2>
+<form method="post" action="/properties/{{uuid .Data.Property.ID}}" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{$failed := eq .Data.Failed "property"}}
+  <label>Name <input name="name" value="{{if $failed}}{{.Form.Get "name"}}{{else}}{{.Data.Property.Name}}{{end}}" required maxlength="120">
+    {{if $failed}}{{template "field_error" index .Errors "name"}}{{end}}</label>
+  <label>Address <input name="address" value="{{if $failed}}{{.Form.Get "address"}}{{else}}{{.Data.Property.Address}}{{end}}" required maxlength="240">
+    {{if $failed}}{{template "field_error" index .Errors "address"}}{{end}}</label>
+  <button type="submit">Save property</button>
+</form>
+{{end}}
+
+<h2>Units</h2>
+<table>
+  <thead><tr><th>Label</th><th>Bedrooms</th><th class="num">Market rent</th>{{if $canEdit}}<th></th>{{end}}</tr></thead>
+  <tbody>
+  {{range .Data.Units}}
+    {{$id := uuid .ID}}
+    {{$failed := eq $.Data.Failed $id}}
+    <tr>
+    {{if $canEdit}}
+      <td colspan="4">
+        <form method="post" action="/units/{{$id}}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input name="label" size="8" value="{{if $failed}}{{$.Form.Get "label"}}{{else}}{{.Label}}{{end}}" required maxlength="40">
+          <input name="bedrooms" type="number" min="0" max="20" value="{{if $failed}}{{$.Form.Get "bedrooms"}}{{else}}{{.Bedrooms}}{{end}}" required>
+          <input name="market_rent" size="10" value="{{if $failed}}{{$.Form.Get "market_rent"}}{{else}}{{plain .MarketRentCents}}{{end}}" required>
+          <button type="submit">Save</button>
+          {{if $failed}}{{range $field, $msg := $.Errors}}<span class="field-error">{{$field}} {{$msg}}</span>{{end}}{{end}}
+        </form>
+      </td>
+    {{else}}
+      <td>{{.Label}}</td><td>{{.Bedrooms}}</td><td class="num">{{cents .MarketRentCents}}</td>
+    {{end}}
+    </tr>
+  {{else}}
+    <tr><td colspan="4" class="muted">No units yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if $canEdit}}
+<h2>Add a unit</h2>
+{{$failed := eq .Data.Failed "new-unit"}}
+<form method="post" action="/properties/{{uuid .Data.Property.ID}}/units" class="stacked">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <label>Label <input name="label" value="{{if $failed}}{{.Form.Get "label"}}{{end}}" required maxlength="40">
+    {{if $failed}}{{template "field_error" index .Errors "label"}}{{end}}</label>
+  <label>Bedrooms <input name="bedrooms" type="number" min="0" max="20" value="{{if $failed}}{{.Form.Get "bedrooms"}}{{else}}1{{end}}" required>
+    {{if $failed}}{{template "field_error" index .Errors "bedrooms"}}{{end}}</label>
+  <label>Market rent <input name="market_rent" value="{{if $failed}}{{.Form.Get "market_rent"}}{{end}}" placeholder="1250.00" required>
+    {{if $failed}}{{template "field_error" index .Errors "market_rent"}}{{end}}</label>
+  <button type="submit">Add unit</button>
+</form>
+{{end}}
+<p><a href="/properties">All properties</a></p>
+{{end}}

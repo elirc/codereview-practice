@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Rent roll</h1>
+<form method="get" action="/reports/rent-roll" class="inline">
+  <label>As of <input type="date" name="as_of" value="{{date .Data.AsOf}}"></label>
+  <button type="submit">Show</button>
+</form>
+<table>
+  <thead><tr><th>Property</th><th>Unit</th><th>Primary tenant</th><th class="num">Rent</th><th class="num">Balance</th><th>Oldest unpaid charge</th><th class="num">Days past due</th></tr></thead>
+  <tbody>
+  {{range .Data.Rows}}
+    <tr>
+      <td>{{.Property}}</td><td><a href="/leases/{{uuid .ID}}/ledger">{{.Unit}}</a></td><td>{{.Tenant}}</td>
+      <td class="num">{{cents .Rent}}</td><td class="num">{{cents .Balance}}</td>
+      <td>{{date .OldestUnpaid}}</td><td class="num">{{if .OldestUnpaid}}{{.DaysPastDue}}{{end}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="7" class="muted">No active leases.</td></tr>
+  {{end}}
+  </tbody>
+  <tfoot>
+    <tr><th colspan="3">Total</th><th class="num">{{cents .Data.Rent}}</th><th class="num">{{cents .Data.Balance}}</th><th colspan="2"></th></tr>
+  </tfoot>
+</table>
+{{end}}
