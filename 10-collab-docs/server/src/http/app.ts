@@ -9,6 +9,7 @@ import { authRoutes } from './routes/auth.js';
 import { commentRoutes } from './routes/comments.js';
 import { docRoutes } from './routes/docs.js';
 import { sharingRoutes } from './routes/sharing.js';
+import { versionRoutes } from './routes/versions.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 
 export interface AppOptions {
@@ -47,6 +48,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
       docRoutes(api, ctx);
       sharingRoutes(api, ctx);
       commentRoutes(api, ctx);
+      versionRoutes(api, ctx);
     },
     { prefix: '/api' },
   );

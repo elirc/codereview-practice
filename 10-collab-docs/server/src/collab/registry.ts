@@ -73,6 +73,19 @@ export class RoomRegistry implements LiveDocs {
     return room && room.isLoaded && !room.closing ? room.doc : null;
   }
 
+  /** Runs `task` in the document's room queue when a room is open, otherwise directly. */
+  runExclusive<T>(docId: string, task: () => Promise<T>): Promise<T> {
+    const room = this.rooms.get(docId);
+    return room && !room.closing ? room.queue.run(task) : task();
+  }
+
+  /** Integrates a committed server-generated update locally and announces it. */
+  applyCommitted(docId: string, seq: number, update: Uint8Array): void {
+    const room = this.rooms.get(docId);
+    if (room) room.committed(seq, update, null);
+    else this.publishUpdate(docId, seq, update);
+  }
+
   /** Returns every open room. */
   all(): Room[] {
     return [...this.rooms.values()];

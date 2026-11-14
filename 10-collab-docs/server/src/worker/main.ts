@@ -2,6 +2,7 @@ import { ConfigError, loadConfig, type Config } from '../config/config.js';
 import { createDb } from '../db/db.js';
 import { systemClock } from '../lib/clock.js';
 import { createLogger } from '../lib/logger.js';
+import { autoVersionOnce } from './autoVersions.js';
 import { compactOnce } from './compaction.js';
 import { startLoop, type LoopHandle } from './loop.js';
 import { purgeSessionsOnce } from './sessionPurge.js';
@@ -38,6 +39,13 @@ const loops: LoopHandle[] = [
         { db, logger, minUpdates: config.COMPACT_MIN_UPDATES, minBytes: config.COMPACT_MIN_BYTES },
         now,
       ),
+  }),
+  startLoop({
+    name: 'automatic versions',
+    intervalMs: 60 * SECOND,
+    clock,
+    logger,
+    run: (now) => autoVersionOnce({ db, logger, minutes: config.AUTO_VERSION_MINUTES }, now),
   }),
   startLoop({
     name: 'trash purge',
