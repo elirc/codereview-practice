@@ -73,6 +73,7 @@ class StaffOrderSerializer(PublicOrderSerializer):
             "refund_state",
             "payment_intent_id",
             "last_payment_event_at",
+            "payment_failure_reason",
             "needs_review",
             "review_reason",
             "updated_at",

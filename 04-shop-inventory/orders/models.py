@@ -27,6 +27,7 @@ class Order(models.Model):
     paid_at = models.DateTimeField(null=True, blank=True)
     amount_paid_minor = models.BigIntegerField(default=0)
     last_payment_event_at = models.DateTimeField(null=True, blank=True)
+    payment_failure_reason = models.CharField(max_length=500, blank=True, default="")
     needs_review = models.BooleanField(default=False)
     review_reason = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

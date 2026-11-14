@@ -76,3 +76,31 @@ class RefundLine(models.Model):
 
     def __str__(self) -> str:
         return f"{self.order_line_id} x{self.quantity}"
+
+
+class WebhookEvent(models.Model):
+    class Status(models.TextChoices):
+        RECEIVED = "received"
+        PROCESSED = "processed"
+        IGNORED = "ignored"
+        FAILED = "failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider_event_id = models.CharField(max_length=255, unique=True)
+    type = models.CharField(max_length=100)
+    payload = models.JSONField()
+    provider_created_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RECEIVED)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    received_at = models.DateTimeField()
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-received_at"]
+        indexes = [
+            models.Index(fields=["status", "received_at"], name="webhook_status_received_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.type} {self.provider_event_id} ({self.status})"

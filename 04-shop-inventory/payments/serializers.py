@@ -61,3 +61,12 @@ class RefundSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class EventDataSerializer(serializers.Serializer):
+    payment_intent_id = serializers.CharField(max_length=255)
+    amount_minor = serializers.IntegerField(min_value=0, max_value=MAX_REFUND_MINOR)
+    currency = serializers.CharField(max_length=16)
+    refund_id = serializers.CharField(max_length=255, allow_blank=True, default="")
+    refund_reference = serializers.CharField(max_length=255, allow_blank=True, default="")
+    failure_reason = serializers.CharField(max_length=500, allow_blank=True, default="")

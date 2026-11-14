@@ -181,6 +181,22 @@ def create_refund(
     return refund
 
 
+def create_system_refund(order: Order, *, reason: str) -> Refund | None:
+    """Refund whatever is still refundable on ``order``, which the caller has locked."""
+    amount = order.amount_paid_minor - claimed_minor(order)
+    if amount <= 0:
+        return None
+    refund = Refund.objects.create(
+        order=order,
+        amount_minor=amount,
+        status=Refund.Status.PENDING,
+        reason=reason,
+        source=Refund.Source.SYSTEM,
+    )
+    enqueue_on_commit("payments.submit_refund", str(refund.id))
+    return refund
+
+
 def submit_refund(
     refund_id: uuid.UUID,
     *,

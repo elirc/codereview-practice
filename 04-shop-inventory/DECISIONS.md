@@ -55,3 +55,21 @@ refund.
 The spec asks for `services.py` per app. Payments has three distinct areas (webhook intake,
 event processing, refunds), so it uses a `payments/services/` package with one module each to
 keep files focused. Views and tasks stay thin and call into these modules.
+
+## Where a payment failure reason is kept
+
+`payment.failed` must record "failure reason on the order", but the Order model lists no field
+for it. Orders gain `payment_failure_reason` (blank by default), shown to staff.
+
+## Order of checks for `payment.succeeded`
+
+The checks run in the order the spec lists them: an amount or currency mismatch flags the order
+for review (event `processed`, no status change) before the order status is considered, so a
+mismatched event for an order that is already paid is flagged rather than ignored. A matching
+event for a paid or fulfilled order is `ignored`. `paid_at` is the time the event is processed.
+
+## Payment events for an unknown payment intent
+
+Only `payment.succeeded` is specified as retryable when no order carries the payment intent.
+`payment.failed` and the refund events look the order up the same way and are retried the same
+way, since the most likely cause is the intent id not being stored yet.

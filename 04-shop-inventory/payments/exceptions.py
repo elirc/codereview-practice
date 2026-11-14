@@ -25,3 +25,11 @@ class RefundLimitExceeded(DomainError):
     status_code = status.HTTP_403_FORBIDDEN
     code = "refund_limit_exceeded"
     message = "This refund is above the limit you are allowed to issue."
+
+
+class OrderNotFoundYet(Exception):
+    """No order carries the event's payment intent (yet); processing should be retried."""
+
+
+class InvalidEventData(Exception):
+    """The event's ``data`` object does not have the fields its type requires."""

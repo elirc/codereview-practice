@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime
 
 from django.db import transaction
@@ -7,6 +8,7 @@ from catalog.models import Product
 from inventory.models import StockItem, StockMovement
 from orders.models import Order
 from orders.services import LineRequest, pay_pending_order, place_order, request_payment
+from payments.models import WebhookEvent
 
 NOW = datetime(2026, 3, 2, 12, 0, tzinfo=UTC)
 
@@ -48,3 +50,36 @@ def pay(order: Order, *, now: datetime = NOW) -> Order:
 def checkout(client, lines: list[dict], key: str = "checkout-key-1", **extra):
     body = {"email": "buyer@example.com", "lines": lines, **extra}
     return client.post("/api/orders/", body, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+
+def event_payload(
+    event_type: str,
+    order: Order,
+    *,
+    event_id: str | None = None,
+    created: datetime = NOW,
+    **data,
+) -> dict:
+    return {
+        "id": event_id or f"evt_{uuid.uuid4().hex}",
+        "type": event_type,
+        "created": int(created.timestamp()),
+        "data": {
+            "payment_intent_id": order.payment_intent_id,
+            "amount_minor": order.total_minor,
+            "currency": order.currency,
+            **data,
+        },
+    }
+
+
+def store_event(event_type: str, order: Order, *, received_at: datetime = NOW, **kwargs):
+    """Store an event as the webhook endpoint would, without enqueueing it."""
+    payload = event_payload(event_type, order, **kwargs)
+    return WebhookEvent.objects.create(
+        provider_event_id=payload["id"],
+        type=event_type,
+        payload=payload,
+        provider_created_at=datetime.fromtimestamp(payload["created"], tz=UTC),
+        received_at=received_at,
+    )
