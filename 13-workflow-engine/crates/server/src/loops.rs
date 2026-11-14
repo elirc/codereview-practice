@@ -6,11 +6,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use engine_core::clock::{Clock, JitterSource, SyncedClock};
-use engine_store::{clock_sync, reaper, StoreError};
+use engine_store::{clock_sync, reaper, schedules, StoreError};
 use sqlx::PgPool;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+pub const SCHEDULER_INTERVAL: Duration = Duration::from_secs(1);
 pub const REAPER_INTERVAL: Duration = Duration::from_secs(5);
 pub const CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -33,6 +34,18 @@ pub struct LoopContext {
 /// Starts every server loop. They stop after their current pass once `shutdown` is cancelled.
 pub fn spawn_all(ctx: LoopContext, shutdown: CancellationToken) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
+
+    let scheduler_ctx = ctx.clone();
+    let schedule = move || {
+        let ctx = scheduler_ctx.clone();
+        async move { schedules::run_scheduler_once(&ctx.pool, ctx.clock.now()).await }
+    };
+    handles.push(tokio::spawn(run_every(
+        "scheduler",
+        SCHEDULER_INTERVAL,
+        shutdown.clone(),
+        schedule,
+    )));
 
     let reaper_ctx = ctx.clone();
     let reap = move || {

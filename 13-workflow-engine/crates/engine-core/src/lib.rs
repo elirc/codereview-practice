@@ -6,6 +6,7 @@
 pub mod authz;
 pub mod backoff;
 pub mod clock;
+pub mod cron_plan;
 pub mod limits;
 pub mod names;
 pub mod outcome;

@@ -19,3 +19,10 @@ Short records of places where the spec left a choice open.
   The refill advances `rate_refilled_at` only by the time that produced whole milli-tokens, and
   moves it to `now` once the bucket is full. It never moves backwards, and a `now` earlier than
   `rate_refilled_at` adds nothing.
+- **Schedules that never fire again.** A seven-field expression with a year can run out of fire
+  times. Creating or editing a schedule to such an expression is `422 invalid_cron`; a stored
+  schedule that runs out during a pass is paused after its last due fire is handled, because
+  `next_fire_at` cannot be empty.
+- **Catch-up search start.** When `next_fire_at` is older than the 24-hour horizon, the pass
+  searches for fire times from the horizon start rather than from `next_fire_at`, so a long
+  outage does not cost one iteration per missed fire.

@@ -14,6 +14,7 @@ use crate::state::AppState;
 mod health;
 mod jobs;
 mod queues;
+mod schedules;
 mod tokens;
 
 /// Builds the application router with every route and middleware.
@@ -27,6 +28,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/jobs/:id", get(jobs::show))
         .route("/jobs/:id/cancel", post(jobs::cancel))
         .route("/jobs/:id/requeue", post(jobs::requeue))
+        .route("/schedules", get(schedules::list).post(schedules::create))
+        .route(
+            "/schedules/:id",
+            get(schedules::show)
+                .patch(schedules::update)
+                .delete(schedules::remove),
+        )
+        .route("/schedules/:id/pause", post(schedules::pause))
+        .route("/schedules/:id/resume", post(schedules::resume))
         .route("/tokens", post(tokens::create))
         .route("/tokens/:id", delete(tokens::revoke))
         .route_layer(middleware::from_fn_with_state(

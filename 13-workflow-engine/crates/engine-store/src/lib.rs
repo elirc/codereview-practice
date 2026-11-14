@@ -10,6 +10,7 @@ pub mod models;
 pub mod page;
 pub mod queues;
 pub mod reaper;
+pub mod schedules;
 pub mod tokens;
 
 pub use error::StoreError;
