@@ -1,5 +1,6 @@
 package ledger.jobs
 
+import ledger.outbox.OutboxRelayLoop
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
 import org.springframework.scheduling.annotation.EnableScheduling
@@ -19,8 +20,15 @@ class WorkerSchedules(
     private val clock: Clock,
     private val jobs: JobRunner,
     private val idempotencyPurge: IdempotencyPurgeJob,
-    private val holdExpiry: HoldExpiryJob
+    private val holdExpiry: HoldExpiryJob,
+    private val relayLoop: OutboxRelayLoop,
+    private val outboxPurge: OutboxPurgeJob
 ) {
+    @Scheduled(fixedDelay = RELAY_MS)
+    fun relayOutbox() {
+        relayLoop.tick(clock.instant())
+    }
+
     @Scheduled(fixedDelay = HOLD_EXPIRY_MS)
     fun expireHolds() {
         jobs.run("hold-expiry") { holdExpiry.runOnce(clock.instant()) }
@@ -31,7 +39,13 @@ class WorkerSchedules(
         jobs.run("idempotency-purge") { idempotencyPurge.runOnce(clock.instant()) }
     }
 
+    @Scheduled(fixedDelay = HOUR_MS, initialDelay = MINUTE_MS)
+    fun purgeOutbox() {
+        jobs.run("outbox-purge") { outboxPurge.runOnce(clock.instant()) }
+    }
+
     private companion object {
+        const val RELAY_MS = 200L
         const val HOLD_EXPIRY_MS = 30_000L
         const val MINUTE_MS = 60_000L
         const val HOUR_MS = 3_600_000L
