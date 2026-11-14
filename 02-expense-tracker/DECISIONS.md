@@ -34,3 +34,9 @@ Audit events carry an extra nullable `report_id` column so that `GET /audit` can
 
 ## Error codes the spec leaves open
 Deciding a step one is not entitled to returns `403 not_step_approver`; changing another user's report that one may view returns `403 not_report_owner`; a duplicate rate returns `409 rate_exists`; an unknown manager returns `422 unknown_manager`.
+
+## Comparing Money across currencies
+"Adding or comparing different currencies raises" is applied to equality as well as ordering, so `Money(1, "USD") == Money(1, "EUR")` raises instead of returning `False`.
+
+## Audit trigger scope
+The trigger rejects row-level `UPDATE` and `DELETE` as specified. `TRUNCATE` is not intercepted; the integration suite uses it to reset tables between tests.

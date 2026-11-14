@@ -16,7 +16,7 @@ def list_events(
     entity_id: uuid.UUID | None,
     limit: int,
     offset: int,
-) -> Sequence[Row[tuple[AuditEvent, str | None]]]:
+) -> Sequence[Row[tuple[AuditEvent, str]]]:
     """Audit events the caller may read, oldest first.
 
     Filtering on a report returns the events of the report and of its lines,
