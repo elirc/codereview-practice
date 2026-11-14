@@ -304,3 +304,18 @@ export async function replaceIssueLabels(
 export async function deleteIssue(orgId: string, issueId: string, db: Database): Promise<void> {
   await db.deleteFrom('issues').where('org_id', '=', orgId).where('id', '=', issueId).execute();
 }
+
+/** Marks the issue as updated without changing its version. */
+export async function touchIssue(
+  orgId: string,
+  issueId: string,
+  now: Date,
+  db: Database,
+): Promise<void> {
+  await db
+    .updateTable('issues')
+    .set({ updated_at: now })
+    .where('org_id', '=', orgId)
+    .where('id', '=', issueId)
+    .execute();
+}
