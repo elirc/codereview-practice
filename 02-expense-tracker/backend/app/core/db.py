@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 def build_engine(database_url: str) -> Engine:
-    return create_engine(database_url, pool_pre_ping=True, pool_size=10, max_overflow=5)
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=5,
+        connect_args={"options": "-c timezone=UTC"},
+    )
 
 
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:
