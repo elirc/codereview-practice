@@ -2,8 +2,9 @@ import * as Y from 'yjs';
 import type { Config } from '../config/config.js';
 import type { AppendAuthorizer } from '../collab/docStore.js';
 import type { Room } from '../collab/room.js';
+import { filterAwarenessUpdate } from '../collab/awarenessFilter.js';
 import { addsNothing } from '../collab/updates.js';
-import { canEdit } from '../domain/roles.js';
+import { canEdit, canSendPresence } from '../domain/roles.js';
 import type { Clock } from '../lib/clock.js';
 import { resolveDocAccess } from '../services/access.js';
 import { CloseCode, decodeFrame, encodeSyncStep2, ProtocolError, type Frame } from './codec.js';
@@ -56,6 +57,7 @@ export class FrameHandler {
         await this.receiveUpdate(conn, room, frame.update);
         return;
       case 'awareness':
+        this.receiveAwareness(conn, room, frame.update);
         return;
       case 'control':
         conn.close(CloseCode.Malformed, 'control frames are server-only');
@@ -107,6 +109,31 @@ export class FrameHandler {
         conn.close(CloseCode.TooLarge, 'document size limit reached');
         return;
     }
+  }
+
+  private receiveAwareness(conn: Connection, room: Room, update: Uint8Array): void {
+    const userId = conn.auth.userId;
+    if (userId === null || !canSendPresence(conn.auth.role, true)) {
+      conn.close(CloseCode.Forbidden, 'presence not allowed');
+      return;
+    }
+    const result = filterAwarenessUpdate(update, {
+      pinnedClientId: conn.awarenessClientId,
+      user: { id: userId, name: conn.auth.userName ?? '' },
+    });
+    if (!result.ok) {
+      conn.close(result.code, result.reason);
+      return;
+    }
+    if (conn.awarenessClientId === null) {
+      if (room.awarenessClientTaken(result.clientId, conn)) {
+        conn.close(CloseCode.Forbidden, 'awareness client id not allowed');
+        return;
+      }
+      conn.awarenessClientId = result.clientId;
+    }
+    conn.awarenessClock = Math.max(conn.awarenessClock, result.clock);
+    room.applyPeerAwareness(conn, result.update);
   }
 
   private authorizer(conn: Connection): AppendAuthorizer {

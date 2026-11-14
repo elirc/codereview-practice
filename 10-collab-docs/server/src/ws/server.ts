@@ -227,6 +227,8 @@ export class CollabServer extends EventEmitter {
       userId: conn.auth.userId,
     });
     if (canEdit(conn.auth.role)) conn.send(encodeSyncStep1(room.stateVector()));
+    const presence = room.awarenessFrame();
+    if (presence) conn.send(presence);
   }
 
   /** Cleans up after a socket closes. */
@@ -234,7 +236,12 @@ export class CollabServer extends EventEmitter {
     conn.markClosed();
     this.connections.delete(conn);
     if (conn.auth.userId !== null) this.counter.release(conn.docId, conn.auth.userId);
-    if (conn.room) this.registry.detach(conn.room, conn, this.clock.now());
+    if (conn.room) {
+      if (conn.awarenessClientId !== null) {
+        conn.room.removeAwareness(conn.awarenessClientId, conn.awarenessClock);
+      }
+      this.registry.detach(conn.room, conn, this.clock.now());
+    }
     conn.log.info({ code }, 'connection closed');
     this.emit('connection-closed', conn);
   }

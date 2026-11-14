@@ -38,6 +38,8 @@ export class Connection implements RoomPeer {
   readonly log: Logger;
   auth: ConnectionAuth;
   room: Room | null = null;
+  awarenessClientId: number | null = null;
+  awarenessClock = 0;
   alive = true;
   closed = false;
   draining = false;

@@ -128,6 +128,17 @@ export class RoomRegistry {
       .catch((error: unknown) => this.log.warn({ err: error, docId, seq }, 'update publish failed'));
   }
 
+  /** Publishes an awareness update relayed by this instance. */
+  publishAwareness(docId: string, update: Uint8Array): void {
+    this.bus
+      .publish(docChannel(docId), {
+        kind: 'awareness',
+        instanceId: this.bus.instanceId,
+        update: toBase64(update),
+      })
+      .catch((error: unknown) => this.log.warn({ err: error, docId }, 'awareness publish failed'));
+  }
+
   private open(docId: string, workspaceId: string): Room {
     const room = new Room({
       docId,
@@ -135,6 +146,7 @@ export class RoomRegistry {
       store: this.store,
       logger: this.log,
       onCommitted: (seq, update) => this.publishUpdate(docId, seq, update),
+      onAwareness: (update) => this.publishAwareness(docId, update),
     });
     this.rooms.set(docId, room);
     const ready = this.prepare(room);
@@ -194,6 +206,9 @@ export class RoomRegistry {
         room.closePeers(CloseCode.Gone, 'document trashed');
         return;
       case 'awareness':
+        if (message.instanceId === this.bus.instanceId) return;
+        room.applyRemoteAwareness(fromBase64(message.update));
+        return;
       case 'perm':
         return;
     }

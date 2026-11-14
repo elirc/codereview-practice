@@ -1,7 +1,19 @@
+import {
+  applyAwarenessUpdate,
+  Awareness,
+  encodeAwarenessUpdate,
+  removeAwarenessStates,
+} from 'y-protocols/awareness';
 import * as Y from 'yjs';
 import type { Logger } from '../lib/logger.js';
 import { SerialQueue } from '../lib/serialQueue.js';
-import { encodeControl, encodeSyncUpdate, type ControlMessage } from '../ws/codec.js';
+import {
+  encodeAwareness,
+  encodeControl,
+  encodeSyncUpdate,
+  type ControlMessage,
+} from '../ws/codec.js';
+import { encodeAwarenessEntries } from './awarenessFilter.js';
 import type { AppendAuthorizer, AppendInput, AppendResult, DocLog } from './docStore.js';
 
 /** The storage operations a room needs. */
@@ -15,6 +27,7 @@ export interface RoomStore {
 /** A local connection joined to a room. */
 export interface RoomPeer {
   readonly userId: string | null;
+  readonly awarenessClientId: number | null;
   send(frame: Uint8Array): void;
   close(code: number, reason: string): void;
 }
@@ -26,6 +39,8 @@ export interface RoomOptions {
   logger: Logger;
   /** Called after an update committed by this instance has been integrated. */
   onCommitted?: (seq: number, update: Uint8Array) => void;
+  /** Called with every awareness update that should reach other instances. */
+  onAwareness?: (update: Uint8Array) => void;
 }
 
 interface Pending {
@@ -40,6 +55,7 @@ export class Room {
   readonly docId: string;
   readonly workspaceId: string;
   readonly doc: Y.Doc;
+  readonly awareness: Awareness;
   readonly peers = new Set<RoomPeer>();
   readonly queue = new SerialQueue();
   /** Every update with `seq <= appliedSeq` has been applied to `doc`. */
@@ -51,6 +67,7 @@ export class Room {
   protected readonly store: RoomStore;
   protected readonly log: Logger;
   private readonly onCommitted: ((seq: number, update: Uint8Array) => void) | undefined;
+  private readonly onAwareness: ((update: Uint8Array) => void) | undefined;
   private loaded = false;
   private early: Array<Pending & { seq: number }> = [];
   private readonly buffer = new Map<number, Pending>();
@@ -63,7 +80,10 @@ export class Room {
     this.store = options.store;
     this.log = options.logger.child({ docId: options.docId });
     this.onCommitted = options.onCommitted;
+    this.onAwareness = options.onAwareness;
     this.doc = new Y.Doc({ gc: true });
+    this.awareness = new Awareness(this.doc);
+    this.awareness.setLocalState(null);
     this.doc.on('update', (update: Uint8Array, origin: unknown) => {
       const frame = encodeSyncUpdate(update);
       for (const peer of this.peers) {
@@ -169,6 +189,44 @@ export class Room {
     return Y.encodeStateVector(this.doc);
   }
 
+  /** Applies a filtered awareness update from a peer and relays it. */
+  applyPeerAwareness(peer: RoomPeer, update: Uint8Array): void {
+    applyAwarenessUpdate(this.awareness, update, peer);
+    this.broadcast(encodeAwareness(update), peer);
+    this.onAwareness?.(update);
+  }
+
+  /** Applies an awareness update received from another instance. */
+  applyRemoteAwareness(update: Uint8Array): void {
+    applyAwarenessUpdate(this.awareness, update, SERVER_ORIGIN);
+    this.broadcast(encodeAwareness(update));
+  }
+
+  /** Removes a client's presence and tells local peers and other instances. */
+  removeAwareness(clientId: number, clock: number): void {
+    if (this.awareness.getStates().has(clientId)) {
+      removeAwarenessStates(this.awareness, [clientId], SERVER_ORIGIN);
+    }
+    const removal = encodeAwarenessEntries([{ clientId, clock, state: null }]);
+    this.broadcast(encodeAwareness(removal));
+    this.onAwareness?.(removal);
+  }
+
+  /** Returns a frame with every known presence state, or null when there is none. */
+  awarenessFrame(): Uint8Array | null {
+    const clients = [...this.awareness.getStates().keys()];
+    if (clients.length === 0) return null;
+    return encodeAwareness(encodeAwarenessUpdate(this.awareness, clients));
+  }
+
+  /** Returns whether another peer already uses this awareness client id. */
+  awarenessClientTaken(clientId: number, except: RoomPeer): boolean {
+    for (const peer of this.peers) {
+      if (peer !== except && peer.awarenessClientId === clientId) return true;
+    }
+    return false;
+  }
+
   /** Sends a frame to every peer except `except`. */
   broadcast(frame: Uint8Array, except: RoomPeer | null = null): void {
     for (const peer of this.peers) {
@@ -202,6 +260,7 @@ export class Room {
     this.closing = true;
     await this.queue.drain();
     if (this.catchUpRun) await this.catchUpRun;
+    this.awareness.destroy();
     this.doc.destroy();
   }
 

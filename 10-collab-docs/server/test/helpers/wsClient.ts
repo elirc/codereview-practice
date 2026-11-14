@@ -1,7 +1,10 @@
 import WebSocket from 'ws';
+import { applyAwarenessUpdate, Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
+import { encodeAwarenessEntries, type AwarenessState } from '../../src/collab/awarenessFilter.js';
 import {
   decodeFrame,
+  encodeAwareness,
   encodeSyncStep1,
   encodeSyncStep2,
   encodeSyncUpdate,
@@ -44,6 +47,7 @@ function socketOptions(options: ConnectOptions): WebSocket.ClientOptions {
 export class TestClient {
   readonly doc: Y.Doc;
   readonly text: Y.Text;
+  readonly awareness: Awareness;
   readonly socket: WebSocket;
   readonly frames: Frame[] = [];
   readonly controls: Control[] = [];
@@ -58,10 +62,13 @@ export class TestClient {
     this.socket = socket;
     this.doc = options.doc ?? new Y.Doc();
     this.text = this.doc.getText('content');
+    this.awareness = new Awareness(this.doc);
+    this.awareness.setLocalState(null);
     this.autoSend = options.autoSend ?? true;
     this.closed = new Promise((resolve) => {
       socket.on('close', (code: number, reason: Buffer) => {
         this.closeInfo = { code, reason: reason.toString() };
+        this.awareness.destroy();
         resolve(this.closeInfo);
         this.notify();
       });
@@ -197,6 +204,7 @@ export class TestClient {
     return this.closed;
   }
 
+
   private receive(data: Uint8Array): void {
     const frame = decodeFrame(data);
     this.frames.push(frame);
@@ -224,7 +232,21 @@ export class TestClient {
     this.notify();
   }
 
-  protected onAwareness(_update: Uint8Array): void {}
+  /** Presence states this client has received from the server, by client id. */
+  presence(): Map<number, Record<string, unknown>> {
+    const states = new Map(this.awareness.getStates());
+    states.delete(this.doc.clientID);
+    return states as Map<number, Record<string, unknown>>;
+  }
+
+  /** Sends one awareness entry, by default for this client's own id. */
+  sendPresence(state: AwarenessState, clock: number, clientId = this.doc.clientID): void {
+    this.socket.send(encodeAwareness(encodeAwarenessEntries([{ clientId, clock, state }])));
+  }
+
+  private onAwareness(update: Uint8Array): void {
+    applyAwarenessUpdate(this.awareness, update, REMOTE);
+  }
 
   protected notify(): void {
     for (const waiter of [...this.waiters]) waiter();
