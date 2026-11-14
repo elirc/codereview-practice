@@ -35,3 +35,9 @@ in the same transaction, bumping each issue's `version`, exactly as removal does
 
 `DELETE /members/me` and `DELETE /members/<own id>` are both treated as leaving, which any role
 may do subject to the last-owner rule.
+
+## Duplicate project key
+
+The spec names no code for a project key that is already used in the org. It returns
+`409 project_key_taken`, mirroring `slug_taken`. Archiving an already archived project is a no-op
+that keeps the original `archivedAt`; there is no unarchive.

@@ -7,8 +7,10 @@ import type { Database } from './db/index.js';
 import type { Clock } from './lib/clock.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { labelRoutes } from './modules/labels/routes.js';
 import { memberRoutes } from './modules/members/routes.js';
 import { orgCreationRoutes, orgRoutes } from './modules/orgs/routes.js';
+import { projectRoutes } from './modules/projects/routes.js';
 import { registerSessionAuth, requireUser } from './plugins/auth.js';
 import { registerCsrfProtection } from './plugins/csrf.js';
 import { registerErrorHandling } from './plugins/error-handler.js';
@@ -65,6 +67,8 @@ export async function buildApp(deps: AppDeps) {
             tenant.addHook('preHandler', resolveTenant);
             await tenant.register(orgRoutes);
             await tenant.register(memberRoutes);
+            await tenant.register(projectRoutes);
+            await tenant.register(labelRoutes);
           },
           { prefix: '/orgs/:orgSlug' },
         );
