@@ -92,3 +92,17 @@ func TestCourierReadPermissions(t *testing.T) {
 	_, err = e.svc.Me(asOps())
 	wantCode(t, err, "forbidden")
 }
+
+func TestSeedCourierRecordsStatusEachRun(t *testing.T) {
+	e := newEnv(t)
+	id := uuid.New()
+	for i := 0; i < 2; i++ {
+		if _, err := e.svc.SeedCourier(asOps(), id, "Seed Rider", "scooter"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	evs := e.eventsOfType(t, EventStatusChanged)
+	if len(evs) != 2 || evs[0].Sequence != 2 || evs[1].Sequence != 3 {
+		t.Fatalf("status events = %+v", evs)
+	}
+}

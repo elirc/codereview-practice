@@ -66,15 +66,13 @@ WHERE id = @id;
 SELECT id FROM deliveries
 WHERE status = 'searching' AND (next_offer_at <= @now OR search_deadline <= @now)
 ORDER BY next_offer_at, id
-LIMIT @batch_size::integer
-FOR UPDATE SKIP LOCKED;
+LIMIT @batch_size::integer;
 
 -- name: ListExpiredReservations :many
 SELECT id FROM deliveries
 WHERE status = 'reserving' AND reserve_deadline <= @now::timestamptz
 ORDER BY reserve_deadline, id
-LIMIT @batch_size::integer
-FOR UPDATE SKIP LOCKED;
+LIMIT @batch_size::integer;
 
 -- name: ListSurgeZones :many
 SELECT zone_id FROM deliveries WHERE status IN ('searching', 'offered')

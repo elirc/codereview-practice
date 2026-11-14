@@ -31,14 +31,14 @@ jobs:
       APP_CURRENCY: USD
       LOOPS_ENABLED: "false"
       LOG_LEVEL: warn
-      NATS_URL: nats://localhost:6393
+      NATS_URL: nats://localhost:6395
       ORDERS_DATABASE_URL: postgres://dd_orders:dd_orders@localhost:5463/dd_orders?sslmode=disable
       DISPATCH_DATABASE_URL: postgres://dd_dispatch:dd_dispatch@localhost:5463/dd_dispatch?sslmode=disable
       COURIERS_DATABASE_URL: postgres://dd_couriers:dd_couriers@localhost:5463/dd_couriers?sslmode=disable
       TEST_DATABASE_URL_ORDERS: postgres://dd_orders:dd_orders@localhost:5463/dd_orders?sslmode=disable
       TEST_DATABASE_URL_DISPATCH: postgres://dd_dispatch:dd_dispatch@localhost:5463/dd_dispatch?sslmode=disable
       TEST_DATABASE_URL_COURIERS: postgres://dd_couriers:dd_couriers@localhost:5463/dd_couriers?sslmode=disable
-      TEST_NATS_URL: nats://localhost:6393
+      TEST_NATS_URL: nats://localhost:6395
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
 
       - name: Start NATS JetStream
         # Service containers cannot pass server flags, so NATS is started here.
-        run: docker run -d --name nats -p 6393:4222 nats:2.10-alpine -js
+        run: docker run -d --name nats-test -p 6395:4222 nats:2.10-alpine -js
 
       - name: Format check
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)

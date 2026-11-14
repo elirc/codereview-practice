@@ -281,7 +281,6 @@ SELECT id FROM deliveries
 WHERE status = 'searching' AND (next_offer_at <= $1 OR search_deadline <= $1)
 ORDER BY next_offer_at, id
 LIMIT $2::integer
-FOR UPDATE SKIP LOCKED
 `
 
 type ListDueDeliveriesParams struct {
@@ -314,7 +313,6 @@ SELECT id FROM deliveries
 WHERE status = 'reserving' AND reserve_deadline <= $1::timestamptz
 ORDER BY reserve_deadline, id
 LIMIT $2::integer
-FOR UPDATE SKIP LOCKED
 `
 
 type ListExpiredReservationsParams struct {

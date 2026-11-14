@@ -7,10 +7,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"deliverydispatch/pkg/auth"
-	"deliverydispatch/services/couriers/internal/store/db"
+	"deliverydispatch/services/couriers/internal/service"
 )
 
 var couriers = []struct {
@@ -22,13 +20,13 @@ var couriers = []struct {
 	{"Chidi Car", "car"},
 }
 
-// Run upserts the seed couriers and prints a token for each and for ops.
-func Run(ctx context.Context, pool *pgxpool.Pool, secret []byte, now time.Time, out io.Writer) error {
-	q := db.New(pool)
+// Run creates or updates the seed couriers through svc, so each records a
+// status event, and prints a token for each and for ops.
+func Run(ctx context.Context, svc *service.Service, secret []byte, now time.Time, out io.Writer) error {
 	tokens := map[string]auth.Principal{"ops": auth.SeedOps}
 	for i, c := range couriers {
 		id := auth.SeedCourierIDs[i]
-		if err := q.UpsertCourier(ctx, db.UpsertCourierParams{ID: id, Name: c.name, Vehicle: c.vehicle, CreatedAt: now}); err != nil {
+		if _, err := svc.SeedCourier(ctx, id, c.name, c.vehicle); err != nil {
 			return fmt.Errorf("seed courier %s: %w", c.name, err)
 		}
 		tokens[fmt.Sprintf("courier-%d", i+1)] = auth.Principal{Subject: id, Role: auth.RoleCourier}

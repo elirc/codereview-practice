@@ -103,8 +103,8 @@ func (s *Service) offerNext(ctx context.Context, id uuid.UUID, now time.Time) er
 	})
 }
 
-// insertOfferSavepoint inserts an offer inside a savepoint. It reports false
-// when a unique index refused the offer, leaving tx usable.
+// insertOfferSavepoint inserts an offer and reports false when a unique index
+// refused it.
 func insertOfferSavepoint(ctx context.Context, tx pgx.Tx, arg db.InsertOfferParams) (bool, error) {
 	sp, err := tx.Begin(ctx)
 	if err != nil {

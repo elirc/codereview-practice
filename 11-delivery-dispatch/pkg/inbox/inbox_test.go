@@ -3,10 +3,12 @@ package inbox
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -246,5 +248,13 @@ func TestPurgeRemovesOldInboxRows(t *testing.T) {
 	n, err := Purge(context.Background(), pool, t0)
 	if err != nil || n != 1 {
 		t.Fatalf("purged %d, err %v", n, err)
+	}
+}
+
+func TestTruncateKeepsValidUTF8(t *testing.T) {
+	long := strings.Repeat("é", 1500)
+	got := truncate(long, 2001)
+	if len(got) != 2000 || !utf8.ValidString(got) {
+		t.Fatalf("truncate kept %d bytes, valid=%v", len(got), utf8.ValidString(got))
 	}
 }

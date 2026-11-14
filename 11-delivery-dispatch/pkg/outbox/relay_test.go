@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -247,5 +248,25 @@ func TestPurgeKeepsRecentAndUnpublishedRows(t *testing.T) {
 	}
 	if s.Unpublished != 1 || s.Published != 1 {
 		t.Fatalf("stats = %+v", s)
+	}
+}
+
+func TestTruncateKeepsValidUTF8(t *testing.T) {
+	tests := []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"short", 10, "short"},
+		{"abcdef", 3, "abc"},
+		{"naïve", 3, "na"},
+		{"naïve", 4, "naï"},
+		{"₦500", 2, ""},
+	}
+	for _, tt := range tests {
+		got := truncate(tt.in, tt.n)
+		if got != tt.want || !utf8.ValidString(got) {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tt.in, tt.n, got, tt.want)
+		}
 	}
 }

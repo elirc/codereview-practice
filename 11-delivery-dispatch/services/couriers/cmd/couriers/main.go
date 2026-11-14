@@ -25,6 +25,7 @@ import (
 	"deliverydispatch/pkg/natsx"
 	"deliverydispatch/services/couriers/app"
 	couriersseed "deliverydispatch/services/couriers/internal/seed"
+	"deliverydispatch/services/couriers/internal/service"
 	"deliverydispatch/services/couriers/migrations"
 )
 
@@ -60,7 +61,7 @@ func run(args []string) error {
 		}
 		return migrate.Run(ctx, cfg.DatabaseURL, migrations.FS, command)
 	case "seed":
-		return seed(ctx, cfg)
+		return seed(ctx, cfg, logger)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -116,11 +117,13 @@ func serve(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 	return result
 }
 
-func seed(ctx context.Context, cfg app.Config) error {
+func seed(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
-	return couriersseed.Run(ctx, pool, []byte(cfg.Common.JWTSecret), clock.System{}.Now(), os.Stdout)
+	clk := clock.System{}
+	svc := service.New(pool, cfg.Common.Currency, clk, idgen.Random{}, logger)
+	return couriersseed.Run(ctx, svc, []byte(cfg.Common.JWTSecret), clk.Now(), os.Stdout)
 }

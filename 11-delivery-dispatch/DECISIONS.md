@@ -11,7 +11,7 @@ Points the SPEC leaves open, the choice made, and why.
 7. **`delivery.cancel_rejected` applies its reason.** If the rejection (reason `picked_up` or `delivered`) arrives before the lower-sequence pickup/delivery event, that event would later be skipped. Applying "the event's meaning directly" therefore also moves the order to `picked_up`/`delivered`.
 8. **`delivery.cancelled` without a requester.** If an order has no `cancel_requested_by` when the answer arrives, the reason is `ops` and no fee is charged.
 9. **Suspension ends the shift.** Suspending clears `shift_zone_id` (the active delivery, if any, continues). This makes "reinstating does not start a shift" hold and makes the courier `offline` once the delivery ends.
-10. **Courier creation emits `courier.status_changed`** (offline, `status_version` 1) so dispatch learns the vehicle, and every courier event has a sequence of at least 1.
+10. **Courier creation emits `courier.status_changed`** (offline, `status_version` 1) so dispatch learns the vehicle, and every courier event has a sequence of at least 1. The seed command does the same for each seeded courier, with a new `status_version` on every run.
 11. **Sequences of `courier.reserved` / `courier.reservation_rejected`.** They carry the courier's current `status_version` as the SPEC's event table says; a reservation bumps the version once, shared by `courier.reserved` and `courier.status_changed`.
 12. **Projection rows for unknown couriers.** A location for an unseen courier creates an `offline` row with vehicle `bike` until a status event supplies the real vehicle.
 13. **Reservation deadline when `courier.reserved` is handled.** A reserved answer handled at or after `reserve_deadline` is treated as the timeout (release, back to `searching`) even if the sweeper has not run, so the timeout takes effect at its instant.
@@ -23,5 +23,5 @@ Points the SPEC leaves open, the choice made, and why.
 19. **Couriers use PostGIS** for the 50 m publish distance (they store positions); only orders uses the pure-Go great-circle distance. `dd_couriers` therefore also has the PostGIS extension.
 20. **Dead letters** use a UUID primary key (CONVENTIONS default) and store the raw payload as `bytea` with a nullable `event_id`, so invalid envelopes can be kept too.
 21. **Dispatch seed.** Dispatch has no seed data of its own (its tables are projections and event-driven); `dispatch seed` only prints tokens.
-22. **End-to-end tests reset the JetStream streams** on `TEST_NATS_URL` before each test so stale messages from earlier runs cannot interfere. Point it at a dedicated NATS server.
+22. **End-to-end tests reset the JetStream streams** on `TEST_NATS_URL` before each test so messages from earlier runs cannot interfere. `compose.yaml` runs a separate `nats-test` server on 6395 for this, and `.env.example` points `TEST_NATS_URL` at it, so the development streams on 6393 are untouched.
 23. **The outbox relay counts as a loop**: with `LOOPS_ENABLED=false`, `serve` runs HTTP and consumers but neither the relay nor the sweepers.

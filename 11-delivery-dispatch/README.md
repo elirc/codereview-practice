@@ -9,7 +9,7 @@ Requirements: Go 1.23, Docker (for Postgres 16 + PostGIS 3.4 and NATS 2.10).
 ```sh
 cp .env.example .env            # then export it, e.g. `set -a; . ./.env; set +a`
 go mod tidy                     # resolves indirect dependencies and writes go.sum
-docker compose up -d            # Postgres on 5463, NATS on 6393 (monitoring 6394)
+docker compose up -d            # Postgres 5463, NATS 6393 (monitoring 6394), test NATS 6395
 go run ./services/orders/cmd/orders migrate up
 go run ./services/dispatch/cmd/dispatch migrate up
 go run ./services/couriers/cmd/couriers migrate up
@@ -44,7 +44,7 @@ docker compose up -d && set -a && . ./.env && set +a
 go test -race -count=1 ./...                    # everything, including test/e2e
 ```
 
-Integration tests use `TEST_DATABASE_URL_ORDERS`, `_DISPATCH` and `_COURIERS`; each test creates and drops its own schema. `test/e2e` also needs `TEST_NATS_URL`; it deletes and recreates the three streams, so point it at a NATS server you use only for tests. Lint: `gofmt -l .`, `go vet ./...`, `staticcheck ./...` (2024.1.1).
+Integration tests use `TEST_DATABASE_URL_ORDERS`, `_DISPATCH` and `_COURIERS`; each test creates and drops its own schema. `test/e2e` also needs `TEST_NATS_URL`, which `.env.example` points at the separate `nats-test` server (port 6395) from `compose.yaml`; the suite deletes and recreates the three streams there before each test. Lint: `gofmt -l .`, `go vet ./...`, `staticcheck ./...` (2024.1.1).
 
 ## Architecture
 

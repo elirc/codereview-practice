@@ -33,8 +33,7 @@ WHERE id = @id;
 SELECT id, delivery_id FROM offers
 WHERE status = 'pending' AND expires_at <= @now
 ORDER BY expires_at, id
-LIMIT @batch_size::integer
-FOR UPDATE SKIP LOCKED;
+LIMIT @batch_size::integer;
 
 -- name: FindCandidate :one
 SELECT courier_view.courier_id,

@@ -209,7 +209,6 @@ SELECT id, delivery_id FROM offers
 WHERE status = 'pending' AND expires_at <= $1
 ORDER BY expires_at, id
 LIMIT $2::integer
-FOR UPDATE SKIP LOCKED
 `
 
 type ListExpiredOffersParams struct {

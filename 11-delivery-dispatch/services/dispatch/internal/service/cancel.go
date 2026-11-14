@@ -95,8 +95,7 @@ func (s *Service) cancelledFacts(d db.Delivery) cancelledData {
 	return data
 }
 
-// cancelPendingOfferFor cancels the delivery's pending offer, if any. The
-// delivery row must already be locked.
+// cancelPendingOfferFor cancels the delivery's pending offer, if any.
 func cancelPendingOfferFor(ctx context.Context, q *db.Queries, deliveryID uuid.UUID, now time.Time) error {
 	pending, err := q.GetPendingOfferForDelivery(ctx, deliveryID)
 	if errors.Is(err, pgx.ErrNoRows) {

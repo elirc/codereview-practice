@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -171,9 +172,11 @@ func (p *Processor) deadLetter(ctx context.Context, eventID uuid.NullUUID, subje
 	})
 }
 
+// truncate returns at most the first n bytes of s, dropping a character
+// that the cut would split.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n]
+	return strings.ToValidUTF8(s[:n], "")
 }

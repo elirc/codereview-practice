@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,8 +50,7 @@ type pendingRow struct {
 }
 
 // RunOnce publishes up to one batch and returns how many rows it marked
-// published. It returns 0 and no error when another relay holds the lock, and
-// an error when a publish failed.
+// published, and an error when a publish failed.
 func (r *Relay) RunOnce(ctx context.Context, now time.Time) (int, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -159,9 +159,11 @@ func Backoff(failures int) time.Duration {
 	return d
 }
 
+// truncate returns at most the first n bytes of s, dropping a character
+// that the cut would split.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n]
+	return strings.ToValidUTF8(s[:n], "")
 }

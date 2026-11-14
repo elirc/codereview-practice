@@ -71,8 +71,8 @@ func (s *Service) ApplyCourierPosition(ctx context.Context, tx pgx.Tx, ev Courie
 	return nil
 }
 
-// lockPendingOfferOf locks the delivery and then the offer of the courier's
-// pending offer, if there is one.
+// lockPendingOfferOf loads the courier's pending offer and its delivery for
+// update, if there is one.
 func lockPendingOfferOf(ctx context.Context, q *db.Queries, courierID uuid.UUID) error {
 	o, err := q.GetPendingOfferForCourier(ctx, courierID)
 	if errors.Is(err, pgx.ErrNoRows) {

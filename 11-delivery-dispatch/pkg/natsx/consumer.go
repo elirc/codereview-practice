@@ -13,8 +13,7 @@ import (
 
 // Consume ensures the durable consumer for p on s and fetches and handles
 // messages one at a time until ctx is done. The message being handled when ctx
-// is cancelled is finished and settled; the rest of its batch is left for
-// redelivery.
+// is cancelled is finished and settled.
 func Consume(ctx context.Context, js jetstream.JetStream, s Stream, p *inbox.Processor, logger *slog.Logger) {
 	log := logger.With("consumer", p.Consumer(), "stream", s.Name)
 	var cons jetstream.Consumer

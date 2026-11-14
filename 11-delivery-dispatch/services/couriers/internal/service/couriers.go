@@ -145,3 +145,44 @@ func (s *Service) Reinstate(ctx context.Context, id uuid.UUID) (db.Courier, erro
 		return c, nil
 	})
 }
+
+// SeedCourier creates or updates the courier with a fixed id, then records
+// their current status under a new status_version.
+func (s *Service) SeedCourier(ctx context.Context, id uuid.UUID, name, vehicle string) (db.Courier, error) {
+	var out db.Courier
+	err := pgxtx.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		now := s.clock.Now()
+		if err := q.UpsertCourier(ctx, db.UpsertCourierParams{ID: id, Name: name, Vehicle: vehicle, CreatedAt: now}); err != nil {
+			return fmt.Errorf("upsert courier: %w", err)
+		}
+		c, err := q.GetCourierForUpdate(ctx, id)
+		if err != nil {
+			return fmt.Errorf("lock courier: %w", err)
+		}
+		c.StatusVersion++
+		c.UpdatedAt = now
+		if err := q.UpdateCourierStatus(ctx, db.UpdateCourierStatusParams{
+			Suspended:        c.Suspended,
+			ShiftZoneID:      c.ShiftZoneID,
+			ActiveDeliveryID: c.ActiveDeliveryID,
+			StatusVersion:    c.StatusVersion,
+			UpdatedAt:        now,
+			ID:               c.ID,
+		}); err != nil {
+			return fmt.Errorf("update courier status: %w", err)
+		}
+		if err := s.emitCourierEvent(ctx, tx, c.ID, EventStatusChanged, c.StatusVersion, now, statusChangedData{
+			CourierID: c.ID,
+			Status:    Status(c),
+			ZoneID:    c.ShiftZoneID,
+			Vehicle:   c.Vehicle,
+			Suspended: c.Suspended,
+		}); err != nil {
+			return err
+		}
+		out = c
+		return nil
+	})
+	return out, err
+}
