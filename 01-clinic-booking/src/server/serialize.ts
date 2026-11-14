@@ -1,5 +1,6 @@
 import type { AvailabilityException, AvailabilityRule, Clinic, Provider } from "@prisma/client";
-import { fromDbDate } from "./dates";
+import type { AppointmentView } from "@/services/access";
+import { fromDbDate, isoInstant } from "./dates";
 
 export function serializeClinic(clinic: Clinic) {
   return {
@@ -43,5 +44,26 @@ export function serializeException(exception: AvailabilityException) {
     startLocal: exception.startLocal,
     endLocal: exception.endLocal,
     slotMinutes: exception.slotMinutes,
+  };
+}
+
+export function serializeAppointment(appointment: AppointmentView) {
+  const { provider, patient } = appointment;
+  const { clinic } = provider;
+  return {
+    id: appointment.id,
+    status: appointment.status,
+    startsAt: isoInstant(appointment.startsAt),
+    endsAt: isoInstant(appointment.endsAt),
+    reason: appointment.reason,
+    lateCancel: appointment.lateCancel,
+    cancelledAt: appointment.cancelledAt ? isoInstant(appointment.cancelledAt) : null,
+    cancelReason: appointment.cancelReason,
+    rescheduledFromId: appointment.rescheduledFromId,
+    bookedByUserId: appointment.bookedByUserId,
+    createdAt: isoInstant(appointment.createdAt),
+    provider: { id: provider.id, displayName: provider.displayName, specialty: provider.specialty },
+    clinic: { id: clinic.id, name: clinic.name, timezone: clinic.timezone },
+    patient: { id: patient.id, fullName: patient.fullName, timezone: patient.timezone },
   };
 }

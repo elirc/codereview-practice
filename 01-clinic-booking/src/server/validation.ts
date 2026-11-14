@@ -1,4 +1,4 @@
-import { IANAZone } from "luxon";
+import { DateTime, IANAZone } from "luxon";
 import { z } from "zod";
 import { SLOT_LENGTHS } from "@/domain/slots";
 import { isLocalDate, isWallTime } from "@/domain/time";
@@ -27,6 +27,12 @@ export const slotMinutes = z
     (value) => (SLOT_LENGTHS as readonly number[]).includes(value),
     "Must be one of 15, 20, 30, 45 or 60",
   );
+
+/** An ISO-8601 instant with `Z` or an explicit offset, normalised to UTC. */
+export const instant = z
+  .string()
+  .datetime({ offset: true })
+  .transform((value) => DateTime.fromISO(value, { setZone: true }).toUTC());
 
 /** Path ids that are not UUIDs cannot exist, so they are reported exactly like missing rows. */
 export function parseId(raw: string | undefined, what = "Resource"): string {

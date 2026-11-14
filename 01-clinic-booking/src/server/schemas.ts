@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { daysBetween, wallTimeToMinutes } from "@/domain/time";
-import { localDate, slotMinutes, wallTime } from "./validation";
+import { instant, localDate, slotMinutes, uuid, wallTime } from "./validation";
 
 export const MAX_SLOT_RANGE_DAYS = 31;
 
@@ -53,3 +53,28 @@ export const slotRangeQuery = z
       });
     }
   });
+
+export const idempotencyKeyHeader = z.string().min(1).max(64);
+
+const reason = z.string().trim().max(500);
+
+export const bookingBody = z
+  .object({
+    providerId: uuid,
+    startsAt: instant,
+    reason: reason.optional(),
+    patientId: uuid.optional(),
+  })
+  .strict();
+
+export const cancelBody = z.object({ reason: reason.optional() }).strict();
+
+export const rescheduleBody = z.object({ providerId: uuid.optional(), startsAt: instant }).strict();
+
+export const appointmentListQuery = z.object({
+  scope: z.enum(["mine", "clinic"]).default("mine"),
+  date: localDate.optional(),
+  providerId: uuid.optional(),
+  clinicId: uuid.optional(),
+  status: z.enum(["BOOKED", "CANCELLED", "COMPLETED", "NO_SHOW"]).optional(),
+});

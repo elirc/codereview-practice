@@ -29,3 +29,28 @@ Rule and exception times are `00:00`–`23:59`; `24:00` is not accepted. Windows
 ## Slot availability for staff callers
 
 `GET /providers/:id/slots` always annotates availability with the clinic's lead time, as a patient would see it. Staff and admin may still book a `too_soon` slot through `POST /appointments`, where their exemption applies.
+
+## `patientId` sent by a patient
+
+Patients always book for themselves. A `patientId` in a patient's booking request is ignored rather than rejected, so the request cannot target anyone else either way.
+
+## Codes the spec does not name
+
+- Marking an appointment `COMPLETED` or `NO_SHOW` before it starts returns `422 not_started`.
+- Rescheduling to a provider in a different clinic returns `422 provider_not_in_clinic`.
+
+## Reschedule response
+
+`POST /appointments/:id/reschedule` creates a new appointment, so it answers `201` with that appointment. The old row is cancelled with `cancelReason = "Rescheduled"`; whether it counts as a late cancellation follows the normal cancellation rule for the caller.
+
+## Rescheduled email job
+
+The spec asks for one "rescheduled" email after commit but lists only `email.cancellation` among the queues. A matching `email.rescheduled` queue is added, keyed on the new appointment id with the same retry policy.
+
+## Listing scopes
+
+`scope=mine` is for patients only; other roles use `scope=clinic`. A `date` filter is interpreted in the zone of the clinic named by `clinicId`, else the caller's own clinic, else the clinic of `providerId`. Admins filtering by date without either id get `400 validation_failed`, because "a day" is undefined across clinics in different zones.
+
+## Email enqueue failures
+
+Cancellation and reschedule emails are enqueued after the database transaction commits. If enqueueing fails, the error is logged and the API still reports the committed change; the appointment state is never rolled back over a notification.
