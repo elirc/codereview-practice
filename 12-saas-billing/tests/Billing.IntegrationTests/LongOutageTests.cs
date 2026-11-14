@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class LongOutageTests(BillingApp app) : IntegrationTest(app)
 {
     private Task RunBillingAsync() => App.RunLoopAsync<BillingRun>();

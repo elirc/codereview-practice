@@ -41,8 +41,7 @@ public sealed class WebhookDispatcher(
     }
 
     /// <summary>
-    /// Claims up to <see cref="BatchSize"/> due pending deliveries whose earlier deliveries to the same endpoint and
-    /// object are no longer pending, and returns their ids.
+    /// Claims up to <see cref="BatchSize"/> due pending deliveries and returns their ids.
     /// </summary>
     public async Task<IReadOnlyList<Guid>> ClaimDueAsync(DateTimeOffset now, CancellationToken ct)
     {

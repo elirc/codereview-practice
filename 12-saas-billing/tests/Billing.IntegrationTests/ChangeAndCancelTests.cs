@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class ChangeAndCancelTests(BillingApp app) : IntegrationTest(app)
 {
     private Guid _product;

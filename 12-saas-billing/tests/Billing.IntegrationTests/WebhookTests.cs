@@ -12,6 +12,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class WebhookTests(BillingApp app) : IntegrationTest(app)
 {
     private ApiClient? _ops;

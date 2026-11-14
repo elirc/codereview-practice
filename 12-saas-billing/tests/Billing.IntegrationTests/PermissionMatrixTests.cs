@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class PermissionMatrixTests(BillingApp app) : IntegrationTest(app)
 {
     private static readonly ApiRole[] All = [ApiRole.Service, ApiRole.Support, ApiRole.BillingOps, ApiRole.Admin];

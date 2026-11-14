@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class ConcurrencyTests(BillingApp app) : IntegrationTest(app)
 {
     public override async Task InitializeAsync()

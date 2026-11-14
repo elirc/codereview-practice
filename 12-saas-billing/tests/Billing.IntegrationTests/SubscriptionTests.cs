@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class SubscriptionTests(BillingApp app) : IntegrationTest(app)
 {
     private async Task<Guid> CatalogAsync(int trialDays = 0)

@@ -9,7 +9,7 @@ namespace Billing.Core.Services;
 public sealed class CreditLedger(BillingDbContext db, TimeProvider clock)
 {
     /// <summary>
-    /// Adds the signed amount to the balance of a customer the caller has locked and records the transaction;
+    /// Adds the signed amount to the customer's balance and records the transaction;
     /// throws when the balance would become negative.
     /// </summary>
     public CreditBalanceTransaction Post(

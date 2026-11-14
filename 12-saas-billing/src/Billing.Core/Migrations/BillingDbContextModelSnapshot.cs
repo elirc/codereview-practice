@@ -1107,7 +1107,7 @@ namespace Billing.Core.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string[]>("EventTypes")
+                    b.PrimitiveCollection<string[]>("EventTypes")
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("event_types");

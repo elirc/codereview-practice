@@ -22,6 +22,9 @@ switch (command)
     case "migrate":
         Environment.ExitCode = await MigrateCommand.RunAsync(app.Services);
         return;
+    case "seed":
+        Environment.ExitCode = await SeedCommand.RunAsync(app.Services);
+        return;
     default:
         Console.Error.WriteLine($"Unknown command \"{command}\".");
         Environment.ExitCode = 2;

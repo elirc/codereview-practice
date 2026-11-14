@@ -47,7 +47,7 @@ public static class DbContextExtensions
         LockAsync(db, db.CreditNotes.FromSql($"SELECT * FROM credit_notes WHERE id = {id} FOR UPDATE"), n => n.Id == id, ct);
 
     /// <summary>
-    /// Locks an invoice together with its subscription, subscription first; returns null when the invoice does not exist.
+    /// Loads an invoice and its subscription, if it has one, for update; returns null when the invoice does not exist.
     /// </summary>
     public static async Task<(Invoice Invoice, Subscription? Subscription)?> LockInvoiceWithSubscriptionAsync(
         this BillingDbContext db,

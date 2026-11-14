@@ -1,0 +1,56 @@
+name: 12-saas-billing
+
+on:
+  push:
+    paths: ["12-saas-billing/**", ".github/workflows/12-saas-billing.yml"]
+  pull_request:
+    paths: ["12-saas-billing/**", ".github/workflows/12-saas-billing.yml"]
+
+defaults:
+  run:
+    working-directory: 12-saas-billing
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: billing
+          POSTGRES_PASSWORD: billing
+          POSTGRES_DB: billing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U billing -d billing_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      DATABASE_URL: postgres://billing:billing@localhost:5432/billing_test
+      TEST_DATABASE_URL: postgres://billing:billing@localhost:5432/billing_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: 12-saas-billing/global.json
+
+      - name: Restore
+        run: dotnet restore Billing.slnx
+
+      - name: Format check
+        run: dotnet format Billing.slnx --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build Billing.slnx --no-restore --configuration Release
+
+      - name: Migrate
+        run: dotnet run --project src/Billing.Api --no-build --configuration Release -- migrate
+
+      - name: Test
+        run: dotnet test Billing.slnx --no-build --configuration Release --logger "console;verbosity=normal"

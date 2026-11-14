@@ -57,7 +57,7 @@ public sealed class InvoiceCollector(
 
     /// <summary>
     /// Starts a new attempt (or picks up an unresolved one) for a due invoice, asks the gateway for the outcome and
-    /// stores it; does nothing when the invoice is no longer due or is held by another worker.
+    /// stores it; does nothing when the invoice is no longer due.
     /// </summary>
     public async Task CollectAsync(Guid invoiceId, DateTimeOffset now, CancellationToken ct)
     {

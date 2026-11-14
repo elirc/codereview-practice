@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class CustomerAndCatalogTests(BillingApp app) : IntegrationTest(app)
 {
     [Fact]

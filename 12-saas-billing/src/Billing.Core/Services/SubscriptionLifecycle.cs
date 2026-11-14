@@ -136,7 +136,7 @@ public sealed class SubscriptionLifecycle(
             ct);
 
     /// <summary>
-    /// Ends a subscription the caller has locked: marks it canceled as of now, seals and rates its unbilled usage
+    /// Ends a subscription now: marks it canceled as of now, seals and rates its unbilled usage
     /// into the current period, finalises a final invoice when that produces lines, and records the event.
     /// </summary>
     public async Task CancelNowAsync(Subscription subscription, CancelReason reason, CancellationToken ct)

@@ -8,6 +8,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class InvoiceTests(BillingApp app) : IntegrationTest(app)
 {
     private async Task<(ApiClient Ops, Guid InvoiceId)> DraftAsync(Guid customerId, params (long Quantity, long Unit)[] lines)

@@ -50,7 +50,7 @@ public sealed class SubscriptionBiller(
     ILogger<SubscriptionBiller> logger)
 {
     /// <summary>
-    /// Bills the subscription's due boundary when it is due and not held by another worker; returns whether a
+    /// Bills the subscription's next boundary when it is still due; returns whether a
     /// boundary was billed.
     /// </summary>
     public async Task<bool> BillNextBoundaryAsync(Guid subscriptionId, DateTimeOffset now, CancellationToken ct)

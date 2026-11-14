@@ -16,7 +16,7 @@ public sealed class InvoiceFinalizer(
     ILogger<InvoiceFinalizer> logger)
 {
     /// <summary>
-    /// Finalises a saved draft invoice held by the caller: snapshots the customer, taxes every line, applies the
+    /// Finalises a saved draft invoice: snapshots the customer, taxes every line, applies the
     /// customer's credit, assigns the next invoice number and leaves the invoice open or paid.
     /// </summary>
     public async Task FinalizeAsync(Invoice invoice, CancellationToken ct)

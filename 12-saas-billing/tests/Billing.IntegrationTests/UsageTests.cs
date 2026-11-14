@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Billing.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class UsageTests(BillingApp app) : IntegrationTest(app)
 {
     private static readonly DateTimeOffset Boundary = new(2026, 2, 15, 1, 0, 0, TimeSpan.Zero);

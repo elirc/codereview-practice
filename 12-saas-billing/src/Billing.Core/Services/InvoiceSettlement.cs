@@ -15,7 +15,7 @@ public sealed class InvoiceSettlement(
     ILogger<InvoiceSettlement> logger)
 {
     /// <summary>
-    /// Marks a locked invoice whose remaining amount is zero as paid, records <c>invoice.paid</c>, and returns a
+    /// Marks an invoice whose remaining amount is zero as paid, records <c>invoice.paid</c>, and returns a
     /// past-due subscription to active when it has no other declined open invoice.
     /// </summary>
     public async Task MarkPaidAsync(Invoice invoice, Subscription? subscription, CancellationToken ct)
@@ -44,7 +44,7 @@ public sealed class InvoiceSettlement(
     }
 
     /// <summary>
-    /// Counts a decline on a locked invoice: schedules the next attempt, or after the last allowed decline marks the
+    /// Counts a decline on an invoice: schedules the next attempt, or after the last allowed decline marks the
     /// invoice uncollectible and cancels its subscription; an active subscription becomes past due.
     /// </summary>
     public async Task ApplyDeclineAsync(Invoice invoice, Subscription? subscription, string failureCode, CancellationToken ct)
