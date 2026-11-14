@@ -90,6 +90,14 @@ public sealed class BillingApp : IAsyncLifetime
         return await query(scope.ServiceProvider.GetRequiredService<BillingDbContext>());
     }
 
+    /// <summary>Runs one pass of the loop runner at the current manual time.</summary>
+    public async Task RunLoopAsync<TRunner>()
+        where TRunner : ILoopRunner
+    {
+        await using var scope = Scope();
+        await scope.ServiceProvider.GetRequiredService<TRunner>().RunOnceAsync(Clock.GetUtcNow(), default);
+    }
+
     /// <summary>Resolves a scoped service and runs the action with it.</summary>
     public async Task RunAsync<TService>(Func<TService, Task> action)
         where TService : notnull

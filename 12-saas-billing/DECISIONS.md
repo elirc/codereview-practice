@@ -11,3 +11,5 @@ Points the spec leaves open, the choice made, and why.
 - **Customer payment token in responses.** The token is not returned; customer representations carry `hasPaymentMethod` instead.
 - **Idempotency-Key format.** A missing header is `400 idempotency_key_required`; a header outside 8–128 characters is `400 validation_failed` on the `Idempotency-Key` path. Keys are scoped to the API key that sent them. `404` responses are not stored, since the spec lists only `2xx`, `409` and `422`.
 - **Unknown plan code or customer on subscribe.** `404 not_found`; `422 plan_incompatible` is kept for plans that exist but are retired or in another currency.
+- **Trial end event.** The trial-to-active transition emits `subscription.trial_ended` only, not also `subscription.updated`, since the spec's event table gives that transition its own type.
+- **Billing run claim.** Due subscription ids are read in a batch of 50; each is then locked with `FOR UPDATE SKIP LOCKED` (re-checking status and `next_billing_at`) inside its own transaction, which is held until that boundary's invoice is finalised.
