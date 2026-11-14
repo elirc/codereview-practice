@@ -6,6 +6,8 @@ import type { ServiceContext } from '../services/context.js';
 import { registerAuth } from './auth.js';
 import { registerErrorHandling } from './errors.js';
 import { authRoutes } from './routes/auth.js';
+import { docRoutes } from './routes/docs.js';
+import { sharingRoutes } from './routes/sharing.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 
 export interface AppOptions {
@@ -41,6 +43,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
       api.get('/health', async () => ({ status: 'ok' }));
       authRoutes(api, ctx);
       workspaceRoutes(api, ctx);
+      docRoutes(api, ctx);
+      sharingRoutes(api, ctx);
     },
     { prefix: '/api' },
   );
