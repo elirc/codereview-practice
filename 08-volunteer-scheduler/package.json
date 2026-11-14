@@ -11,6 +11,8 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"start": "node build",
+		"db:migrate": "tsx scripts/migrate.ts",
+		"db:generate": "drizzle-kit generate",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "prettier --check . && eslint .",

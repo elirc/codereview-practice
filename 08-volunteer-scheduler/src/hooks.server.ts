@@ -16,6 +16,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const requestId = inbound && REQUEST_ID_PATTERN.test(inbound) ? inbound : randomUUID();
 	event.locals.requestId = requestId;
 	event.locals.log = app.logger.child({ requestId });
+	event.locals.ctx = app.ctx;
 
 	const started = performance.now();
 	const response = await resolve(event);
