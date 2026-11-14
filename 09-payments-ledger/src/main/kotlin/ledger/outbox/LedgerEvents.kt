@@ -2,6 +2,7 @@ package ledger.outbox
 
 import com.fasterxml.jackson.annotation.JsonValue
 import ledger.domain.AccountStatus
+import ledger.domain.Currency
 import ledger.domain.WireValue
 import ledger.holds.Hold
 import ledger.ledger.Account
@@ -10,6 +11,7 @@ import ledger.ledger.JournalEntry
 import ledger.settlement.BankExpectation
 import org.springframework.stereotype.Component
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 enum class CauseType(@get:JsonValue override val wire: String) : WireValue {
@@ -121,6 +123,32 @@ class LedgerEvents(private val outbox: OutboxWriter) {
                 "currency" to hold.currency,
                 "expiresAt" to hold.expiresAt,
                 "captureEntryId" to hold.captureEntryId
+            )
+        )
+    }
+
+    fun settlementCompleted(
+        batchId: UUID,
+        businessDate: LocalDate,
+        currency: Currency,
+        paidCount: Long,
+        paidTotalMinor: Long,
+        occurredAt: Instant
+    ) {
+        outbox.record(
+            topic = Topics.SETTLEMENT,
+            partitionKey = batchId.toString(),
+            type = "settlement.batch_completed",
+            aggregateType = "settlement_batch",
+            aggregateId = batchId.toString(),
+            sequence = 1,
+            occurredAt = occurredAt,
+            data = mapOf(
+                "batchId" to batchId,
+                "businessDate" to businessDate,
+                "currency" to currency,
+                "paidCount" to paidCount,
+                "paidTotalMinor" to paidTotalMinor
             )
         )
     }

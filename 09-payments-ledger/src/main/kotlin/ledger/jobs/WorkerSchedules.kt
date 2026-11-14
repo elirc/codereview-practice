@@ -22,7 +22,8 @@ class WorkerSchedules(
     private val idempotencyPurge: IdempotencyPurgeJob,
     private val holdExpiry: HoldExpiryJob,
     private val relayLoop: OutboxRelayLoop,
-    private val outboxPurge: OutboxPurgeJob
+    private val outboxPurge: OutboxPurgeJob,
+    private val settlementTrigger: SettlementTriggerJob
 ) {
     @Scheduled(fixedDelay = RELAY_MS)
     fun relayOutbox() {
@@ -32,6 +33,11 @@ class WorkerSchedules(
     @Scheduled(fixedDelay = HOLD_EXPIRY_MS)
     fun expireHolds() {
         jobs.run("hold-expiry") { holdExpiry.runOnce(clock.instant()) }
+    }
+
+    @Scheduled(cron = "0 15 0 * * *", zone = "UTC")
+    fun settleYesterday() {
+        jobs.run("settlement-trigger") { settlementTrigger.runOnce(clock.instant()) }
     }
 
     @Scheduled(fixedDelay = HOUR_MS, initialDelay = MINUTE_MS)

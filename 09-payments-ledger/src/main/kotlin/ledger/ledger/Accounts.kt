@@ -93,6 +93,13 @@ class Accounts(private val jdbc: JdbcClient) {
             .list()
     }
 
+    /** Returns the ids of all merchant accounts in [currency], ordered by id. */
+    fun merchantIds(currency: Currency): List<UUID> =
+        jdbc.sql("SELECT id FROM accounts WHERE type = 'merchant' AND currency = :currency ORDER BY id")
+            .param("currency", currency.name)
+            .query { rs, _ -> rs.uuid("id") }
+            .list()
+
     fun insert(account: Account) {
         jdbc.sql(
             """
