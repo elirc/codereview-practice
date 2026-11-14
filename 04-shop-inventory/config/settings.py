@@ -3,6 +3,7 @@
 Every value comes from the environment and is validated here once, at start-up.
 """
 
+import re
 from pathlib import Path
 
 import environ
@@ -32,6 +33,12 @@ _require(
     "LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR",
 )
 
+SHOP_CURRENCY = env.str("SHOP_CURRENCY", default="USD")
+_require(
+    re.fullmatch(r"[A-Z]{3}", SHOP_CURRENCY) is not None,
+    "SHOP_CURRENCY must be an upper-case ISO-4217 code such as USD",
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -40,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
     "django_structlog",
     "core",
     "catalog",
@@ -92,8 +100,10 @@ SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_HTTPONLY = True
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["core.permissions.IsStaffMember"],
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.Pagination",
+    "PAGE_SIZE": 50,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "EXCEPTION_HANDLER": "core.errors.exception_handler",
