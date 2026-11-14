@@ -47,8 +47,9 @@ async function requireComment(
   issueId: string,
   commentId: string,
 ): Promise<CommentRow> {
-  const comment = await findComment(tenant.orgId, issueId, commentId, deps.db);
+  const comment = await findComment(tenant.orgId, commentId, deps.db);
   if (!comment) throw notFound();
+  if (comment.issue_id !== issueId) throw forbidden();
   return comment;
 }
 

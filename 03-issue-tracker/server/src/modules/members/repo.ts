@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import type { Database } from '../../db/index.js';
-import { isoMicros } from '../../db/sql.js';
+import { isoMicros, keysetAfter, timestampValue } from '../../db/sql.js';
 import type { MembershipRole } from '../../db/types.js';
 import type { Cursor } from '../../lib/cursor.js';
 
@@ -37,7 +37,7 @@ export async function listMembersPage(
   let query = memberQuery(orgId, db);
   if (after) {
     query = query.where(
-      sql<boolean>`(m.created_at, m.user_id) > (${after.v}::timestamptz, ${after.id}::uuid)`,
+      keysetAfter('m.created_at', 'm.user_id', 'asc', timestampValue(after.v), after.id),
     );
   }
   return query.orderBy('m.created_at', 'asc').orderBy('m.user_id', 'asc').limit(take).execute();

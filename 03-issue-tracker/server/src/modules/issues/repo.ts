@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import type { Database } from '../../db/index.js';
-import { isoMicros } from '../../db/sql.js';
+import { isoMicros, keysetAfter, timestampValue } from '../../db/sql.js';
 import type { IssueStatus } from '../../db/types.js';
 import type { Cursor } from '../../lib/cursor.js';
 import type { LabelRow } from '../labels/repo.js';
@@ -176,12 +176,8 @@ export async function listIssuesPage(
     query = query.where(sql<boolean>`i.search @@ websearch_to_tsquery('english', ${filters.text})`);
   }
   if (after) {
-    query =
-      sort === 'priority'
-        ? query.where(sql<boolean>`(i.priority, i.id) < (${after.v}::int, ${after.id}::uuid)`)
-        : query.where(
-            sql<boolean>`(${sql.ref(column)}, i.id) < (${after.v}::timestamptz, ${after.id}::uuid)`,
-          );
+    const value = sort === 'priority' ? sql`${after.v}::int` : timestampValue(after.v);
+    query = query.where(keysetAfter(column, 'i.id', 'desc', value, after.id));
   }
   return query.orderBy(column, 'desc').orderBy('i.id', 'desc').limit(take).execute();
 }

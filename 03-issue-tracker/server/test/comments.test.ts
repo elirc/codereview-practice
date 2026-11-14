@@ -119,7 +119,7 @@ describe('comments', () => {
     expect(byAuthor.statusCode).toBe(204);
   });
 
-  it('returns 404 for a comment addressed through the wrong issue', async () => {
+  it('rejects a comment addressed through the wrong issue', async () => {
     const patch = await call(ctx, 'PATCH', `${ENG2_COMMENTS}/${miaComment}`, {
       cookie: f.users.mia.cookie,
       body: { body: 'Moved?' },
@@ -127,8 +127,8 @@ describe('comments', () => {
     const del = await call(ctx, 'DELETE', `${ENG2_COMMENTS}/${miaComment}`, {
       cookie: f.users.alice.cookie,
     });
-    expect(patch.statusCode).toBe(404);
-    expect(del.statusCode).toBe(404);
+    expect(patch.statusCode).toBe(403);
+    expect(del.statusCode).toBe(403);
   });
 
   it('returns 404 for a comment from another org', async () => {
