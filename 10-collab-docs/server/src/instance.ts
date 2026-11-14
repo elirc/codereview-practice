@@ -2,7 +2,6 @@ import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from './config/config.js';
 import { Bus } from './collab/bus.js';
-import { BusNotifier } from './collab/busNotifier.js';
 import { DocStore } from './collab/docStore.js';
 import { RoomRegistry } from './collab/registry.js';
 import { createDb, type Db } from './db/db.js';
@@ -46,8 +45,7 @@ export function createInstance(options: InstanceOptions): Instance {
   const bus = new Bus(config.REDIS_URL, config.INSTANCE_ID ?? random.uuid(), logger);
   const store = new DocStore(db, clock, config.MAX_DOC_BYTES);
   const registry = new RoomRegistry({ store, bus, logger, roomIdleMs: config.ROOM_IDLE_MS });
-  const notifier = new BusNotifier(bus, logger);
-  const ctx: ServiceContext = { db, clock, random, config, notifier, live: registry };
+  const ctx: ServiceContext = { db, clock, random, config, notifier: registry, live: registry };
   const app = buildApp({ ctx, logger });
   const collab = new CollabServer({ config, db, clock, random, logger, registry });
   collab.attach(app.server);

@@ -183,6 +183,28 @@ describe('CollabProvider', () => {
     expect(sockets[0].syncSteps()).not.toContain(syncProtocol.messageYjsSyncStep2);
   });
 
+  it('announces its presence with a newer clock after every hello', () => {
+    const { provider, sockets, scheduler } = setup();
+    provider.setPresence({ user: { name: 'Ada' } });
+    const clockOf = () => provider.awareness.meta.get(provider.doc.clientID)!.clock;
+    const awarenessFrames = (socket: FakeSocket) =>
+      socket.sent.filter((frame) => decoding.readVarUint(decoding.createDecoder(frame)) === 1);
+
+    sockets[0].open();
+    const before = clockOf();
+    sockets[0].deliver(hello('editor'));
+    expect(awarenessFrames(sockets[0])).toHaveLength(1);
+    expect(clockOf()).toBeGreaterThan(before);
+
+    sockets[0].serverClose(1006);
+    scheduler.runNext();
+    sockets[1].open();
+    const again = clockOf();
+    sockets[1].deliver(hello('editor'));
+    expect(awarenessFrames(sockets[1])).toHaveLength(1);
+    expect(clockOf()).toBeGreaterThan(again);
+  });
+
   it('reports role changes and comment notifications', () => {
     const { provider, sockets } = setup();
     const roles: Array<string | null> = [];

@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import * as Y from 'yjs';
+import { docFromLog } from '../collab/docState.js';
 import { readDocLog } from '../collab/docStore.js';
 import { toBytea, type Db } from '../db/db.js';
 import type { Logger } from '../lib/logger.js';
@@ -44,12 +45,8 @@ async function compactNext(
 
     const head = doc.head_seq;
     const log = await readDocLog(trx, doc.id);
-    const merged = new Y.Doc();
+    const merged = docFromLog(log, head);
     try {
-      if (log.snapshot) Y.applyUpdate(merged, log.snapshot.state);
-      for (const entry of log.updates) {
-        if (entry.seq <= head) Y.applyUpdate(merged, entry.update);
-      }
       const state = Y.encodeStateAsUpdate(merged);
 
       await trx

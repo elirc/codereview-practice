@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { contentOf, docFromLog } from '../../src/collab/docState.js';
 import { createLogger } from '../../src/lib/logger.js';
@@ -144,6 +145,24 @@ describe('restore', () => {
     await editor.waitForText('alpha beta gamma');
     await observer.waitForText('alpha beta gamma');
     expect(await storedText()).toBe('alpha beta gamma');
+  });
+
+  it('restores a change larger than the WebSocket update limit', async () => {
+    editor.append('a'.repeat(150_000));
+    editor.append('b'.repeat(150_000));
+    await observer.waitFor(() => observer.text.length === 300_000);
+    const big = await named('Big');
+    await setText('short');
+    const result = await restore(big);
+    expect(result.changed).toBe(true);
+    await observer.waitFor(() => observer.text.length === 300_000);
+    expect(await storedText()).toBe('a'.repeat(150_000) + 'b'.repeat(150_000));
+    const largest = await server.instance.db
+      .selectFrom('doc_updates')
+      .select(sql<number>`max(octet_length("update"))`.as('bytes'))
+      .where('doc_id', '=', docId)
+      .executeTakeFirstOrThrow();
+    expect(largest.bytes).toBeGreaterThan(262_144);
   });
 
   it('restores emoji at the edge of the changed range without broken characters', async () => {

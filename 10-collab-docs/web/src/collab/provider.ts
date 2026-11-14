@@ -219,8 +219,10 @@ export class CollabProvider {
         this.userId = (message.userId as string | null) ?? null;
         this.setStatus('connected');
         this.applyRole(message.role as DocRole);
-        if (this.socket && this.userId !== null && this.awareness.getLocalState() !== null) {
-          this.send(encodeAwarenessFrame(encodeAwarenessUpdate(this.awareness, [this.doc.clientID])));
+        if (this.userId !== null) {
+          const presence = this.awareness.getLocalState();
+          // Setting the state again advances its clock.
+          if (presence !== null) this.awareness.setLocalState(presence);
         }
         return;
       case 'role':

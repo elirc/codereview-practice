@@ -3,7 +3,7 @@ import type { Config } from '../config/config.js';
 import type { AppendAuthorizer } from '../collab/docStore.js';
 import type { Room } from '../collab/room.js';
 import { filterAwarenessUpdate } from '../collab/awarenessFilter.js';
-import { addsNothing } from '../collab/updates.js';
+import { addsNothing, appliesCleanly } from '../collab/updates.js';
 import { canEdit, canSendPresence } from '../domain/roles.js';
 import type { Clock } from '../lib/clock.js';
 import { resolveDocAccess } from '../services/access.js';
@@ -101,6 +101,10 @@ export class FrameHandler {
       conn.close(CloseCode.Malformed, 'malformed update');
       return;
     }
+    if (!unchanged && !appliesCleanly(update)) {
+      conn.close(CloseCode.Malformed, 'malformed update');
+      return;
+    }
     if (unchanged) return;
 
     const result = await room.appendFromPeer(conn, update, this.authorizer(conn));
@@ -134,9 +138,14 @@ export class FrameHandler {
       return;
     }
     if (conn.awarenessClientId === null) {
-      if (room.awarenessClientTaken(result.clientId, conn)) {
+      const holders = room.awarenessHolders(result.clientId, conn);
+      if (holders.some((peer) => peer.userId !== userId)) {
         conn.close(CloseCode.Forbidden, 'awareness client id not allowed');
         return;
+      }
+      for (const holder of holders) {
+        holder.releaseAwarenessClient();
+        holder.close(CloseCode.Replaced, 'replaced by a newer connection');
       }
       conn.awarenessClientId = result.clientId;
     }

@@ -28,6 +28,8 @@ export interface CollabServerOptions {
   registry: RoomRegistry;
 }
 
+const ANONYMOUS = 'anonymous';
+
 function toBytes(data: WebSocket.RawData): Uint8Array {
   if (Array.isArray(data)) return new Uint8Array(Buffer.concat(data));
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -49,6 +51,7 @@ export class CollabServer extends EventEmitter {
   private readonly random: RandomSource;
   private readonly wss: WebSocketServer;
   private readonly counter: ConnectionCounter;
+  private readonly anonymousCounter: ConnectionCounter;
   private readonly handler: FrameHandler;
   private readonly timers: NodeJS.Timeout[] = [];
   private accepting = true;
@@ -63,6 +66,9 @@ export class CollabServer extends EventEmitter {
     this.registry = options.registry;
     this.wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
     this.counter = new ConnectionCounter(options.config.MAX_CONNECTIONS_PER_USER_PER_DOC);
+    this.anonymousCounter = new ConnectionCounter(
+      options.config.MAX_ANONYMOUS_CONNECTIONS_PER_DOC,
+    );
     this.monitor = new AccessMonitor({
       db: options.db,
       clock: options.clock,
@@ -161,11 +167,11 @@ export class CollabServer extends EventEmitter {
       if (!this.accepting) return rejectUpgrade(socket, 503);
       const userId = decision.session?.user.id ?? null;
       const docId = decision.access.docId;
-      if (userId !== null && !this.counter.tryAcquire(docId, userId)) {
+      if (!this.acquireSlot(docId, userId)) {
         return rejectUpgrade(socket, 429);
       }
       if (socket.destroyed) {
-        if (userId !== null) this.counter.release(docId, userId);
+        this.releaseSlot(docId, userId);
         return;
       }
       socket.off('error', onError);
@@ -176,6 +182,17 @@ export class CollabServer extends EventEmitter {
       this.log.error({ err: error }, 'upgrade failed');
       rejectUpgrade(socket, 500);
     }
+  }
+
+  private acquireSlot(docId: string, userId: string | null): boolean {
+    return userId === null
+      ? this.anonymousCounter.tryAcquire(docId, ANONYMOUS)
+      : this.counter.tryAcquire(docId, userId);
+  }
+
+  private releaseSlot(docId: string, userId: string | null): void {
+    if (userId === null) this.anonymousCounter.release(docId, ANONYMOUS);
+    else this.counter.release(docId, userId);
   }
 
   private open(socket: WebSocket, session: AuthSession | null, access: DocAccess): void {
@@ -251,10 +268,11 @@ export class CollabServer extends EventEmitter {
   private closed(conn: Connection, code: number): void {
     conn.markClosed();
     this.connections.delete(conn);
-    if (conn.auth.userId !== null) this.counter.release(conn.docId, conn.auth.userId);
+    this.releaseSlot(conn.docId, conn.auth.userId);
     if (conn.room) {
-      if (conn.awarenessClientId !== null) {
-        conn.room.removeAwareness(conn.awarenessClientId, conn.awarenessClock);
+      const clientId = conn.awarenessClientId;
+      if (clientId !== null && conn.room.awarenessHolders(clientId, conn).length === 0) {
+        conn.room.removeAwareness(clientId, conn.awarenessClock);
       }
       this.registry.detach(conn.room, conn, this.clock.now());
     }

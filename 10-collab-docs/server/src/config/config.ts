@@ -37,6 +37,7 @@ const configSchema = databaseSchema.extend({
   LOOPS_ENABLED: flag(true),
 
   MAX_CONNECTIONS_PER_USER_PER_DOC: int(8, 1),
+  MAX_ANONYMOUS_CONNECTIONS_PER_DOC: int(50, 1),
   WS_RATE_PER_SEC: int(50, 1),
   WS_RATE_BURST: int(100, 1),
   MAX_UPDATE_BYTES: int(262_144, 1),

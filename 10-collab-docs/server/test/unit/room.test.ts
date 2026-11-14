@@ -65,6 +65,7 @@ class FakeStore implements RoomStore {
 class FakePeer implements RoomPeer {
   readonly userId = 'user-1';
   readonly awarenessClientId = null;
+  releaseAwarenessClient(): void {}
   readonly sent: Uint8Array[] = [];
   send(frame: Uint8Array): void {
     this.sent.push(frame);

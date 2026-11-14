@@ -2,27 +2,22 @@ import * as Y from 'yjs';
 
 export type DecodedUpdate = ReturnType<typeof Y.decodeUpdate>;
 
-interface Range {
-  clock: number;
-  len: number;
-}
-
-function covers(ranges: Range[], clock: number, len: number): boolean {
-  let low = 0;
-  let high = ranges.length - 1;
-  let candidate = -1;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    if (ranges[mid].clock <= clock) {
-      candidate = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
+/** Returns whether every struct of `client` in [clock, clock + len) exists in `doc` and is deleted. */
+function rangeDeleted(doc: Y.Doc, client: number, clock: number, len: number): boolean {
+  const structs = doc.store.clients.get(client);
+  if (!structs || structs.length === 0) return false;
+  const last = structs[structs.length - 1];
+  const end = clock + len;
+  if (last.id.clock + last.length < end) return false;
+  let index = Y.findIndexSS(structs, clock);
+  let position = clock;
+  while (position < end) {
+    const struct = structs[index];
+    if (!struct.deleted) return false;
+    position = struct.id.clock + struct.length;
+    index += 1;
   }
-  if (candidate < 0) return false;
-  const range = ranges[candidate];
-  return range.clock + range.len >= clock + len;
+  return true;
 }
 
 /**
@@ -32,14 +27,33 @@ function covers(ranges: Range[], clock: number, len: number): boolean {
 export function addsNothing(update: Uint8Array, doc: Y.Doc): boolean {
   const decoded: DecodedUpdate = Y.decodeUpdate(Y.diffUpdate(update, Y.encodeStateVector(doc)));
   if (decoded.structs.length > 0) return false;
-  if (decoded.ds.clients.size === 0) return true;
-  const known = Y.createDeleteSetFromStructStore(doc.store);
   for (const [client, items] of decoded.ds.clients) {
-    const ranges = known.clients.get(client);
-    if (!ranges) return false;
     for (const item of items) {
-      if (!covers(ranges, item.clock, item.len)) return false;
+      if (item.len > 0 && !rangeDeleted(doc, client, item.clock, item.len)) return false;
     }
   }
   return true;
+}
+
+/** Returns whether the update can be applied to a fresh document without an error. */
+export function appliesCleanly(update: Uint8Array): boolean {
+  const scratch = new Y.Doc();
+  try {
+    Y.applyUpdate(scratch, update);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    scratch.destroy();
+  }
+}
+
+/** Applies an update, returning false instead of throwing when it cannot be applied. */
+export function tryApplyUpdate(doc: Y.Doc, update: Uint8Array, origin?: unknown): boolean {
+  try {
+    Y.applyUpdate(doc, update, origin);
+    return true;
+  } catch {
+    return false;
+  }
 }

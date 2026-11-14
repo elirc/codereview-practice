@@ -28,6 +28,8 @@ export interface RoomStore {
 export interface RoomPeer {
   readonly userId: string | null;
   readonly awarenessClientId: number | null;
+  /** Forgets the awareness client id this peer announced. */
+  releaseAwarenessClient(): void;
   send(frame: Uint8Array): void;
   close(code: number, reason: string): void;
 }
@@ -219,12 +221,11 @@ export class Room {
     return encodeAwareness(encodeAwarenessUpdate(this.awareness, clients));
   }
 
-  /** Returns whether another peer already uses this awareness client id. */
-  awarenessClientTaken(clientId: number, except: RoomPeer): boolean {
-    for (const peer of this.peers) {
-      if (peer !== except && peer.awarenessClientId === clientId) return true;
-    }
-    return false;
+  /** Returns the other peers that have announced this awareness client id. */
+  awarenessHolders(clientId: number, except: RoomPeer): RoomPeer[] {
+    return [...this.peers].filter(
+      (peer) => peer !== except && peer.awarenessClientId === clientId,
+    );
   }
 
   /** Sends a frame to every peer except `except`. */

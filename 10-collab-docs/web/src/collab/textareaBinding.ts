@@ -39,8 +39,8 @@ export function bindTextarea(text: Y.Text, textarea: TextAreaLike): () => void {
     const startIndex = Math.min(textarea.selectionStart, length);
     const endIndex = Math.min(textarea.selectionEnd, length);
     const start = Y.createRelativePositionFromTypeIndex(text, startIndex);
-    // A non-empty selection ends on its last character, so text typed after it stays outside.
-    const end = endIndex > startIndex ? Y.createRelativePositionFromTypeIndex(text, endIndex, -1) : start;
+    const end =
+      endIndex > startIndex ? Y.createRelativePositionFromTypeIndex(text, endIndex, -1) : start;
     selection = { start, end };
   };
 

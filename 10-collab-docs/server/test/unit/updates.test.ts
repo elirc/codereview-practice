@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { addsNothing } from '../../src/collab/updates.js';
+import { addsNothing, appliesCleanly, tryApplyUpdate } from '../../src/collab/updates.js';
 
 function synced(): { server: Y.Doc; client: Y.Doc } {
   const client = new Y.Doc();
@@ -10,6 +10,17 @@ function synced(): { server: Y.Doc; client: Y.Doc } {
   Y.applyUpdate(server, Y.encodeStateAsUpdate(client));
   return { server, client };
 }
+
+describe('appliesCleanly', () => {
+  it('accepts a real update and refuses truncated bytes', () => {
+    const doc = new Y.Doc();
+    doc.getText('content').insert(0, 'hello');
+    const update = Y.encodeStateAsUpdate(doc);
+    expect(appliesCleanly(update)).toBe(true);
+    expect(appliesCleanly(update.subarray(0, update.length - 3))).toBe(false);
+    expect(tryApplyUpdate(new Y.Doc(), update.subarray(0, 2))).toBe(false);
+  });
+});
 
 describe('addsNothing', () => {
   it('is true for an empty update', () => {

@@ -8,6 +8,7 @@ export const MESSAGE_AWARENESS = 1;
 export const MESSAGE_CONTROL = 2;
 
 export const CloseCode = {
+  Replaced: 1000,
   GoingAway: 1001,
   ServerError: 1011,
   Malformed: 4400,

@@ -2,6 +2,7 @@ import type * as Y from 'yjs';
 import { fromBase64, toBase64 } from '../lib/bytes.js';
 import type { Logger } from '../lib/logger.js';
 import type { LiveDocs } from '../services/liveDocs.js';
+import type { ControlEvent, DocEvent, Notifier } from '../services/notifier.js';
 import { CloseCode } from '../ws/codec.js';
 import type { Bus, BusHandler } from './bus.js';
 import {
@@ -9,6 +10,7 @@ import {
   controlBusMessage,
   docBusMessage,
   docChannel,
+  type ControlBusMessage,
   type DocBusMessage,
 } from './busMessages.js';
 import { Room, type RoomPeer, type RoomStore } from './room.js';
@@ -27,8 +29,11 @@ export interface RegistryOptions {
   roomIdleMs: number;
 }
 
-/** The open rooms of this instance, keyed by document id. */
-export class RoomRegistry implements LiveDocs {
+/**
+ * The open rooms of this instance, keyed by document id. Also the services'
+ * notifier: events take effect on this instance's rooms and are published to the others.
+ */
+export class RoomRegistry implements LiveDocs, Notifier {
   private readonly rooms = new Map<string, Room>();
   private readonly store: RoomStore;
   private readonly bus: Bus;
@@ -232,13 +237,38 @@ export class RoomRegistry implements LiveDocs {
       this.log.warn({ docId: room.docId }, 'ignoring malformed bus message');
       return;
     }
-    this.handleDocMessage(room, parsed.data);
+    if (parsed.data.instanceId === this.bus.instanceId) return;
+    this.applyDocMessage(room.docId, room, parsed.data);
   }
 
-  private handleDocMessage(room: Room, message: DocBusMessage): void {
+  /** Applies a document event on this instance and publishes it to the others. */
+  doc(docId: string, event: DocEvent): void {
+    const message: DocBusMessage = { ...event, instanceId: this.bus.instanceId };
+    this.applyDocMessage(docId, this.rooms.get(docId) ?? null, message);
+    this.bus
+      .publish(docChannel(docId), message)
+      .catch((error: unknown) =>
+        this.log.warn({ err: error, docId, kind: event.kind }, 'bus publish failed'),
+      );
+  }
+
+  /** Applies a control event on this instance and publishes it to the others. */
+  control(event: ControlEvent): void {
+    const message: ControlBusMessage = { ...event, instanceId: this.bus.instanceId };
+    this.applyControlMessage(message);
+    this.bus
+      .publish(CONTROL_CHANNEL, message)
+      .catch((error: unknown) => this.log.warn({ err: error, kind: event.kind }, 'bus publish failed'));
+  }
+
+  private applyDocMessage(docId: string, room: Room | null, message: DocBusMessage): void {
+    if (message.kind === 'perm') {
+      this.accessListener?.docPermChanged(docId);
+      return;
+    }
+    if (!room) return;
     switch (message.kind) {
       case 'update':
-        if (message.instanceId === this.bus.instanceId) return;
         room.integrate(message.seq, fromBase64(message.update), null);
         return;
       case 'meta':
@@ -251,11 +281,7 @@ export class RoomRegistry implements LiveDocs {
         room.closePeers(CloseCode.Gone, 'document trashed');
         return;
       case 'awareness':
-        if (message.instanceId === this.bus.instanceId) return;
         room.applyRemoteAwareness(fromBase64(message.update));
-        return;
-      case 'perm':
-        this.accessListener?.docPermChanged(room.docId);
         return;
     }
   }
@@ -266,7 +292,11 @@ export class RoomRegistry implements LiveDocs {
       this.log.warn('ignoring malformed control message');
       return;
     }
-    const message = parsed.data;
+    if (parsed.data.instanceId === this.bus.instanceId) return;
+    this.applyControlMessage(parsed.data);
+  }
+
+  private applyControlMessage(message: ControlBusMessage): void {
     switch (message.kind) {
       case 'workspace_perm':
         this.accessListener?.workspacePermChanged(message.workspaceId);

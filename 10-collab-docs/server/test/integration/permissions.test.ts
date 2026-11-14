@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import type { BusMessage } from '../../src/collab/busMessages.js';
+import type { ControlEvent, DocEvent } from '../../src/services/notifier.js';
 import { encodeSyncStep1, encodeSyncUpdate } from '../../src/ws/codec.js';
 import { ApiClient, registerUser, type TestUser } from '../helpers/http.js';
 import { freshDatabase, startInstance, stopInstances, type RunningInstance } from '../helpers/instance.js';
@@ -22,14 +22,15 @@ async function rowCount(): Promise<number> {
   return rows.length;
 }
 
-/** Stops access-related bus messages from being published. */
+/** Drops access-related notifications, both on this instance and on the bus. */
 function silenceAccessMessages() {
-  const bus = server.instance.bus;
-  const original = bus.publish.bind(bus);
-  return vi.spyOn(bus, 'publish').mockImplementation(async (channel: string, message: BusMessage) => {
-    if (['perm', 'trashed', 'workspace_perm', 'session_ended'].includes(message.kind)) return;
-    return original(channel, message);
+  const registry = server.instance.registry;
+  const doc = registry.doc.bind(registry);
+  vi.spyOn(registry, 'doc').mockImplementation((docId: string, event: DocEvent) => {
+    if (event.kind === 'perm' || event.kind === 'trashed') return;
+    doc(docId, event);
   });
+  vi.spyOn(registry, 'control').mockImplementation((_event: ControlEvent) => undefined);
 }
 
 function insertUpdate(text: string): Uint8Array {

@@ -87,6 +87,10 @@ export class Connection implements RoomPeer {
     this.socket.close(code, reason);
   }
 
+  releaseAwarenessClient(): void {
+    this.awarenessClientId = null;
+  }
+
   /** Records that the socket has closed. */
   markClosed(): void {
     this.closed = true;

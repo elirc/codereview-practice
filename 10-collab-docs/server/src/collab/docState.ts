@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
 import type { DocLog } from './docStore.js';
+import { tryApplyUpdate } from './updates.js';
 
 export const CONTENT_FIELD = 'content';
 
@@ -8,11 +9,13 @@ export function contentOf(doc: Y.Doc): Y.Text {
   return doc.getText(CONTENT_FIELD);
 }
 
-/** Builds a fresh Y.Doc from a snapshot and the updates after it. */
-export function docFromLog(log: DocLog): Y.Doc {
+/** Builds a fresh Y.Doc from a snapshot and the updates after it, skipping any that cannot be applied. */
+export function docFromLog(log: DocLog, uptoSeq = Number.POSITIVE_INFINITY): Y.Doc {
   const doc = new Y.Doc();
-  if (log.snapshot) Y.applyUpdate(doc, log.snapshot.state);
-  for (const entry of log.updates) Y.applyUpdate(doc, entry.update);
+  if (log.snapshot) tryApplyUpdate(doc, log.snapshot.state);
+  for (const entry of log.updates) {
+    if (entry.seq <= uptoSeq) tryApplyUpdate(doc, entry.update);
+  }
   return doc;
 }
 

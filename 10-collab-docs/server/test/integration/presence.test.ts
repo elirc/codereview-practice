@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../helpers/env.js';
 import { registerUser, type TestUser } from '../helpers/http.js';
-import { freshDatabase, startInstance, stopInstances, type RunningInstance } from '../helpers/instance.js';
+import {
+  connectionsClosed,
+  freshDatabase,
+  startInstance,
+  stopInstances,
+  type RunningInstance,
+} from '../helpers/instance.js';
 import { TestClient } from '../helpers/wsClient.js';
 
 let a: RunningInstance;
@@ -79,6 +85,27 @@ describe('presence', () => {
     second.sendPresence({}, 5, first.doc.clientID);
     expect((await second.closed).code).toBe(4403);
     await first.close();
+  });
+
+  it('hands a client id to the same user reconnecting before the old socket has closed', async () => {
+    const first = await TestClient.join(a.url, docId, { token: member.token });
+    const watcher = await TestClient.join(b.url, docId, { token: owner.token });
+    first.sendPresence({ user: { color: 'red' } }, 1);
+    await watcher.waitFor(() => watcher.presence().has(first.doc.clientID));
+
+    const second = await TestClient.join(a.url, docId, { token: member.token, doc: first.doc });
+    const oldClosed = connectionsClosed(a.instance);
+    second.sendPresence({ user: { color: 'green' } }, 2);
+    expect((await first.closed).code).toBe(1000);
+    await oldClosed;
+    await watcher.waitFor(
+      () =>
+        (watcher.presence().get(first.doc.clientID)?.user as { color?: string } | undefined)
+          ?.color === 'green',
+    );
+    expect(second.isOpen()).toBe(true);
+    expect(a.instance.registry.get(docId)!.awareness.getStates().has(first.doc.clientID)).toBe(true);
+    await Promise.all([second.close(), watcher.close()]);
   });
 
   it('refuses presence from an anonymous viewer link', async () => {

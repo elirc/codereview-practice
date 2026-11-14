@@ -146,6 +146,17 @@ describe('connecting', () => {
     await Promise.all([...clients.slice(1), again].map((client) => client.close()));
   });
 
+  it('limits anonymous connections per document on one instance', async () => {
+    const limited = await startInstance({ env: { MAX_ANONYMOUS_CONNECTIONS_PER_DOC: '2' } });
+    const viewerLink = await link('viewer');
+    const first = await TestClient.join(limited.url, docId, { link: viewerLink });
+    const second = await TestClient.join(limited.url, docId, { link: viewerLink });
+    expect(await TestClient.refusedStatus(limited.url, docId, { link: viewerLink })).toBe(429);
+    const signedIn = await TestClient.join(limited.url, docId, { token: owner.token });
+    expect(signedIn.role).toBe('owner');
+    await Promise.all([first.close(), second.close(), signedIn.close()]);
+  });
+
   it('opens one room with one load for simultaneous first connections', async () => {
     const load = vi.spyOn(server.instance.store, 'load');
     const [first, second] = await Promise.all([

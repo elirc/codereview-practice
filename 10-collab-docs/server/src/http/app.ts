@@ -5,6 +5,7 @@ import type { Logger } from '../lib/logger.js';
 import type { ServiceContext } from '../services/context.js';
 import { registerAuth } from './auth.js';
 import { registerErrorHandling } from './errors.js';
+import { registerRequestLogging } from './requestLog.js';
 import { authRoutes } from './routes/auth.js';
 import { commentRoutes } from './routes/comments.js';
 import { docRoutes } from './routes/docs.js';
@@ -30,7 +31,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
       return typeof inbound === 'string' && REQUEST_ID.test(inbound) ? inbound : randomUUID();
     },
     bodyLimit: 1_048_576,
+    disableRequestLogging: true,
   });
+
+  registerRequestLogging(app);
 
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);

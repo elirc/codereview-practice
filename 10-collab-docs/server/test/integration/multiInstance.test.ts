@@ -228,6 +228,16 @@ describe('two instances', () => {
     expect((await right.closed).code).toBe(4404);
   });
 
+  it('tells connections on the changing instance even while publishing fails', async () => {
+    const local = await TestClient.join(a.url, docId, { token: owner.token });
+    vi.spyOn(a.instance.bus, 'publish').mockRejectedValue(new Error('Connection is closed.'));
+    const seen = local.controls.length;
+    await owner.api.patch(`/api/docs/${docId}`, { title: 'Offline rename' });
+    expect(await local.waitForControl('meta', seen)).toEqual({ type: 'meta', title: 'Offline rename' });
+    expect((await owner.api.post(`/api/docs/${docId}/trash`, {})).status).toBe(204);
+    expect((await local.closed).code).toBe(4404);
+  });
+
   it('tells every instance about a new title', async () => {
     const left = await TestClient.join(a.url, docId, { token: owner.token });
     const right = await TestClient.join(b.url, docId, { token: owner.token });

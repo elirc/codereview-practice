@@ -68,7 +68,7 @@ describe('schema constraints', () => {
     ).rejects.toThrow(/docs_seq_order/);
   });
 
-  it('bounds the size of a stored update and requires a positive seq', async () => {
+  it('bounds a stored update by the document size limit and requires a positive seq', async () => {
     const { ownerId, workspaceId } = await seedWorkspace();
     const doc = await db
       .insertInto('docs')
@@ -78,7 +78,7 @@ describe('schema constraints', () => {
     await expect(
       db
         .insertInto('doc_updates')
-        .values({ doc_id: doc.id, seq: 1, update: Buffer.alloc(262_145), user_id: ownerId })
+        .values({ doc_id: doc.id, seq: 1, update: Buffer.alloc(5_242_881), user_id: ownerId })
         .execute(),
     ).rejects.toThrow(/doc_updates_size/);
     await expect(
