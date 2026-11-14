@@ -28,6 +28,18 @@ export class TestClock implements Clock {
   }
 }
 
+const TABLES = [
+  'comments',
+  'issue_labels',
+  'issues',
+  'labels',
+  'projects',
+  'memberships',
+  'orgs',
+  'sessions',
+  'users',
+];
+
 export interface TestContext {
   app: App;
   db: Database;
@@ -35,9 +47,7 @@ export interface TestContext {
 }
 
 export async function resetDatabase(db: Database): Promise<void> {
-  await sql`TRUNCATE comments, issue_labels, issues, labels, projects, memberships, orgs, sessions, users CASCADE`.execute(
-    db,
-  );
+  await sql.raw(`TRUNCATE ${TABLES.join(', ')} CASCADE`).execute(db);
 }
 
 /** Builds one app per test file and truncates the database before each test. */
@@ -85,7 +95,11 @@ export async function createSessionCookie(ctx: TestContext, userId: string): Pro
 }
 
 /** Inserts a user directly (sharing one password hash) and opens a session for them. */
-export async function createUser(ctx: TestContext, email: string, name?: string): Promise<TestUser> {
+export async function createUser(
+  ctx: TestContext,
+  email: string,
+  name?: string,
+): Promise<TestUser> {
   passwordHash ??= hashPassword(TEST_PASSWORD);
   const user = await ctx.db
     .insertInto('users')

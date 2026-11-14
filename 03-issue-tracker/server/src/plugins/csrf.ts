@@ -16,7 +16,8 @@ function isJsonContentType(header: string | undefined): boolean {
 export function registerCsrfProtection(app: FastifyInstance, appOrigin: string): void {
   app.addHook('onRequest', async (request) => {
     if (SAFE_METHODS.has(request.method)) return;
-    if (!isJsonContentType(request.headers['content-type']) || request.headers.origin !== appOrigin) {
+    const fromApp = request.headers.origin === appOrigin;
+    if (!isJsonContentType(request.headers['content-type']) || !fromApp) {
       throw new AppError(
         403,
         'csrf_rejected',

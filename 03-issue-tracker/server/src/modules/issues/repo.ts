@@ -132,7 +132,12 @@ export async function listIssuesPage(
   const sortValue = sort === 'priority' ? sql<string>`i.priority::text` : isoMicros(column);
   let query = issueWithProject(orgId, db)
     .leftJoin('users as a', 'a.id', 'i.assignee_id')
-    .select(['a.name as assignee_name', 'i.created_at', 'i.updated_at', sortValue.as('sort_value')]);
+    .select([
+      'a.name as assignee_name',
+      'i.created_at',
+      'i.updated_at',
+      sortValue.as('sort_value'),
+    ]);
 
   if (filters.projectKey !== undefined) {
     query = query.where('p.key', '=', filters.projectKey);
@@ -147,7 +152,10 @@ export async function listIssuesPage(
   }
   for (const labelId of filters.labelIds ?? []) {
     query = query.where(
-      sql<boolean>`exists (select 1 from issue_labels il where il.org_id = ${orgId} and il.issue_id = i.id and il.label_id = ${labelId})`,
+      sql<boolean>`exists (
+        select 1 from issue_labels il
+        where il.org_id = ${orgId} and il.issue_id = i.id and il.label_id = ${labelId}
+      )`,
     );
   }
   if (filters.identifier) {

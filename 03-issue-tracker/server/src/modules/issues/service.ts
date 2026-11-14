@@ -337,7 +337,14 @@ export async function replaceLabels(
         if (issue.version !== input.version) throw new StaleVersion(issue.id);
         return issue.id;
       }
-      const updated = await updateIssueIfVersion(tenant.orgId, issue.id, input.version, {}, now, trx);
+      const updated = await updateIssueIfVersion(
+        tenant.orgId,
+        issue.id,
+        input.version,
+        {},
+        now,
+        trx,
+      );
       if (!updated) throw new StaleVersion(issue.id);
       await replaceIssueLabels(tenant.orgId, issue.id, input.labelIds, trx);
       return issue.id;

@@ -107,7 +107,8 @@ describe('issues', () => {
     });
 
     it('rejects client-controlled fields', async () => {
-      for (const extra of [{ orgId: f.globex.id }, { reporterId: f.users.vic.id }, { number: 99 }]) {
+      const extras = [{ orgId: f.globex.id }, { reporterId: f.users.vic.id }, { number: 99 }];
+      for (const extra of extras) {
         const res = await call(ctx, 'POST', '/api/orgs/acme/projects/ENG/issues', {
           cookie: f.users.mia.cookie,
           body: { title: 'Sneaky', ...extra },

@@ -4,7 +4,11 @@ import type { ColumnType, Generated, GeneratedAlways } from 'kysely';
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
 type DefaultedTimestamp = ColumnType<Date, Date | string | undefined, Date | string>;
-type NullableTimestamp = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+type NullableTimestamp = ColumnType<
+  Date | null,
+  Date | string | null | undefined,
+  Date | string | null
+>;
 
 export type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
 export type IssueStatus = 'backlog' | 'todo' | 'in_progress' | 'done' | 'cancelled';

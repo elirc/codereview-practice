@@ -21,7 +21,11 @@ export const memberRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get(
     '/members',
     {
-      schema: { params: MembersParams, querystring: ListMembersQuery, response: { 200: MemberPage } },
+      schema: {
+        params: MembersParams,
+        querystring: ListMembersQuery,
+        response: { 200: MemberPage },
+      },
     },
     async (request) => listMembers(app.deps, request.tenant, request.query),
   );

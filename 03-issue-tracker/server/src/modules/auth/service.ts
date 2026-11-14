@@ -82,7 +82,8 @@ export async function login(
   if (!credentials || !valid) {
     throw new AppError(401, 'invalid_credentials', 'Email or password is incorrect.');
   }
-  return startSession(deps, { id: credentials.id, email: credentials.email, name: credentials.name });
+  const { id, email, name } = credentials;
+  return startSession(deps, { id, email, name });
 }
 
 export async function logout(deps: Deps, token: string | undefined): Promise<void> {

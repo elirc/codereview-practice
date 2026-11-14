@@ -18,7 +18,8 @@ describe('issue identifiers', () => {
   });
 
   it('rejects anything that is not exactly KEY-number', () => {
-    for (const input of ['E-1', 'ABCDEFG-1', 'ENG-', 'ENG12', 'ENG-1a', ' ENG-1', 'EN1-2', 'ENG--1']) {
+    const inputs = ['E-1', 'ABCDEFG-1', 'ENG-', 'ENG12', 'ENG-1a', ' ENG-1', 'EN1-2', 'ENG--1'];
+    for (const input of inputs) {
       expect(parseIdentifier(input)).toBeNull();
     }
   });

@@ -26,13 +26,21 @@ const ISSUE_PATH = '/projects/:projectKey/issues/:number';
 export const issueRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get(
     '/issues',
-    { schema: { params: IssuesParams, querystring: ListIssuesQuery, response: { 200: IssuePage } } },
+    {
+      schema: { params: IssuesParams, querystring: ListIssuesQuery, response: { 200: IssuePage } },
+    },
     async (request) => listIssues(app.deps, request.tenant, request.query),
   );
 
   app.post(
     '/projects/:projectKey/issues',
-    { schema: { params: ProjectIssuesParams, body: CreateIssueBody, response: { 201: IssueDetail } } },
+    {
+      schema: {
+        params: ProjectIssuesParams,
+        body: CreateIssueBody,
+        response: { 201: IssueDetail },
+      },
+    },
     async (request, reply) => {
       const issue = await createIssue(
         app.deps,

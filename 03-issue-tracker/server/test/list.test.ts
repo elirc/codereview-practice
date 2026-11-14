@@ -170,7 +170,7 @@ describe('issue list pagination', () => {
     expect(seen).toEqual(before);
   });
 
-  it('returns no cursor when exactly limit rows exist and one more page for limit + 1', async () => {
+  it('returns no cursor at exactly limit rows and one more page at limit + 1', async () => {
     await ctx.db.deleteFrom('issues').where('org_id', '=', f.acme.id).execute();
     const rows = (n: number) =>
       Array.from({ length: n }, (_, i) => ({

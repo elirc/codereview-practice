@@ -60,7 +60,17 @@ describe('issue search', () => {
   });
 
   it('copes with quotes, wildcards, operators and backslashes', async () => {
-    for (const q of ["it's", '100%', ':*', 'crash:*', '\\', '"unbalanced', "'; drop table", '&|!()']) {
+    const awkward = [
+      "it's",
+      '100%',
+      ':*',
+      'crash:*',
+      '\\',
+      '"unbalanced',
+      "'; drop table",
+      '&|!()',
+    ];
+    for (const q of awkward) {
       await search(q);
     }
     expect(await search('"login button')).toEqual(['ENG-1']);

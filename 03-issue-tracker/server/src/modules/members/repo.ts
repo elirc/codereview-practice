@@ -158,6 +158,10 @@ export async function unassignMemberIssues(
 }
 
 export async function findUserIdByEmail(email: string, db: Database): Promise<string | undefined> {
-  const row = await db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst();
+  const row = await db
+    .selectFrom('users')
+    .select('id')
+    .where('email', '=', email)
+    .executeTakeFirst();
   return row?.id;
 }

@@ -1,5 +1,13 @@
 import { Type } from '@sinclair/typebox';
-import { CursorParam, Email, Limit, OrgParams, Page, StrictObject, Uuid } from '../../lib/schemas.js';
+import {
+  CursorParam,
+  Email,
+  Limit,
+  OrgParams,
+  Page,
+  StrictObject,
+  Uuid,
+} from '../../lib/schemas.js';
 import { Role } from '../auth/schemas.js';
 
 export const MembersParams = OrgParams({});

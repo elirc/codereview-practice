@@ -92,6 +92,10 @@ describe('buildPage', () => {
   it('derives the cursor from the last returned row when there is more', () => {
     const page = buildPage(rows, 2, cursorFor);
     expect(page.rows).toHaveLength(2);
-    expect(decodeCursor(page.nextCursor as string, 'priority')).toEqual({ s: 'priority', v: 2, id: ID });
+    expect(decodeCursor(page.nextCursor as string, 'priority')).toEqual({
+      s: 'priority',
+      v: 2,
+      id: ID,
+    });
   });
 });
