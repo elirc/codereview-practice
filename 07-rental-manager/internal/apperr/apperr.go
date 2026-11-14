@@ -13,6 +13,8 @@ const (
 	KindConflict
 	KindForbidden
 	KindRule
+	KindUnauthenticated
+	KindBadRequest
 )
 
 // Error is an expected failure with a stable code and a message that is
@@ -45,6 +47,16 @@ func Forbidden(code, message string) *Error {
 // Rule returns an error for well-formed input that breaks a business rule.
 func Rule(code, message string) *Error {
 	return &Error{Kind: KindRule, Code: code, Message: message}
+}
+
+// Unauthenticated returns an error for a request without a valid session.
+func Unauthenticated(code, message string) *Error {
+	return &Error{Kind: KindUnauthenticated, Code: code, Message: message}
+}
+
+// BadRequest returns an error for input that cannot be parsed at all.
+func BadRequest(code, message string) *Error {
+	return &Error{Kind: KindBadRequest, Code: code, Message: message}
 }
 
 // FieldError is a validation problem with one input field.

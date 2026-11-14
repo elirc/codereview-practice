@@ -1,0 +1,30 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+{{with .Data.Overview}}
+<table class="summary">
+  <tr><th>As of</th><td>{{date .AsOf}}</td></tr>
+  <tr><th>Active leases</th><td>{{.ActiveLeases}}</td></tr>
+  <tr><th>Total owed</th><td class="num">{{cents .TotalOwed}}</td></tr>
+  <tr><th>Leases past due</th><td>{{.PastDue}}</td></tr>
+</table>
+{{end}}
+
+{{if can .User "jobs"}}
+<h2>Last job runs</h2>
+{{if .Data.Runs}}
+<table>
+  <thead><tr><th>Job</th><th>As of</th><th>Started</th><th>Status</th><th>Leases</th><th>Entries</th></tr></thead>
+  <tbody>
+  {{range .Data.Runs}}
+    <tr>
+      <td>{{.Job}}</td><td>{{date .AsOf}}</td><td>{{ts .StartedAt}}</td>
+      <td class="status-{{.Status}}">{{.Status}}</td><td>{{.LeasesProcessed}}</td><td>{{.EntriesPosted}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p>No job has run yet.</p>
+{{end}}
+{{end}}
+{{end}}
