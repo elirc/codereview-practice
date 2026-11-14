@@ -1,4 +1,10 @@
-import type { AvailabilityException, AvailabilityRule, Clinic, Provider } from "@prisma/client";
+import type {
+  AvailabilityException,
+  AvailabilityRule,
+  Clinic,
+  Provider,
+  User,
+} from "@prisma/client";
 import type { AppointmentView } from "@/services/access";
 import { fromDbDate, isoInstant } from "./dates";
 
@@ -20,6 +26,20 @@ export function serializeProvider(provider: Provider) {
     specialty: provider.specialty,
     active: provider.active,
   };
+}
+
+export function serializeProviderAccount(
+  provider: Provider & { clinic: Clinic; user: { email: string } },
+) {
+  return {
+    ...serializeProvider(provider),
+    email: provider.user.email,
+    clinicName: provider.clinic.name,
+  };
+}
+
+export function serializeStaff(user: User) {
+  return { id: user.id, email: user.email, role: user.role, clinicId: user.clinicId };
 }
 
 export function serializeRule(rule: AvailabilityRule) {

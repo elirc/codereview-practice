@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { daysBetween, wallTimeToMinutes } from "@/domain/time";
-import { instant, localDate, slotMinutes, uuid, wallTime } from "./validation";
+import {
+  email,
+  ianaZone,
+  instant,
+  localDate,
+  password,
+  slotMinutes,
+  uuid,
+  wallTime,
+} from "./validation";
 
 export const MAX_SLOT_RANGE_DAYS = 31;
 
@@ -78,3 +87,36 @@ export const appointmentListQuery = z.object({
   clinicId: uuid.optional(),
   status: z.enum(["BOOKED", "CANCELLED", "COMPLETED", "NO_SHOW"]).optional(),
 });
+
+const clinicSettings = {
+  name: z.string().trim().min(1).max(200),
+  minLeadMinutes: z.number().int().min(0).max(10_080),
+  bookingHorizonDays: z.number().int().min(1).max(730),
+};
+
+export const createClinicBody = z
+  .object({
+    ...clinicSettings,
+    timezone: ianaZone,
+    minLeadMinutes: clinicSettings.minLeadMinutes.optional(),
+    bookingHorizonDays: clinicSettings.bookingHorizonDays.optional(),
+  })
+  .strict();
+
+export const updateClinicBody = z.object(clinicSettings).partial().strict();
+
+const providerProfile = {
+  displayName: z.string().trim().min(1).max(200),
+  specialty: z.string().trim().min(1).max(200),
+};
+
+export const createProviderBody = z
+  .object({ ...providerProfile, email, password, clinicId: uuid })
+  .strict();
+
+export const updateProviderBody = z
+  .object({ ...providerProfile, active: z.boolean() })
+  .partial()
+  .strict();
+
+export const createStaffBody = z.object({ email, password, clinicId: uuid }).strict();

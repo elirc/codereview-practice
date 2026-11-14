@@ -49,10 +49,13 @@ function assertCanRead(actor: Actor, provider: Provider): void {
   throw forbidden();
 }
 
+function canManage(actor: Actor, provider: Provider): boolean {
+  if (actor.role === "ADMIN") return true;
+  return actor.role === "STAFF" && actor.clinicId === provider.clinicId;
+}
+
 function assertCanManage(actor: Actor, provider: Provider): void {
-  if (actor.role === "ADMIN") return;
-  if (actor.role === "STAFF" && actor.clinicId === provider.clinicId) return;
-  throw forbidden();
+  if (!canManage(actor, provider)) throw forbidden();
 }
 
 async function lockProvider(tx: DbClient, providerId: string): Promise<void> {
@@ -96,12 +99,32 @@ function ruleData(rule: RuleSpec) {
   };
 }
 
-export async function listRules(actor: Actor, providerId: string) {
-  assertCanRead(actor, await loadProvider(providerId));
+function findRules(providerId: string) {
   return db.availabilityRule.findMany({
     where: { providerId },
     orderBy: [{ weekday: "asc" }, { startLocal: "asc" }, { validFrom: "asc" }],
   });
+}
+
+function findExceptions(providerId: string) {
+  return db.availabilityException.findMany({
+    where: { providerId },
+    orderBy: { localDate: "asc" },
+  });
+}
+
+/** Everything the availability editor shows for one provider. */
+export async function getAvailability(actor: Actor, providerId: string) {
+  const provider = await loadProvider(providerId);
+  assertCanRead(actor, provider);
+  const rules = await findRules(providerId);
+  const exceptions = await findExceptions(providerId);
+  return { provider, rules, exceptions, canManage: canManage(actor, provider) };
+}
+
+export async function listRules(actor: Actor, providerId: string) {
+  assertCanRead(actor, await loadProvider(providerId));
+  return findRules(providerId);
 }
 
 export async function createRule(
@@ -176,10 +199,7 @@ export async function deleteRule(actor: Actor, ruleId: string, now: DateTime) {
 
 export async function listExceptions(actor: Actor, providerId: string) {
   assertCanRead(actor, await loadProvider(providerId));
-  return db.availabilityException.findMany({
-    where: { providerId },
-    orderBy: { localDate: "asc" },
-  });
+  return findExceptions(providerId);
 }
 
 function exceptionExists(date: LocalDate): AppError {

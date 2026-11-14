@@ -58,3 +58,7 @@ Cancellation and reschedule emails are enqueued after the database transaction c
 ## Retry timing for failed reminders
 
 The spec returns a failed reminder to `PENDING` without saying when it is retried. It is picked up by the next dispatch run (about a minute later) with its original `scheduledFor`, so the 30-minute staleness rule still applies to retries: a reminder that keeps failing past that point is `SKIPPED` rather than sent late.
+
+## Clinic time zone and provider clinic are fixed after creation
+
+Rules are stored as clinic wall time and appointments as instants, so changing a clinic's zone (or moving a provider to another clinic) would silently shift every future slot away from existing bookings. `PATCH /admin/clinics/:id` accepts name, lead time and horizon only, and `PATCH /admin/providers/:id` accepts display name, specialty and `active`. Unknown fields are rejected with `400 validation_failed`.
