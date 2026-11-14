@@ -22,6 +22,7 @@ import (
 	"deliverydispatch/pkg/outbox"
 	"deliverydispatch/pkg/runner"
 	"deliverydispatch/services/dispatch/internal/httpapi"
+	"deliverydispatch/services/dispatch/internal/loops"
 	"deliverydispatch/services/dispatch/internal/consumers"
 	"deliverydispatch/services/dispatch/internal/service"
 )
@@ -92,6 +93,8 @@ func (a *App) processor(s natsx.Stream, handlers map[string]inbox.Handler) *inbo
 // Loops returns the service's periodic loops.
 func (a *App) Loops() []runner.Loop {
 	return []runner.Loop{
+		loops.Offers(a.Service),
+		loops.OfferExpiry(a.Service),
 		{Name: "purge", Interval: time.Hour, RunOnce: a.purge},
 	}
 }

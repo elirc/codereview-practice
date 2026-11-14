@@ -27,6 +27,9 @@ func New(svc *service.Service, logger *slog.Logger) *Handler {
 
 // Mount registers the authenticated dispatch routes on r.
 func (h *Handler) Mount(r chi.Router) {
+	r.Get("/offers/current", h.wrap(h.currentOffer))
+	r.Post("/offers/{id}/accept", h.wrap(h.acceptOffer))
+	r.Post("/offers/{id}/decline", h.wrap(h.declineOffer))
 	r.Get("/deliveries/{id}", h.wrap(h.getDelivery))
 }
 
