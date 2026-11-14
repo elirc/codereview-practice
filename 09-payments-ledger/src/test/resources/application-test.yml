@@ -1,0 +1,10 @@
+spring:
+  flyway:
+    enabled: true
+  datasource:
+    hikari:
+      maximum-pool-size: 24
+
+logging:
+  level:
+    org.apache.kafka: warn
