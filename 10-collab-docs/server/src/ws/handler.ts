@@ -7,22 +7,26 @@ import { addsNothing } from '../collab/updates.js';
 import { canEdit, canSendPresence } from '../domain/roles.js';
 import type { Clock } from '../lib/clock.js';
 import { resolveDocAccess } from '../services/access.js';
+import type { AccessMonitor } from './accessMonitor.js';
 import { CloseCode, decodeFrame, encodeSyncStep2, ProtocolError, type Frame } from './codec.js';
 import type { Connection } from './connection.js';
 
 export interface FrameHandlerOptions {
   config: Config;
   clock: Clock;
+  monitor: AccessMonitor;
 }
 
 /** Processes inbound frames for joined connections. */
 export class FrameHandler {
   private readonly config: Config;
   private readonly clock: Clock;
+  private readonly monitor: AccessMonitor;
 
   constructor(options: FrameHandlerOptions) {
     this.config = options.config;
     this.clock = options.clock;
+    this.monitor = options.monitor;
   }
 
   /** Handles one inbound frame that has already passed the rate limit. */
@@ -33,6 +37,10 @@ export class FrameHandler {
     if (conn.auth.sessionExpiresAt && now.getTime() >= conn.auth.sessionExpiresAt.getTime()) {
       conn.close(CloseCode.SessionEnded, 'session expired');
       return;
+    }
+    if (conn.auth.linkExpiresAt && now.getTime() >= conn.auth.linkExpiresAt.getTime()) {
+      await this.monitor.reevaluate(conn);
+      if (conn.closed) return;
     }
 
     if (!isBinary) {

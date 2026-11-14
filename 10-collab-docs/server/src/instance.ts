@@ -63,6 +63,7 @@ export function createInstance(options: InstanceOptions): Instance {
     collab,
     ctx,
     async listen(port = config.PORT, host = config.HOST) {
+      await registry.start();
       await app.listen({ port, host });
       collab.startLoops();
       return (app.server.address() as AddressInfo).port;

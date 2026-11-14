@@ -2,8 +2,21 @@ import { fromBase64, toBase64 } from '../lib/bytes.js';
 import type { Logger } from '../lib/logger.js';
 import { CloseCode } from '../ws/codec.js';
 import type { Bus, BusHandler } from './bus.js';
-import { docBusMessage, docChannel, type DocBusMessage } from './busMessages.js';
+import {
+  CONTROL_CHANNEL,
+  controlBusMessage,
+  docBusMessage,
+  docChannel,
+  type DocBusMessage,
+} from './busMessages.js';
 import { Room, type RoomPeer, type RoomStore } from './room.js';
+
+/** Receives access-related bus messages. */
+export interface AccessListener {
+  docPermChanged(docId: string): void;
+  workspacePermChanged(workspaceId: string): void;
+  sessionEnded(sessionId: string): void;
+}
 
 export interface RegistryOptions {
   store: RoomStore;
@@ -21,6 +34,7 @@ export class RoomRegistry {
   private readonly roomIdleMs: number;
   private readonly ready = new Map<Room, Promise<void>>();
   private readonly handlers = new Map<Room, BusHandler>();
+  private accessListener: AccessListener | null = null;
 
   constructor(options: RegistryOptions) {
     this.store = options.store;
@@ -30,6 +44,16 @@ export class RoomRegistry {
     this.bus.onReady(() => {
       for (const room of this.all()) void room.catchUp();
     });
+  }
+
+  /** Sets the receiver of permission, workspace and session messages. */
+  setAccessListener(listener: AccessListener): void {
+    this.accessListener = listener;
+  }
+
+  /** Subscribes to the control channel. */
+  async start(): Promise<void> {
+    await this.bus.subscribe(CONTROL_CHANNEL, (raw) => this.onControlMessage(raw));
   }
 
   get instanceId(): string {
@@ -210,6 +234,24 @@ export class RoomRegistry {
         room.applyRemoteAwareness(fromBase64(message.update));
         return;
       case 'perm':
+        this.accessListener?.docPermChanged(room.docId);
+        return;
+    }
+  }
+
+  private onControlMessage(raw: unknown): void {
+    const parsed = controlBusMessage.safeParse(raw);
+    if (!parsed.success) {
+      this.log.warn('ignoring malformed control message');
+      return;
+    }
+    const message = parsed.data;
+    switch (message.kind) {
+      case 'workspace_perm':
+        this.accessListener?.workspacePermChanged(message.workspaceId);
+        return;
+      case 'session_ended':
+        this.accessListener?.sessionEnded(message.sessionId);
         return;
     }
   }

@@ -13,6 +13,7 @@ import type { RandomSource } from '../lib/random.js';
 import type { DocAccess } from '../services/access.js';
 import type { AuthSession } from '../services/auth.js';
 import { CloseCode, encodeSyncStep1 } from './codec.js';
+import { AccessMonitor } from './accessMonitor.js';
 import { Connection } from './connection.js';
 import { FrameHandler } from './handler.js';
 import { ConnectionCounter, MAX_PAYLOAD_BYTES } from './limits.js';
@@ -40,6 +41,7 @@ function toBytes(data: WebSocket.RawData): Uint8Array {
 export class CollabServer extends EventEmitter {
   readonly connections = new Set<Connection>();
   readonly registry: RoomRegistry;
+  readonly monitor: AccessMonitor;
   private readonly config: Config;
   private readonly db: Db;
   private readonly clock: Clock;
@@ -61,7 +63,18 @@ export class CollabServer extends EventEmitter {
     this.registry = options.registry;
     this.wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
     this.counter = new ConnectionCounter(options.config.MAX_CONNECTIONS_PER_USER_PER_DOC);
-    this.handler = new FrameHandler({ config: options.config, clock: options.clock });
+    this.monitor = new AccessMonitor({
+      db: options.db,
+      clock: options.clock,
+      connections: this.connections,
+      logger: options.logger,
+    });
+    this.registry.setAccessListener(this.monitor);
+    this.handler = new FrameHandler({
+      config: options.config,
+      clock: options.clock,
+      monitor: this.monitor,
+    });
   }
 
   /** Handles WebSocket upgrades on the given HTTP server. */
@@ -76,6 +89,9 @@ export class CollabServer extends EventEmitter {
     if (!this.config.LOOPS_ENABLED) return;
     this.every(this.config.PING_INTERVAL_MS, 'liveness', async () => this.pingOnce());
     this.every(this.config.CATCHUP_INTERVAL_MS, 'catch-up', () => this.registry.catchUpStale());
+    this.every(this.config.PERM_SWEEP_MS, 'permission sweep', () =>
+      this.monitor.sweep(this.clock.now()),
+    );
     const idleSweepMs = Math.max(1_000, Math.min(this.config.ROOM_IDLE_MS, 5_000));
     this.every(idleSweepMs, 'idle rooms', async () => {
       await this.registry.sweepIdle(this.clock.now());
