@@ -5,6 +5,8 @@ import type { BusMessage } from '../../src/collab/busMessages.js';
 import { docChannel } from '../../src/collab/busMessages.js';
 import { contentOf, docFromLog } from '../../src/collab/docState.js';
 import { toBase64 } from '../../src/lib/bytes.js';
+import { createLogger } from '../../src/lib/logger.js';
+import { compactOnce } from '../../src/worker/compaction.js';
 import { FakeClock, TEST_REDIS_URL } from '../helpers/env.js';
 import { typedUpdates } from '../helpers/fixtures.js';
 import { registerUser, type TestUser } from '../helpers/http.js';
@@ -174,6 +176,29 @@ describe('two instances', () => {
     subscriber.disconnect(true);
     await reconnected;
     await right.waitForText('while away');
+    await Promise.all([left.close(), right.close(), observer.close()]);
+  });
+
+  it('catches up from a snapshot newer than what the room has applied', async () => {
+    const left = await TestClient.join(a.url, docId, { token: owner.token });
+    const right = await TestClient.join(b.url, docId, { token: owner.token });
+    const observer = await TestClient.join(a.url, docId, { token: owner.token });
+    left.append('seen ');
+    await right.waitForText('seen ');
+    dropUpdates(a, 3);
+    left.append('a');
+    left.append('b');
+    left.append('c');
+    await observer.waitForText('seen abc');
+    const compacted = await compactOnce(
+      { db: a.instance.db, logger: createLogger('silent'), minUpdates: 1, minBytes: 1_000_000 },
+      a.clock.now(),
+    );
+    expect(compacted).toBe(1);
+    expect(b.instance.registry.get(docId)!.appliedSeq).toBe(1);
+    await b.instance.registry.catchUpStale();
+    await right.waitForText('seen abc');
+    expect(b.instance.registry.get(docId)!.appliedSeq).toBe(4);
     await Promise.all([left.close(), right.close(), observer.close()]);
   });
 
