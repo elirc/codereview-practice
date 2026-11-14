@@ -18,14 +18,21 @@ class SchedulingConfig
 class WorkerSchedules(
     private val clock: Clock,
     private val jobs: JobRunner,
-    private val idempotencyPurge: IdempotencyPurgeJob
+    private val idempotencyPurge: IdempotencyPurgeJob,
+    private val holdExpiry: HoldExpiryJob
 ) {
+    @Scheduled(fixedDelay = HOLD_EXPIRY_MS)
+    fun expireHolds() {
+        jobs.run("hold-expiry") { holdExpiry.runOnce(clock.instant()) }
+    }
+
     @Scheduled(fixedDelay = HOUR_MS, initialDelay = MINUTE_MS)
     fun purgeIdempotencyKeys() {
         jobs.run("idempotency-purge") { idempotencyPurge.runOnce(clock.instant()) }
     }
 
     private companion object {
+        const val HOLD_EXPIRY_MS = 30_000L
         const val MINUTE_MS = 60_000L
         const val HOUR_MS = 3_600_000L
     }

@@ -2,6 +2,7 @@ package ledger.outbox
 
 import com.fasterxml.jackson.annotation.JsonValue
 import ledger.domain.WireValue
+import ledger.holds.Hold
 import ledger.ledger.Account
 import ledger.ledger.BalanceRow
 import ledger.ledger.JournalEntry
@@ -80,6 +81,28 @@ class LedgerEvents(private val outbox: OutboxWriter) {
                 "accountId" to expectation.accountId,
                 "amountMinor" to expectation.amountMinor,
                 "currency" to expectation.currency
+            )
+        )
+    }
+
+    fun hold(type: String, hold: Hold, occurredAt: Instant) {
+        outbox.record(
+            topic = Topics.ACCOUNTS,
+            partitionKey = hold.accountId.toString(),
+            type = type,
+            aggregateType = "hold",
+            aggregateId = hold.id.toString(),
+            sequence = hold.version,
+            occurredAt = occurredAt,
+            data = mapOf(
+                "holdId" to hold.id,
+                "accountId" to hold.accountId,
+                "merchantAccountId" to hold.merchantAccountId,
+                "amountMinor" to hold.amountMinor,
+                "capturedMinor" to hold.capturedMinor,
+                "currency" to hold.currency,
+                "expiresAt" to hold.expiresAt,
+                "captureEntryId" to hold.captureEntryId
             )
         )
     }
