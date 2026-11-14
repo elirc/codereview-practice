@@ -7,4 +7,5 @@ urlpatterns = [
     path("api/auth/token/", obtain_auth_token, name="auth-token"),
     path("api/", include("catalog.urls")),
     path("api/", include("inventory.urls")),
+    path("api/", include("orders.urls")),
 ]

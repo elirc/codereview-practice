@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import transaction
@@ -10,6 +11,9 @@ from catalog.models import Product
 
 from .exceptions import AdjustmentBelowReserved
 from .models import StockItem, StockMovement
+
+if TYPE_CHECKING:
+    from orders.models import Order
 
 
 def create_stock_item(product: Product) -> StockItem:
@@ -32,6 +36,7 @@ def apply_movement(
     kind: str,
     on_hand_delta: int = 0,
     reserved_delta: int = 0,
+    order: "Order | None" = None,
     reason: str = "",
     actor: AbstractBaseUser | None = None,
 ) -> StockMovement:
@@ -44,6 +49,7 @@ def apply_movement(
         kind=kind,
         on_hand_delta=on_hand_delta,
         reserved_delta=reserved_delta,
+        order=order,
         reason=reason,
         actor=actor,
     )

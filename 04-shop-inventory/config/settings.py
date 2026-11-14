@@ -39,6 +39,12 @@ _require(
     "SHOP_CURRENCY must be an upper-case ISO-4217 code such as USD",
 )
 
+RESERVATION_MINUTES = env.int("RESERVATION_MINUTES", default=30)
+_require(RESERVATION_MINUTES > 0, "RESERVATION_MINUTES must be a positive number of minutes")
+
+PAYMENT_PROVIDER = env.str("PAYMENT_PROVIDER", default="fake")
+_require(PAYMENT_PROVIDER in {"fake"}, "PAYMENT_PROVIDER must be 'fake'")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -52,6 +58,8 @@ INSTALLED_APPS = [
     "core",
     "catalog",
     "inventory",
+    "orders",
+    "payments",
 ]
 
 MIDDLEWARE = [

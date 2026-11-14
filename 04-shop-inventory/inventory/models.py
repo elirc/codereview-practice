@@ -57,6 +57,13 @@ class StockMovement(models.Model):
     kind = models.CharField(max_length=16, choices=Kind.choices)
     on_hand_delta = models.BigIntegerField(default=0)
     reserved_delta = models.BigIntegerField(default=0)
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="stock_movements",
+    )
     reason = models.CharField(max_length=200, blank=True, default="")
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
