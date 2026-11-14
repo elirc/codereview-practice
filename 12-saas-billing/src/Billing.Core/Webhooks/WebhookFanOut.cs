@@ -42,7 +42,7 @@ public sealed class WebhookFanOut(IServiceScopeFactory scopes, RequestContext re
         var endpoints = await db.WebhookEndpoints.AsNoTracking()
             .Where(e => e.Status == WebhookEndpointStatus.Enabled
                 && e.CreatedAt <= createdAt
-                && (e.EventTypes.Contains(type) || e.EventTypes.Contains(WebhookEndpointService.AllEvents)))
+                && (Enumerable.Contains(e.EventTypes, type) || Enumerable.Contains(e.EventTypes, WebhookEndpointService.AllEvents)))
             .Select(e => e.Id)
             .ToListAsync(ct);
 

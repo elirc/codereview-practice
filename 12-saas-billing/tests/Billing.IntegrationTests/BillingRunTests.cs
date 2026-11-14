@@ -136,12 +136,10 @@ public sealed class BillingRunTests(BillingApp app) : IntegrationTest(app)
     public async Task ConcurrentRunsProduceOneInvoicePerPeriod()
     {
         await CatalogAsync();
-        var customers = new List<Guid>();
         var subscriptions = new List<Guid>();
         for (var i = 0; i < 5; i++)
         {
             var customer = await Data.CustomerAsync();
-            customers.Add(customer);
             subscriptions.Add(await Data.SubscribeAsync(customer, "basic"));
         }
 
