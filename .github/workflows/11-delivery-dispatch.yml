@@ -1,0 +1,85 @@
+name: 11-delivery-dispatch
+
+on:
+  push:
+    paths: ["11-delivery-dispatch/**", ".github/workflows/11-delivery-dispatch.yml"]
+  pull_request:
+    paths: ["11-delivery-dispatch/**", ".github/workflows/11-delivery-dispatch.yml"]
+
+defaults:
+  run:
+    working-directory: 11-delivery-dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5463:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      AUTH_JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      APP_CURRENCY: USD
+      LOOPS_ENABLED: "false"
+      LOG_LEVEL: warn
+      NATS_URL: nats://localhost:6395
+      ORDERS_DATABASE_URL: postgres://dd_orders:dd_orders@localhost:5463/dd_orders?sslmode=disable
+      DISPATCH_DATABASE_URL: postgres://dd_dispatch:dd_dispatch@localhost:5463/dd_dispatch?sslmode=disable
+      COURIERS_DATABASE_URL: postgres://dd_couriers:dd_couriers@localhost:5463/dd_couriers?sslmode=disable
+      TEST_DATABASE_URL_ORDERS: postgres://dd_orders:dd_orders@localhost:5463/dd_orders?sslmode=disable
+      TEST_DATABASE_URL_DISPATCH: postgres://dd_dispatch:dd_dispatch@localhost:5463/dd_dispatch?sslmode=disable
+      TEST_DATABASE_URL_COURIERS: postgres://dd_couriers:dd_couriers@localhost:5463/dd_couriers?sslmode=disable
+      TEST_NATS_URL: nats://localhost:6395
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Install dependencies
+        run: go mod tidy && go mod download
+
+      - name: Start NATS JetStream
+        # Service containers cannot pass server flags, so NATS is started here.
+        run: docker run -d --name nats-test -p 6395:4222 nats:2.10-alpine -js
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2024.1.1 ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Create databases
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -p 5463 -U postgres -v ON_ERROR_STOP=1 -f deploy/initdb/20-databases.sql
+
+      - name: Migrate
+        run: |
+          go run ./services/orders/cmd/orders migrate up
+          go run ./services/dispatch/cmd/dispatch migrate up
+          go run ./services/couriers/cmd/couriers migrate up
+
+      - name: Seed
+        run: |
+          go run ./services/orders/cmd/orders seed > /dev/null
+          go run ./services/couriers/cmd/couriers seed > /dev/null
+
+      - name: Test
+        run: go test -race -count=1 ./...
