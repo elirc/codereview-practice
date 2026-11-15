@@ -64,7 +64,7 @@ export function reconnectDelay(attempt: number, random: () => number): number {
   return base + base * 0.2 * random();
 }
 
-const browserScheduler: Scheduler = {
+export const browserScheduler: Scheduler = {
   setTimeout: (callback, ms) => window.setTimeout(callback, ms),
   clearTimeout: (handle) => window.clearTimeout(handle as number),
 };
@@ -201,7 +201,7 @@ export class CollabProvider {
       encoding.writeVarUint(encoder, MESSAGE_SYNC);
       const step = syncProtocol.readSyncMessage(decoder, encoder, this.doc, this);
       if (step === syncProtocol.messageYjsSyncStep1 && canEdit(this.role)) {
-        this.send(encoding.toUint8Array(encoder));
+        if (this.unsent) this.send(encoding.toUint8Array(encoder));
         this.unsent = false;
       }
     } else if (type === MESSAGE_AWARENESS) {

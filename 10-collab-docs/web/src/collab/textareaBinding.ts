@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
 import { diffText } from './diff';
+import { browserScheduler, type Scheduler } from './provider';
 
 /** The parts of a textarea the binding uses. */
 export interface TextAreaLike {
@@ -11,26 +12,48 @@ export interface TextAreaLike {
   removeEventListener(type: 'input', listener: () => void): void;
 }
 
+export interface BindOptions {
+  /** Input events within this many milliseconds become one change; 0 applies each one at once. */
+  batchMs?: number;
+  scheduler?: Scheduler;
+}
+
 /**
- * Keeps a textarea and a Y.Text in step: each input event becomes one
- * delete + insert, and remote changes update the value while keeping the
+ * Keeps a textarea and a Y.Text in step: input becomes one delete + insert
+ * per batch, and remote changes update the value while keeping the
  * selection on the same characters. Returns a function that unbinds.
  */
-export function bindTextarea(text: Y.Text, textarea: TextAreaLike): () => void {
+export function bindTextarea(
+  text: Y.Text,
+  textarea: TextAreaLike,
+  options: BindOptions = {},
+): () => void {
   const doc = text.doc;
   if (!doc) throw new Error('Y.Text must belong to a document');
+  const batchMs = options.batchMs ?? 0;
+  const scheduler = options.scheduler ?? browserScheduler;
   const origin = { source: 'textarea' };
   let selection: { start: Y.RelativePosition; end: Y.RelativePosition } | null = null;
+  let pending: unknown = null;
 
   textarea.value = text.toString();
 
-  const onInput = () => {
+  const flush = () => {
+    pending = null;
     const change = diffText(text.toString(), textarea.value);
     if (!change) return;
     doc.transact(() => {
       if (change.deleteCount > 0) text.delete(change.index, change.deleteCount);
       if (change.insert.length > 0) text.insert(change.index, change.insert);
     }, origin);
+  };
+
+  const onInput = () => {
+    if (batchMs <= 0) {
+      flush();
+      return;
+    }
+    if (pending === null) pending = scheduler.setTimeout(flush, batchMs);
   };
 
   const beforeTransaction = (transaction: Y.Transaction) => {
@@ -59,6 +82,10 @@ export function bindTextarea(text: Y.Text, textarea: TextAreaLike): () => void {
   textarea.addEventListener('input', onInput);
 
   return () => {
+    if (pending !== null) {
+      scheduler.clearTimeout(pending);
+      flush();
+    }
     doc.off('beforeTransaction', beforeTransaction);
     text.unobserve(onChange);
     textarea.removeEventListener('input', onInput);

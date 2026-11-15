@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { diffText } from '../src/collab/diff';
+import type { Scheduler } from '../src/collab/provider';
 import { bindTextarea, type TextAreaLike } from '../src/collab/textareaBinding';
 
 class FakeTextarea implements TextAreaLike {
@@ -27,6 +28,25 @@ class FakeTextarea implements TextAreaLike {
     this.value = value;
     this.setSelectionRange(caret, caret);
     this.listener?.();
+  }
+}
+
+class ManualScheduler implements Scheduler {
+  private pending: Array<() => void> = [];
+
+  setTimeout(callback: () => void): unknown {
+    this.pending.push(callback);
+    return this.pending.length;
+  }
+
+  clearTimeout(): void {
+    this.pending = [];
+  }
+
+  runAll(): void {
+    const due = this.pending;
+    this.pending = [];
+    for (const callback of due) callback();
   }
 }
 
@@ -93,6 +113,34 @@ describe('bindTextarea', () => {
     remote.getText('content').delete(0, 2);
     expect(textarea.value).toBe('cdef');
     expect(textarea.selectionStart).toBe(2);
+  });
+
+  it('turns input events within the batch window into one update', () => {
+    const doc = new Y.Doc();
+    const text = doc.getText('content');
+    const textarea = new FakeTextarea();
+    const scheduler = new ManualScheduler();
+    bindTextarea(text, textarea, { batchMs: 40, scheduler });
+    const updates: Uint8Array[] = [];
+    doc.on('update', (update: Uint8Array) => updates.push(update));
+
+    textarea.typeValue('h');
+    textarea.typeValue('he');
+    textarea.typeValue('hey');
+    expect(text.toString()).toBe('');
+    scheduler.runAll();
+    expect(text.toString()).toBe('hey');
+    expect(updates).toHaveLength(1);
+  });
+
+  it('applies pending input when unbinding', () => {
+    const doc = new Y.Doc();
+    const text = doc.getText('content');
+    const textarea = new FakeTextarea();
+    const unbind = bindTextarea(text, textarea, { batchMs: 40, scheduler: new ManualScheduler() });
+    textarea.typeValue('last words');
+    unbind();
+    expect(text.toString()).toBe('last words');
   });
 
   it('stops syncing after unbinding', () => {

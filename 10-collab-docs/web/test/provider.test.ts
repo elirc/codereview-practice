@@ -168,6 +168,14 @@ describe('CollabProvider', () => {
     expect(sockets[0].syncSteps().at(-1)).toBe(syncProtocol.messageYjsUpdate);
   });
 
+  it('does not answer the server SyncStep1 when it has no unsent edits', () => {
+    const { sockets } = setup();
+    sockets[0].open();
+    sockets[0].deliver(hello('editor'));
+    sockets[0].deliver(serverSyncStep1(new Y.Doc()));
+    expect(sockets[0].syncSteps()).toEqual([syncProtocol.messageYjsSyncStep1]);
+  });
+
   it('discards unsent edits and reloads when told it is read-only', () => {
     const { provider, sockets } = setup();
     const docs: Y.Doc[] = [];

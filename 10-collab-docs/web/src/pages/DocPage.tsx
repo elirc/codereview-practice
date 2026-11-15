@@ -12,6 +12,7 @@ import { SharePanel } from '../components/SharePanel';
 import { VersionsPanel } from '../components/VersionsPanel';
 
 const COLORS = ['#d33', '#36c', '#393', '#c60', '#939', '#077'];
+const INPUT_BATCH_MS = 40;
 
 function socketUrl(docId: string, link: string | null): string {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -67,7 +68,7 @@ export function DocPage() {
   useEffect(() => {
     const element = textarea.current;
     if (!ydoc || !element) return;
-    return bindTextarea(ydoc.getText('content'), element);
+    return bindTextarea(ydoc.getText('content'), element, { batchMs: INPUT_BATCH_MS });
   }, [ydoc]);
 
   useEffect(() => {
