@@ -39,6 +39,12 @@ type Lease struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+type LeaseSummary struct {
+	LeaseID      pgtype.UUID
+	BalanceCents int64
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type LeaseTenant struct {
 	LeaseID   pgtype.UUID
 	TenantID  pgtype.UUID

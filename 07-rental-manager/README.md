@@ -35,6 +35,7 @@ go run ./cmd/rentmgr worker         # every 15 minutes: post-rent, then assess-l
 go run ./cmd/rentmgr run-job post-rent --as-of 2026-03-01
 go run ./cmd/rentmgr run-job assess-late-fees
 go run ./cmd/rentmgr migrate status
+go run ./cmd/rentmgr rebuild-balances   # recompute lease_summaries from ledger_entries
 ```
 
 The worker is the scheduler; run one or several, they coordinate through Postgres advisory locks. Admins can also run a job from **Jobs** in the UI.
@@ -53,7 +54,7 @@ Integration tests truncate and reuse the database named by `TEST_DATABASE_URL`, 
 ## Architecture
 
 ```
-cmd/rentmgr/            serve, worker, migrate, seed, run-job
+cmd/rentmgr/            serve, worker, migrate, seed, run-job, rebuild-balances
 migrations/             goose SQL migrations (embedded)
 internal/config/        environment configuration
 internal/money/         Cents, decimal parsing and formatting, half-up rounding

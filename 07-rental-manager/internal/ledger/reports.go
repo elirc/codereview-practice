@@ -76,7 +76,7 @@ func (s *Service) receivables(ctx context.Context, asOf calendar.Date) ([]receiv
 		if err != nil {
 			return fmt.Errorf("listing entries: %w", err)
 		}
-		balances, err := q.ListLeaseBalances(ctx, store.Date(asOf))
+		summaries, err := q.ListLeaseSummaries(ctx)
 		if err != nil {
 			return fmt.Errorf("listing balances: %w", err)
 		}
@@ -85,9 +85,9 @@ func (s *Service) receivables(ctx context.Context, asOf calendar.Date) ([]receiv
 		for _, r := range rows {
 			entries[r.LeaseID] = append(entries[r.LeaseID], ToEntry(r))
 		}
-		balance := make(map[pgtype.UUID]money.Cents, len(balances))
-		for _, b := range balances {
-			balance[b.LeaseID] = money.Cents(b.Balance)
+		balance := make(map[pgtype.UUID]money.Cents, len(summaries))
+		for _, b := range summaries {
+			balance[b.LeaseID] = money.Cents(b.BalanceCents)
 		}
 
 		out = make([]receivable, 0, len(leases))

@@ -50,12 +50,6 @@ SELECT COALESCE(SUM(amount_cents), 0)::bigint AS balance
 FROM ledger_entries
 WHERE lease_id = @lease_id AND entry_date <= @as_of::date;
 
--- name: ListLeaseBalances :many
-SELECT lease_id, COALESCE(SUM(amount_cents), 0)::bigint AS balance
-FROM ledger_entries
-WHERE entry_date <= @as_of::date
-GROUP BY lease_id;
-
 -- name: ListStatementEntries :many
 SELECT s.id, s.entry_date, s.kind, s.amount_cents, s.period, s.reverses_entry_id, s.memo,
     s.created_at, r.id AS reversed_by_id, s.running_balance

@@ -265,38 +265,6 @@ func (q *Queries) LeaseBalance(ctx context.Context, arg LeaseBalanceParams) (int
 	return balance, err
 }
 
-const listLeaseBalances = `-- name: ListLeaseBalances :many
-SELECT lease_id, COALESCE(SUM(amount_cents), 0)::bigint AS balance
-FROM ledger_entries
-WHERE entry_date <= $1::date
-GROUP BY lease_id
-`
-
-type ListLeaseBalancesRow struct {
-	LeaseID pgtype.UUID
-	Balance int64
-}
-
-func (q *Queries) ListLeaseBalances(ctx context.Context, asOf pgtype.Date) ([]ListLeaseBalancesRow, error) {
-	rows, err := q.db.Query(ctx, listLeaseBalances, asOf)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListLeaseBalancesRow
-	for rows.Next() {
-		var i ListLeaseBalancesRow
-		if err := rows.Scan(&i.LeaseID, &i.Balance); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listStatementEntries = `-- name: ListStatementEntries :many
 SELECT s.id, s.entry_date, s.kind, s.amount_cents, s.period, s.reverses_entry_id, s.memo,
     s.created_at, r.id AS reversed_by_id, s.running_balance

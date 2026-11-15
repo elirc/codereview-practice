@@ -163,8 +163,8 @@ func (f *Fixture) ActiveLease(o LeaseOptions) db.Lease {
 	return active
 }
 
-// Insert writes an entry directly with a random idempotency key. Amount is
-// signed as stored.
+// Insert writes an entry directly with a random idempotency key and adds it
+// to the lease's summary. Amount is signed as stored.
 func (f *Fixture) Insert(leaseID pgtype.UUID, kind billing.Kind, date string, amount money.Cents, period string) db.LedgerEntry {
 	f.t.Helper()
 	key, err := store.NewUUID()
@@ -182,6 +182,10 @@ func (f *Fixture) Insert(leaseID pgtype.UUID, kind billing.Kind, date string, am
 	})
 	if err != nil {
 		f.t.Fatalf("inserting %s entry: %v", kind, err)
+	}
+	err = f.Q.AddToLeaseSummary(context.Background(), db.AddToLeaseSummaryParams{LeaseID: leaseID, AmountCents: int64(amount)})
+	if err != nil {
+		f.t.Fatalf("updating lease summary: %v", err)
 	}
 	return e
 }

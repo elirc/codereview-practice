@@ -414,6 +414,47 @@ func TestDatabaseRejectsInvalidReversals(t *testing.T) {
 	}
 }
 
+func TestCurrentBalanceFollowsPostings(t *testing.T) {
+	f := testdb.New(t)
+	ctx := context.Background()
+	svc := newService(t, f)
+	manager := f.Actor(auth.RoleManager)
+	l := f.ActiveLease(testdb.LeaseOptions{})
+
+	err := store.WithTx(ctx, f.Pool, func(q *db.Queries) error {
+		_, err := ledger.PostRent(ctx, q, l, testdb.MustDate(t, today))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pay, err := svc.Record(ctx, manager, ledger.ManualEntry{
+		LeaseID: l.ID, Kind: billing.KindPayment, Amount: 120000, Date: testdb.MustDate(t, "2026-03-05"), Key: newKey(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.CurrentBalance(ctx, l.ID); err != nil || got != 180000 {
+		t.Fatalf("balance after payment = %d, %v", got, err)
+	}
+
+	if _, err := svc.Reverse(ctx, manager, pay.ID, "returned"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.CurrentBalance(ctx, l.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := balance(t, svc, l, testdb.MustDate(t, today)); got != want || got != 300000 {
+		t.Errorf("current balance = %d, ledger balance = %d, want 300000", got, want)
+	}
+
+	empty := f.ActiveLease(testdb.LeaseOptions{})
+	if got, err := svc.CurrentBalance(ctx, empty.ID); err != nil || got != 0 {
+		t.Errorf("lease without entries: %d, %v", got, err)
+	}
+}
+
 func TestStatementRunningAndOpeningBalances(t *testing.T) {
 	f := testdb.New(t)
 	ctx := context.Background()

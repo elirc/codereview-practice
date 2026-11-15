@@ -46,8 +46,9 @@ type Posting struct {
 }
 
 // Post writes p unless an entry with the same idempotency key exists, in
-// which case the existing entry is returned with created == false. Callers
-// hold the lease row lock for the duration of their transaction.
+// which case the existing entry is returned with created == false. It keeps
+// the lease's summary balance in step with the ledger. Callers hold the
+// lease row lock for the duration of their transaction.
 func Post(ctx context.Context, q *db.Queries, p Posting) (entry db.LedgerEntry, created bool, err error) {
 	params := db.InsertLedgerEntryParams{
 		LeaseID:        p.LeaseID,
@@ -64,22 +65,28 @@ func Post(ctx context.Context, q *db.Queries, p Posting) (entry db.LedgerEntry, 
 	}
 
 	entry, err = q.InsertLedgerEntry(ctx, params)
-	if err == nil {
-		return entry, true, nil
-	}
-	if !store.IsNotFound(err) {
+	switch {
+	case err == nil:
+		created = true
+	case store.IsNotFound(err):
+		// ON CONFLICT DO NOTHING returns no row; the entry already exists.
+		existing, err := q.GetLedgerEntryByKey(ctx, p.Key)
+		if err != nil {
+			return db.LedgerEntry{}, false, fmt.Errorf("loading ledger entry %q: %w", p.Key, err)
+		}
+		if existing.LeaseID != p.LeaseID {
+			return db.LedgerEntry{}, false, ErrKeyConflict
+		}
+		entry = existing
+	default:
 		return db.LedgerEntry{}, false, fmt.Errorf("inserting ledger entry %q: %w", p.Key, err)
 	}
 
-	// ON CONFLICT DO NOTHING returns no row; the entry already exists.
-	existing, err := q.GetLedgerEntryByKey(ctx, p.Key)
+	err = q.AddToLeaseSummary(ctx, db.AddToLeaseSummaryParams{LeaseID: entry.LeaseID, AmountCents: entry.AmountCents})
 	if err != nil {
-		return db.LedgerEntry{}, false, fmt.Errorf("loading ledger entry %q: %w", p.Key, err)
+		return db.LedgerEntry{}, false, fmt.Errorf("updating summary of lease %s: %w", store.FormatUUID(entry.LeaseID), err)
 	}
-	if existing.LeaseID != p.LeaseID {
-		return db.LedgerEntry{}, false, ErrKeyConflict
-	}
-	return existing, false, nil
+	return entry, created, nil
 }
 
 // RentKey is the idempotency key of the rent charge for period p.

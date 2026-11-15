@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	ActivateLease(ctx context.Context, arg ActivateLeaseParams) (Lease, error)
 	AddLeaseTenant(ctx context.Context, arg AddLeaseTenantParams) error
+	AddToLeaseSummary(ctx context.Context, arg AddToLeaseSummaryParams) error
 	AdvisoryUnlock(ctx context.Context, lockKey int64) (bool, error)
 	CountJobRuns(ctx context.Context, arg CountJobRunsParams) (int64, error)
 	CreateJobRun(ctx context.Context, arg CreateJobRunParams) (JobRun, error)
@@ -22,12 +23,14 @@ type Querier interface {
 	CreateUnit(ctx context.Context, arg CreateUnitParams) (Unit, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteDraftLease(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteLeaseSummaries(ctx context.Context) error
 	DeleteLeaseTenants(ctx context.Context, leaseID pgtype.UUID) error
 	EndLease(ctx context.Context, arg EndLeaseParams) (Lease, error)
 	FailStaleJobRuns(ctx context.Context, arg FailStaleJobRunsParams) (int64, error)
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) (JobRun, error)
 	GetLease(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseForUpdate(ctx context.Context, id pgtype.UUID) (Lease, error)
+	GetLeaseSummary(ctx context.Context, leaseID pgtype.UUID) (LeaseSummary, error)
 	GetLedgerEntry(ctx context.Context, id int64) (LedgerEntry, error)
 	GetLedgerEntryByKey(ctx context.Context, idempotencyKey string) (LedgerEntry, error)
 	GetProperty(ctx context.Context, id pgtype.UUID) (Property, error)
@@ -42,9 +45,9 @@ type Querier interface {
 	ListBillableLeases(ctx context.Context) ([]Lease, error)
 	ListEntriesThrough(ctx context.Context, asOf pgtype.Date) ([]LedgerEntry, error)
 	ListJobRuns(ctx context.Context, limit int32) ([]JobRun, error)
-	ListLeaseBalances(ctx context.Context, asOf pgtype.Date) ([]ListLeaseBalancesRow, error)
 	ListLeaseEntries(ctx context.Context, leaseID pgtype.UUID) ([]LedgerEntry, error)
 	ListLeaseKeys(ctx context.Context, leaseID pgtype.UUID) ([]string, error)
+	ListLeaseSummaries(ctx context.Context) ([]LeaseSummary, error)
 	ListLeaseTenants(ctx context.Context, leaseID pgtype.UUID) ([]ListLeaseTenantsRow, error)
 	ListLeases(ctx context.Context) ([]ListLeasesRow, error)
 	ListProperties(ctx context.Context) ([]ListPropertiesRow, error)
@@ -54,6 +57,7 @@ type Querier interface {
 	ListUnitOptions(ctx context.Context) ([]ListUnitOptionsRow, error)
 	ListUnitsByProperty(ctx context.Context, propertyID pgtype.UUID) ([]Unit, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	RebuildLeaseSummaries(ctx context.Context) (int64, error)
 	TryAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	UpdateDraftLease(ctx context.Context, arg UpdateDraftLeaseParams) (Lease, error)
 	UpdateLeaseFeeTerms(ctx context.Context, arg UpdateLeaseFeeTermsParams) (Lease, error)

@@ -29,8 +29,8 @@ var (
 	migrateErr  error
 )
 
-const truncateAll = `TRUNCATE ledger_entries, lease_tenants, leases, units, properties, tenants,
-	job_runs, sessions, users RESTART IDENTITY CASCADE`
+const truncateAll = `TRUNCATE ledger_entries, lease_summaries, lease_tenants, leases, units, properties,
+	tenants, job_runs, sessions, users RESTART IDENTITY CASCADE`
 
 // Open returns a pool connected to TEST_DATABASE_URL with every table
 // emptied. The pool is closed when the test ends.

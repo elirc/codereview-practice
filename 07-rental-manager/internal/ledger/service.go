@@ -248,3 +248,16 @@ func (s *Service) Balance(ctx context.Context, leaseID pgtype.UUID, asOf calenda
 	}
 	return money.Cents(b), nil
 }
+
+// CurrentBalance returns the balance of a lease over every entry posted so
+// far, from the lease's summary row.
+func (s *Service) CurrentBalance(ctx context.Context, leaseID pgtype.UUID) (money.Cents, error) {
+	sum, err := db.New(s.pool).GetLeaseSummary(ctx, leaseID)
+	if store.IsNotFound(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lease summary: %w", err)
+	}
+	return money.Cents(sum.BalanceCents), nil
+}

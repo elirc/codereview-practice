@@ -205,7 +205,7 @@ func (s *Server) renderLease(w http.ResponseWriter, r *http.Request, status int,
 		s.fail(w, r, err)
 		return
 	}
-	balance, err := s.ledger.Balance(r.Context(), id, s.today())
+	balance, err := s.ledger.CurrentBalance(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
 		return
