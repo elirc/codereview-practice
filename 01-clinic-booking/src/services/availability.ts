@@ -58,7 +58,7 @@ function assertCanManage(actor: Actor, provider: Provider): void {
   if (!canManage(actor, provider)) throw forbidden();
 }
 
-async function lockProvider(tx: DbClient, providerId: string): Promise<void> {
+export async function lockProvider(tx: DbClient, providerId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM providers WHERE id = ${providerId}::uuid FOR UPDATE`;
 }
 
@@ -202,7 +202,7 @@ export async function listExceptions(actor: Actor, providerId: string) {
   return findExceptions(providerId);
 }
 
-function exceptionExists(date: LocalDate): AppError {
+export function exceptionExists(date: LocalDate): AppError {
   return new AppError("exception_exists", `An exception already exists for ${date}.`);
 }
 

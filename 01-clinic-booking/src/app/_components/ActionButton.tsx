@@ -9,10 +9,12 @@ interface Props {
   method?: "POST" | "DELETE";
   label: string;
   confirm?: string;
+  /** JSON body to send with the request. */
+  body?: unknown;
 }
 
 /** A single-click API call (cancel, complete, delete) that refreshes the page afterwards. */
-export function ActionButton({ path, method = "POST", label, confirm }: Props) {
+export function ActionButton({ path, method = "POST", label, confirm, body }: Props) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -20,7 +22,7 @@ export function ActionButton({ path, method = "POST", label, confirm }: Props) {
   async function run() {
     if (confirm && !window.confirm(confirm)) return;
     setPending(true);
-    const result = await apiRequest<{ affectedAppointments?: string[] }>(path, { method });
+    const result = await apiRequest<{ affectedAppointments?: string[] }>(path, { method, body });
     setPending(false);
     if (!result.ok) {
       setMessage(describeError(result.error));

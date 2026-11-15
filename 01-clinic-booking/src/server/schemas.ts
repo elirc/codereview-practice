@@ -80,6 +80,10 @@ export const cancelBody = z.object({ reason: reason.optional() }).strict();
 
 export const rescheduleBody = z.object({ providerId: uuid.optional(), startsAt: instant }).strict();
 
+export const closeDayBody = z
+  .object({ providerId: uuid, localDate, reason: reason.optional() })
+  .strict();
+
 export const appointmentListQuery = z.object({
   scope: z.enum(["mine", "clinic"]).default("mine"),
   date: localDate.optional(),

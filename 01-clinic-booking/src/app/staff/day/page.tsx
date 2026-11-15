@@ -122,6 +122,16 @@ export default async function DayViewPage({ searchParams }: { searchParams: Sear
                 <Link href={`/staff/providers/${provider.id}/availability`}>Availability</Link>
                 {!provider.active && <span className="muted"> (inactive)</span>}
               </p>
+              {canCancel && (
+                <p>
+                  <ActionButton
+                    path={`/api/clinics/${clinic.id}/closures`}
+                    body={{ providerId: provider.id, localDate: date }}
+                    label="Close this day"
+                    confirm={`Close ${longDate(date)} for ${provider.displayName} and cancel their remaining bookings?`}
+                  />
+                </p>
+              )}
               {own.length === 0 && <p className="muted">No appointments.</p>}
               {own.map((a) => (
                 <AppointmentCard key={a.id} appointment={a} zone={zone} canCancel={canCancel} />
