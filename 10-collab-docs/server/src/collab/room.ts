@@ -14,14 +14,14 @@ import {
   type ControlMessage,
 } from '../ws/codec.js';
 import { encodeAwarenessEntries } from './awarenessFilter.js';
-import type { AppendAuthorizer, AppendInput, AppendResult, DocLog } from './docStore.js';
+import type { AppendAuthorizer, AppendInput, AppendResult, DocLog, DocStatus } from './docStore.js';
 
 /** The storage operations a room needs. */
 export interface RoomStore {
   load(docId: string): Promise<DocLog>;
   readSince(docId: string, afterSeq: number): Promise<DocLog>;
   append(input: AppendInput): Promise<AppendResult>;
-  headSeqs(docIds: string[]): Promise<Map<string, number>>;
+  docStatuses(docIds: string[]): Promise<Map<string, DocStatus>>;
 }
 
 /** A local connection joined to a room. */

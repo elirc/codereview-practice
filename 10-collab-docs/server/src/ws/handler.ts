@@ -3,7 +3,7 @@ import type { Config } from '../config/config.js';
 import type { AppendAuthorizer } from '../collab/docStore.js';
 import type { Room } from '../collab/room.js';
 import { filterAwarenessUpdate } from '../collab/awarenessFilter.js';
-import { addsNothing, appliesCleanly } from '../collab/updates.js';
+import { classifyInbound } from '../collab/updates.js';
 import { canEdit, canSendPresence } from '../domain/roles.js';
 import type { Clock } from '../lib/clock.js';
 import { resolveDocAccess } from '../services/access.js';
@@ -89,23 +89,18 @@ export class FrameHandler {
       conn.close(CloseCode.Forbidden, 'read-only connection');
       return;
     }
-    if (update.byteLength > this.config.MAX_UPDATE_BYTES) {
-      conn.close(CloseCode.TooLarge, 'update too large');
-      return;
+    switch (classifyInbound(update, room.doc, this.config.MAX_UPDATE_BYTES)) {
+      case 'unchanged':
+        return;
+      case 'too_large':
+        conn.close(CloseCode.TooLarge, 'update too large');
+        return;
+      case 'malformed':
+        conn.close(CloseCode.Malformed, 'malformed update');
+        return;
+      case 'store':
+        break;
     }
-    let unchanged: boolean;
-    try {
-      Y.decodeUpdate(update);
-      unchanged = addsNothing(update, room.doc);
-    } catch {
-      conn.close(CloseCode.Malformed, 'malformed update');
-      return;
-    }
-    if (!unchanged && !appliesCleanly(update)) {
-      conn.close(CloseCode.Malformed, 'malformed update');
-      return;
-    }
-    if (unchanged) return;
 
     const result = await room.appendFromPeer(conn, update, this.authorizer(conn));
     switch (result.status) {

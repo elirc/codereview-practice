@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import type { AppendInput, AppendResult, DocLog } from '../../src/collab/docStore.js';
+import type { AppendInput, AppendResult, DocLog, DocStatus } from '../../src/collab/docStore.js';
 import { Room, type RoomPeer, type RoomStore } from '../../src/collab/room.js';
 import { createLogger } from '../../src/lib/logger.js';
 import { decodeFrame } from '../../src/ws/codec.js';
@@ -52,7 +52,7 @@ class FakeStore implements RoomStore {
     return { snapshot, updates: this.log.updates.filter((entry) => entry.seq > from) };
   }
 
-  async headSeqs(): Promise<Map<string, number>> {
+  async docStatuses(): Promise<Map<string, DocStatus>> {
     return new Map();
   }
 

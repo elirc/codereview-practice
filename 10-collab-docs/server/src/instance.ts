@@ -47,7 +47,7 @@ export function createInstance(options: InstanceOptions): Instance {
   const registry = new RoomRegistry({ store, bus, logger, roomIdleMs: config.ROOM_IDLE_MS });
   const ctx: ServiceContext = { db, clock, random, config, notifier: registry, live: registry };
   const app = buildApp({ ctx, logger });
-  const collab = new CollabServer({ config, db, clock, random, logger, registry });
+  const collab = new CollabServer({ config, db, store, clock, random, logger, registry });
   collab.attach(app.server);
   let closing: Promise<void> | null = null;
 

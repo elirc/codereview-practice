@@ -4,6 +4,7 @@ import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { Config } from '../config/config.js';
 import type { RoomRegistry } from '../collab/registry.js';
+import type { RoomStore } from '../collab/room.js';
 import type { Db } from '../db/db.js';
 import { canEdit } from '../domain/roles.js';
 import { TokenBucket } from '../domain/tokenBucket.js';
@@ -22,6 +23,7 @@ import { authorizeUpgrade, rejectUpgrade } from './upgrade.js';
 export interface CollabServerOptions {
   config: Config;
   db: Db;
+  store: RoomStore;
   clock: Clock;
   random: RandomSource;
   logger: Logger;
@@ -71,6 +73,7 @@ export class CollabServer extends EventEmitter {
     );
     this.monitor = new AccessMonitor({
       db: options.db,
+      store: options.store,
       clock: options.clock,
       connections: this.connections,
       logger: options.logger,

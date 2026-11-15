@@ -17,6 +17,12 @@ export interface DocLog {
   updates: StoredUpdate[];
 }
 
+export interface DocStatus {
+  headSeq: number;
+  permEpoch: number;
+  trashed: boolean;
+}
+
 export interface AppendEpochs {
   docEpoch: number;
   workspaceEpoch: number;
@@ -117,15 +123,20 @@ export class DocStore {
     });
   }
 
-  /** Returns the current head seq of each listed document that still exists. */
-  async headSeqs(docIds: string[]): Promise<Map<string, number>> {
+  /** Returns the head seq, permission epoch and trash state of each listed document. */
+  async docStatuses(docIds: string[]): Promise<Map<string, DocStatus>> {
     if (docIds.length === 0) return new Map();
     const rows = await this.db
       .selectFrom('docs')
-      .select(['id', 'head_seq'])
+      .select(['id', 'head_seq', 'perm_epoch', 'trashed_at'])
       .where('id', 'in', docIds)
       .execute();
-    return new Map(rows.map((row) => [row.id, row.head_seq]));
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        { headSeq: row.head_seq, permEpoch: row.perm_epoch, trashed: row.trashed_at !== null },
+      ]),
+    );
   }
 
   /** Returns the log together with the head seq it reaches, or null for an unknown document. */

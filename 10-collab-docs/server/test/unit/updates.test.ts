@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { addsNothing, appliesCleanly, tryApplyUpdate } from '../../src/collab/updates.js';
+import {
+  addsNothing,
+  appliesCleanly,
+  classifyInbound,
+  tryApplyUpdate,
+} from '../../src/collab/updates.js';
 
 function synced(): { server: Y.Doc; client: Y.Doc } {
   const client = new Y.Doc();
@@ -54,5 +59,31 @@ describe('addsNothing', () => {
     client.on('update', (update: Uint8Array) => deletions.push(update));
     client.getText('content').delete(0, 1);
     expect(addsNothing(deletions[0], server)).toBe(false);
+  });
+});
+
+describe('classifyInbound', () => {
+  it('stores an update that inserts text', () => {
+    const { server, client } = synced();
+    client.getText('content').insert(0, '!');
+    const reply = Y.encodeStateAsUpdate(client, Y.encodeStateVector(server));
+    expect(classifyInbound(reply, server, 1_000)).toBe('store');
+  });
+
+  it('reports an update the document already has as unchanged', () => {
+    const { server, client } = synced();
+    expect(classifyInbound(Y.encodeStateAsUpdate(client), server, 1_000)).toBe('unchanged');
+  });
+
+  it('refuses updates over the size limit', () => {
+    const { server, client } = synced();
+    client.getText('content').insert(0, 'x'.repeat(200));
+    const reply = Y.encodeStateAsUpdate(client, Y.encodeStateVector(server));
+    expect(classifyInbound(reply, server, 100)).toBe('too_large');
+  });
+
+  it('reports bytes that are not an update as malformed', () => {
+    const { server } = synced();
+    expect(classifyInbound(new Uint8Array([5]), server, 1_000)).toBe('malformed');
   });
 });

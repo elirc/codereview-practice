@@ -135,10 +135,10 @@ export class RoomRegistry implements LiveDocs, Notifier {
   async catchUpBehind(): Promise<void> {
     const rooms = this.all().filter((room) => room.isLoaded && !room.closing);
     if (rooms.length === 0) return;
-    const heads = await this.store.headSeqs(rooms.map((room) => room.docId));
+    const statuses = await this.store.docStatuses(rooms.map((room) => room.docId));
     await Promise.all(
       rooms
-        .filter((room) => (heads.get(room.docId) ?? 0) > room.appliedSeq)
+        .filter((room) => (statuses.get(room.docId)?.headSeq ?? 0) > room.appliedSeq)
         .map((room) => room.catchUp()),
     );
   }
@@ -213,8 +213,7 @@ export class RoomRegistry implements LiveDocs, Notifier {
   private async prepare(room: Room): Promise<void> {
     const handler: BusHandler = (raw) => this.onDocMessage(room, raw);
     this.handlers.set(room, handler);
-    await this.bus.subscribe(docChannel(room.docId), handler);
-    await room.load();
+    await Promise.all([this.bus.subscribe(docChannel(room.docId), handler), room.load()]);
   }
 
   private async release(room: Room): Promise<void> {

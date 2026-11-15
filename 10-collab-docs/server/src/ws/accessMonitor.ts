@@ -1,4 +1,5 @@
 import type { AccessListener } from '../collab/registry.js';
+import type { RoomStore } from '../collab/room.js';
 import type { Db } from '../db/db.js';
 import type { Clock } from '../lib/clock.js';
 import type { Logger } from '../lib/logger.js';
@@ -8,6 +9,7 @@ import type { Connection } from './connection.js';
 
 export interface AccessMonitorOptions {
   db: Db;
+  store: Pick<RoomStore, 'docStatuses'>;
   clock: Clock;
   connections: Set<Connection>;
   logger: Logger;
@@ -16,12 +18,14 @@ export interface AccessMonitorOptions {
 /** Re-evaluates open connections against current database state. */
 export class AccessMonitor implements AccessListener {
   private readonly db: Db;
+  private readonly store: Pick<RoomStore, 'docStatuses'>;
   private readonly clock: Clock;
   private readonly connections: Set<Connection>;
   private readonly log: Logger;
 
   constructor(options: AccessMonitorOptions) {
     this.db = options.db;
+    this.store = options.store;
     this.clock = options.clock;
     this.connections = options.connections;
     this.log = options.logger;
@@ -81,19 +85,7 @@ export class AccessMonitor implements AccessListener {
     const conns = this.open().filter((conn) => conn.room !== null);
     if (conns.length === 0) return;
 
-    const docIds = [...new Set(conns.map((conn) => conn.docId))];
-    const docs = await this.db
-      .selectFrom('docs')
-      .innerJoin('workspaces', 'workspaces.id', 'docs.workspace_id')
-      .select([
-        'docs.id',
-        'docs.perm_epoch',
-        'docs.trashed_at',
-        'workspaces.perm_epoch as workspace_epoch',
-      ])
-      .where('docs.id', 'in', docIds)
-      .execute();
-    const byId = new Map(docs.map((doc) => [doc.id, doc]));
+    const statuses = await this.store.docStatuses([...new Set(conns.map((conn) => conn.docId))]);
 
     const sessionIds = [
       ...new Set(conns.map((conn) => conn.auth.sessionId).filter((id): id is string => id !== null)),
@@ -114,8 +106,8 @@ export class AccessMonitor implements AccessListener {
 
     const changed: Connection[] = [];
     for (const conn of conns) {
-      const doc = byId.get(conn.docId);
-      if (!doc || doc.trashed_at !== null) {
+      const status = statuses.get(conn.docId);
+      if (!status || status.trashed) {
         conn.close(CloseCode.Gone, 'document unavailable');
         continue;
       }
@@ -125,13 +117,7 @@ export class AccessMonitor implements AccessListener {
       }
       const linkExpired =
         conn.auth.linkExpiresAt !== null && now.getTime() >= conn.auth.linkExpiresAt.getTime();
-      if (
-        linkExpired ||
-        doc.perm_epoch !== conn.auth.docEpoch ||
-        doc.workspace_epoch !== conn.auth.workspaceEpoch
-      ) {
-        changed.push(conn);
-      }
+      if (linkExpired || status.permEpoch !== conn.auth.docEpoch) changed.push(conn);
     }
     await Promise.all(changed.map((conn) => this.reevaluate(conn)));
   }

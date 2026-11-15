@@ -48,6 +48,24 @@ export function appliesCleanly(update: Uint8Array): boolean {
   }
 }
 
+export type InboundUpdate = 'store' | 'unchanged' | 'too_large' | 'malformed';
+
+/**
+ * Classifies an update received from a client against the room's document:
+ * `store` when it should be appended, `unchanged` when it adds nothing,
+ * `too_large` when it is over `maxBytes`, `malformed` when it cannot be used.
+ */
+export function classifyInbound(update: Uint8Array, doc: Y.Doc, maxBytes: number): InboundUpdate {
+  try {
+    Y.decodeUpdate(update);
+    if (addsNothing(update, doc)) return 'unchanged';
+  } catch {
+    return 'malformed';
+  }
+  if (update.byteLength > maxBytes) return 'too_large';
+  return appliesCleanly(update) ? 'store' : 'malformed';
+}
+
 /** Applies an update, returning false instead of throwing when it cannot be applied. */
 export function tryApplyUpdate(doc: Y.Doc, update: Uint8Array, origin?: unknown): boolean {
   try {
