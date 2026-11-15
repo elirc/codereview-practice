@@ -19,6 +19,13 @@ class Manage::OrdersControllerTest < ActionDispatch::IntegrationTest
     assert_select "td", text: /#{users(:customer).email_address}/
   end
 
+  test "the order page shows what a refund returns to sale" do
+    get manage_event_order_path(events(:concert), @order)
+
+    assert_response :success
+    assert_select "#refund-summary li", text: "2 × #{ticket_tiers(:general).name}"
+  end
+
   test "refunds once and reports a second attempt" do
     post refund_manage_event_order_path(events(:concert), @order)
 

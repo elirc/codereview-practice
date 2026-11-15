@@ -18,6 +18,11 @@ class Order < ApplicationRecord
     number
   end
 
+  # Valid ticket counts keyed by tier id.
+  def valid_ticket_counts
+    tickets.status_valid.group(:ticket_tier_id).count
+  end
+
   private
     def total_matches_amounts
       return if [ subtotal_cents, discount_cents, total_cents ].any?(&:nil?)

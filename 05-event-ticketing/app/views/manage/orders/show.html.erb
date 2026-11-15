@@ -38,6 +38,19 @@
 </table>
 
 <% if @order.paid? %>
-  <%= button_to "Refund in full", refund_manage_event_order_path(@event, @order),
-        data: { turbo_confirm: "Refund #{format_cents(@order.total_cents)} and void these tickets?" } %>
+  <% returning = @order.tickets.select(&:status_valid?).group_by(&:ticket_tier) %>
+  <section id="refund-summary">
+    <h2>Refund</h2>
+    <p>A full refund pays back <%= format_cents(@order.total_cents) %> and returns these tickets to sale:</p>
+    <ul>
+      <% returning.each do |tier, tickets| %>
+        <li><%= tickets.size %> × <%= tier.name %></li>
+      <% end %>
+    </ul>
+    <% if @order.promo_redemptions.any? %>
+      <p class="muted">Promo code redemptions stay counted after a refund.</p>
+    <% end %>
+    <%= button_to "Refund in full", refund_manage_event_order_path(@event, @order),
+          data: { turbo_confirm: "Refund #{format_cents(@order.total_cents)} and void #{pluralize(returning.values.sum(&:size), "ticket")}?" } %>
+  </section>
 <% end %>

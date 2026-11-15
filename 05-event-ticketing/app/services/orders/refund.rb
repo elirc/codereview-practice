@@ -14,22 +14,21 @@ module Orders
     end
 
     def call
-      tier_ids = @order.tickets.distinct.pluck(:ticket_tier_id)
+      raise DomainError.new(:already_refunded) unless @order.paid?
+
+      returned = @order.valid_ticket_counts
 
       ApplicationRecord.transaction do
-        tiers = TicketTier.where(id: tier_ids).order(:id).lock.to_a
+        tiers = TicketTier.where(id: returned.keys).order(:id).lock.to_a
         @order.lock!
-        raise DomainError.new(:already_refunded) unless @order.paid?
-
-        valid_counts = @order.tickets.status_valid.group(:ticket_tier_id).count
         @order.update!(status: :refunded, refunded_at: @now)
         @order.tickets.status_valid.update_all(status: "void", updated_at: @now)
-        tiers.each { |tier| tier.adjust_counts!(sold: -valid_counts.fetch(tier.id, 0)) }
+        tiers.each { |tier| tier.adjust_counts!(sold: -returned.fetch(tier.id)) }
         refund_payment
       end
 
       ActiveRecord.after_all_transactions_commit do
-        tier_ids.each { |tier_id| PromoteWaitlistJob.perform_later(tier_id) }
+        returned.each_key { |tier_id| PromoteWaitlistJob.perform_later(tier_id) }
         OrderMailer.public_send(@notification, @order).deliver_later
       end
       @order
