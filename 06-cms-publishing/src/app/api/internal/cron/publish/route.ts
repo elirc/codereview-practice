@@ -14,7 +14,11 @@ const JOB = "publish-scheduled";
 
 export async function POST(request: Request) {
   const requestId = await getRequestId();
-  if (!isValidBearer(request.headers.get("authorization"), getEnv().CRON_SECRET)) {
+  const env = getEnv();
+  const secrets = env.CRON_SECRET_PREVIOUS
+    ? [env.CRON_SECRET, env.CRON_SECRET_PREVIOUS]
+    : [env.CRON_SECRET];
+  if (!isValidBearer(request.headers.get("authorization"), secrets)) {
     return errorResponse(
       new DomainError("unauthenticated", "Missing or invalid cron credentials."),
       requestId,
@@ -24,13 +28,11 @@ export async function POST(request: Request) {
   const log = logger.child({ job: JOB, jobId: requestId });
   log.info("job started");
   try {
-    let batch = 0;
     const published = await publishDuePosts({
       now: clock.now(),
-      onBatchCommitted: (changes) => {
-        batch += 1;
-        for (const change of changes) invalidatePost(change);
-        log.info({ batch, postIds: changes.map((change) => change.id) }, "batch published");
+      onPublished: (change) => {
+        invalidatePost(change);
+        log.info({ postId: change.id }, "post published");
       },
     });
     log.info({ published: published.length }, "job finished");

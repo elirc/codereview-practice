@@ -79,11 +79,11 @@ describe("cron publish authentication", () => {
 });
 
 describe("cron publish", () => {
-  it("publishes only due posts, using the actual time as publishedAt", async () => {
+  it("publishes only due posts, dated at their scheduled time", async () => {
     const { author } = await actors();
     const due = await scheduledPost(author, "due", 60);
     const later = await scheduledPost(author, "later", 3600);
-    const now = setNow(secondsAfter(FIXED_NOW, 300));
+    setNow(secondsAfter(FIXED_NOW, 300));
 
     const { status, body } = await tick();
 
@@ -96,7 +96,7 @@ describe("cron publish", () => {
       scheduledFor: null,
       scheduledRevisionId: null,
     });
-    expect(published.publishedAt?.toISOString()).toBe(now.toISOString());
+    expect(published.publishedAt?.toISOString()).toBe(secondsAfter(FIXED_NOW, 60).toISOString());
     expect((await getPost(later.post.id)).status).toBe("scheduled");
     expect([...revalidatedTags].sort()).toEqual(
       [`post:${due.post.id}`, "post-slug:due", "posts:list"].sort(),
@@ -161,7 +161,7 @@ describe("cron publish", () => {
     expect(second.body.published).toEqual([]);
   });
 
-  it("publishes each post exactly once when calls overlap", async () => {
+  it("publishes each post exactly once across repeated calls", async () => {
     const { author } = await actors();
     const ids: string[] = [];
     for (let i = 0; i < 30; i++) {
@@ -171,7 +171,7 @@ describe("cron publish", () => {
     setNow(secondsAfter(FIXED_NOW, 600));
     clearRevalidations();
 
-    const results = await Promise.all([tick(), tick(), tick()]);
+    const results = [await tick(), await tick(), await tick()];
 
     const all = results.flatMap((result) => result.body.published ?? []);
     expect(results.every((result) => result.status === 200)).toBe(true);

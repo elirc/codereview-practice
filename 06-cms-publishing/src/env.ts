@@ -10,6 +10,8 @@ const appEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().url(),
   CRON_SECRET: cronSecret,
+  // Still accepted while the scheduler is being moved to a new CRON_SECRET.
+  CRON_SECRET_PREVIOUS: cronSecret.optional(),
   STORAGE_DRIVER: z.enum(["s3", "memory"]).default("s3"),
   S3_ENDPOINT: z.string().url(),
   S3_REGION: z.string().min(1),

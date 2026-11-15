@@ -27,6 +27,8 @@ npm run scheduler    # separate process: POSTs /api/internal/cron/publish every 
 
 Production: `npm run build && npm start`, plus `npm run scheduler` with `APP_URL` pointing at the app. The scheduler only needs `APP_URL`, `CRON_SECRET`, `SCHEDULER_INTERVAL_MS` and `LOG_LEVEL`. Scheduled posts are published inside the Next process so cache invalidation reaches the data cache.
 
+To rotate the cron secret, set `CRON_SECRET_PREVIOUS` on the web app to the current value and `CRON_SECRET` to the new one, restart the scheduler with the new secret, then remove `CRON_SECRET_PREVIOUS`.
+
 Set `STORAGE_DRIVER=memory` to run without MinIO (uploads then live only as long as the process).
 
 ## Test

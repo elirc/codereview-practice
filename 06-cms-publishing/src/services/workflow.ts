@@ -147,7 +147,7 @@ export function unarchivePost(command: WorkflowCommand): Promise<WorkflowOutcome
 
 /**
  * Publishes the pinned revision of a post the caller has already locked. Used by the
- * scheduler; applies the same field changes as a manual publish.
+ * scheduler; applies the same field changes as a manual publish, dated at the scheduled time.
  */
 export async function publishScheduledInTx(tx: Executor, post: Post, now: Date): Promise<Post> {
   const status = nextStatus(post.status, "scheduledPublish", post.publishedRevisionId !== null);
@@ -155,10 +155,11 @@ export async function publishScheduledInTx(tx: Executor, post: Post, now: Date):
     throw new DomainError("invalid_state", "The post is no longer scheduled.");
   }
   await assertRevisionOfPost(tx, post, post.scheduledRevisionId);
+  const publishedAt = post.scheduledFor ?? now;
   const [updated] = await tx
     .update(posts)
     .set({
-      ...publicationFields(post, post.scheduledRevisionId, now),
+      ...publicationFields(post, post.scheduledRevisionId, publishedAt),
       status,
       version: post.version + 1,
       updatedAt: now,
