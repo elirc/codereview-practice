@@ -13,6 +13,7 @@ public static class WebhookEndpoints
     {
         var read = v1.MapGroup(string.Empty).RequireRole(Roles.Ops);
         read.MapGet("/webhook-endpoints", ListEndpoints);
+        read.MapGet("/webhook-endpoints/{id:guid}", GetEndpoint);
         read.MapGet("/webhook-deliveries", ListDeliveries);
         read.MapPost("/webhook-deliveries/{id:guid}/retry", RetryDelivery);
 
@@ -24,6 +25,9 @@ public static class WebhookEndpoints
 
     private static async Task<IResult> ListEndpoints(string? after, int? limit, WebhookEndpointService endpoints, CancellationToken ct) =>
         Results.Ok(await endpoints.ListAsync(PageQuery.Parse(after, limit), ct));
+
+    private static async Task<IResult> GetEndpoint(Guid id, WebhookEndpointService endpoints, CancellationToken ct) =>
+        Results.Ok(await endpoints.GetAsync(id, ct));
 
     private static async Task<IResult> Create(CreateWebhookEndpointRequest body, WebhookEndpointService endpoints, CancellationToken ct)
     {

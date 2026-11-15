@@ -301,6 +301,25 @@ public sealed class WebhookTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task EndpointDetailCountsDeliveriesByStatus()
+    {
+        var (endpoint, _) = await EndpointAsync("https://hooks.test/a", "*");
+        await FinalizedInvoiceAsync(await CustomerWithCreditAsync(5000));
+        await FinalizedInvoiceAsync(await Data.CustomerAsync());
+        await FanOutAsync();
+        await DeliverAsync();
+
+        var detail = await (await OpsAsync()).GetAsync($"/v1/webhook-endpoints/{endpoint}");
+
+        Assert.Equal(200, detail.Status);
+        Assert.Equal("https://hooks.test/a", detail["url"].GetString());
+        Assert.Equal(1, detail["deliveries"].GetProperty("pending").GetInt32());
+        Assert.Equal(2, detail["deliveries"].GetProperty("succeeded").GetInt32());
+        Assert.Equal(0, detail["deliveries"].GetProperty("failed").GetInt32());
+        Assert.Equal(Clock.GetUtcNow(), detail["lastDeliveredAt"].GetDateTimeOffset());
+    }
+
+    [Fact]
     public async Task PlainHttpEndpointsAreRefusedByDefault()
     {
         var response = await (await Data.AdminAsync()).PostAsync("/v1/webhook-endpoints", new { url = "http://hooks.test/a", eventTypes = new[] { "*" } });

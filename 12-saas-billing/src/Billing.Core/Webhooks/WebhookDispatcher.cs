@@ -53,12 +53,11 @@ public sealed class WebhookDispatcher(
                 JOIN webhook_endpoints e ON e.id = d.endpoint_id
                 WHERE d.status = 'pending' AND d.next_attempt_at <= {now}
                   AND e.status = 'enabled'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM webhook_deliveries p
-                      WHERE p.endpoint_id = d.endpoint_id
-                        AND p.object_id = d.object_id
-                        AND p.status = 'pending'
-                        AND p.sequence < d.sequence)
+                  AND d.id IN (
+                      SELECT DISTINCT ON (p.object_id) p.id
+                      FROM webhook_deliveries p
+                      WHERE p.status = 'pending'
+                      ORDER BY p.object_id, p.sequence)
                 ORDER BY d.sequence
                 LIMIT {BatchSize}
                 FOR UPDATE OF d SKIP LOCKED

@@ -30,6 +30,21 @@ public sealed record WebhookEndpointWithSecretView(
         new(e.Id, e.Url, e.EventTypes, e.Status, e.Secret, e.PreviousSecretExpiresAt, e.CreatedAt);
 }
 
+/// <summary>Number of deliveries of an endpoint in each status.</summary>
+public sealed record WebhookDeliveryCounts(int Pending, int Succeeded, int Failed);
+
+/// <summary>An endpoint together with a summary of its deliveries.</summary>
+public sealed record WebhookEndpointDetailView(
+    Guid Id,
+    string Url,
+    IReadOnlyList<string> EventTypes,
+    WebhookEndpointStatus Status,
+    string Secret,
+    DateTimeOffset? PreviousSecretExpiresAt,
+    DateTimeOffset CreatedAt,
+    WebhookDeliveryCounts Deliveries,
+    DateTimeOffset? LastDeliveredAt);
+
 public sealed record WebhookEndpointChanges(string? Url, IReadOnlyList<string>? EventTypes, WebhookEndpointStatus? Status);
 
 /// <summary>Manages webhook endpoints and their signing secrets.</summary>
@@ -63,6 +78,37 @@ public sealed class WebhookEndpointService(BillingDbContext db, TimeProvider clo
             : db.WebhookEndpoints;
         var rows = await source.AsNoTracking().OrderBy(e => e.Id).Take(page.Limit + 1).ToListAsync(ct);
         return Paging.Build(rows, page.Limit, e => e.Id.ToString(), WebhookEndpointView.From);
+    }
+
+    /// <summary>Returns the endpoint with its delivery counts and the time of its latest successful delivery.</summary>
+    public async Task<WebhookEndpointDetailView> GetAsync(Guid id, CancellationToken ct)
+    {
+        var endpoint = await db.WebhookEndpoints.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id, ct)
+            ?? throw DomainException.NotFound("Webhook endpoint");
+        var counts = await db.WebhookDeliveries.AsNoTracking()
+            .Where(d => d.EndpointId == id)
+            .GroupBy(d => d.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var lastDeliveredAt = await db.WebhookDeliveries.AsNoTracking()
+            .Where(d => d.EndpointId == id && d.DeliveredAt != null)
+            .MaxAsync(d => d.DeliveredAt, ct);
+
+        int Count(WebhookDeliveryStatus status) => counts.SingleOrDefault(c => c.Status == status)?.Count ?? 0;
+
+        return new WebhookEndpointDetailView(
+            endpoint.Id,
+            endpoint.Url,
+            endpoint.EventTypes,
+            endpoint.Status,
+            endpoint.Secret,
+            endpoint.PreviousSecretExpiresAt,
+            endpoint.CreatedAt,
+            new WebhookDeliveryCounts(
+                Count(WebhookDeliveryStatus.Pending),
+                Count(WebhookDeliveryStatus.Succeeded),
+                Count(WebhookDeliveryStatus.Failed)),
+            lastDeliveredAt);
     }
 
     public async Task<WebhookEndpointView> UpdateAsync(Guid id, WebhookEndpointChanges changes, CancellationToken ct)
