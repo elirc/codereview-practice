@@ -325,3 +325,23 @@ async fn concurrent_completions_and_cancel_leave_a_consistent_run(pool: PgPool) 
         }
     }
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn one_reaper_pass_ends_standalone_and_workflow_jobs(pool: PgPool) {
+    let run_id = start(&pool, &[step("a", &[]), step("b", &["a"])]).await;
+    let standalone = add_job(&pool, "q", "plain", t0()).await;
+    claim(&pool, "q", &kinds(&["plain"]), WORKER_B, 1, t0())
+        .await
+        .unwrap();
+    claim_step(&pool, "a").await;
+
+    let reaped = reap_expired(&pool, t0() + secs(60), &NEUTRAL).await.unwrap();
+    assert_eq!(reaped, 2);
+    let job = get_job(&pool, standalone.id).await.unwrap();
+    assert_eq!(job.state, "pending");
+    assert_eq!(job.run_at, t0() + secs(61));
+    let end = detail(&pool, run_id).await;
+    assert_eq!(state_of(&end, "a"), "failed");
+    assert_eq!(state_of(&end, "b"), "skipped");
+    assert_eq!(end.run.state, "failed");
+}
