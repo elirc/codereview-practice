@@ -61,6 +61,7 @@ type Querier interface {
 	TryAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	UpdateDraftLease(ctx context.Context, arg UpdateDraftLeaseParams) (Lease, error)
 	UpdateLeaseFeeTerms(ctx context.Context, arg UpdateLeaseFeeTermsParams) (Lease, error)
+	UpdateLedgerEntryMemo(ctx context.Context, arg UpdateLedgerEntryMemoParams) (LedgerEntry, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateUnit(ctx context.Context, arg UpdateUnitParams) (Unit, error)

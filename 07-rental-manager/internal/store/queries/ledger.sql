@@ -26,6 +26,13 @@ SELECT id, lease_id, entry_date, kind, amount_cents, period, reverses_entry_id,
 FROM ledger_entries
 WHERE reverses_entry_id = @entry_id::bigint;
 
+-- name: UpdateLedgerEntryMemo :one
+UPDATE ledger_entries
+SET memo = $2
+WHERE id = $1
+RETURNING id, lease_id, entry_date, kind, amount_cents, period, reverses_entry_id,
+    idempotency_key, memo, created_by, created_at;
+
 -- name: ListLeaseEntries :many
 SELECT id, lease_id, entry_date, kind, amount_cents, period, reverses_entry_id,
     idempotency_key, memo, created_by, created_at

@@ -160,6 +160,18 @@ func (s *Service) Reverse(ctx context.Context, actor auth.Actor, id int64, memo 
 	return reversal, nil
 }
 
+// UpdateMemo replaces the memo of entry id and returns the entry.
+func (s *Service) UpdateMemo(ctx context.Context, id int64, memo string) (db.LedgerEntry, error) {
+	e, err := db.New(s.pool).UpdateLedgerEntryMemo(ctx, db.UpdateLedgerEntryMemoParams{ID: id, Memo: memo})
+	if store.IsNotFound(err) {
+		return db.LedgerEntry{}, ErrEntryNotFound
+	}
+	if err != nil {
+		return db.LedgerEntry{}, fmt.Errorf("updating memo of entry %d: %w", id, err)
+	}
+	return e, nil
+}
+
 // Statement is a lease's ledger for a date range with running balances.
 type Statement struct {
 	Lease   db.Lease

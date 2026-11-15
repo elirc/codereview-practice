@@ -488,6 +488,28 @@ func TestReversalErrorsMapToStatuses(t *testing.T) {
 	}
 }
 
+func TestEditEntryMemo(t *testing.T) {
+	h := newHarness(t)
+	c := h.as(auth.RoleManager)
+	l := h.f.ActiveLease(testdb.LeaseOptions{})
+	e := h.f.Insert(l.ID, billing.KindPayment, "2026-03-02", -50000, "")
+	path := "/entries/" + strconv.FormatInt(e.ID, 10) + "/memo"
+
+	if resp, body := c.post(path, url.Values{"memo": {"check 1042"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status %d\n%s", resp.StatusCode, body)
+	}
+	got, err := h.f.Q.GetLedgerEntry(context.Background(), e.ID)
+	if err != nil || got.Memo != "check 1042" || got.AmountCents != -50000 {
+		t.Errorf("entry after edit = %+v, %v", got, err)
+	}
+
+	headers := http.Header{"Hx-Request": {"true"}, "X-Csrf-Token": {c.token()}}
+	resp, body := c.do(http.MethodPost, path, url.Values{"memo": {"check 1043"}}, headers)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "check 1043") {
+		t.Errorf("htmx edit: status %d", resp.StatusCode)
+	}
+}
+
 func TestActivatingOverlappingLeaseReportsUnitOccupied(t *testing.T) {
 	h := newHarness(t)
 	c := h.as(auth.RoleManager)

@@ -28,7 +28,19 @@
         <td>{{.ID}}</td><td>{{date .Date}}</td><td>{{kind .Kind}}</td><td>{{.Period}}</td>
         <td>{{.Memo}}
           {{if .ReversesID}}<span class="muted">(reverses #{{.ReversesID}})</span>{{end}}
-          {{if .ReversedBy}}<span class="muted">(reversed by #{{.ReversedBy}})</span>{{end}}</td>
+          {{if .ReversedBy}}<span class="muted">(reversed by #{{.ReversedBy}})</span>{{end}}
+          {{if can $.User "edit"}}
+          <details class="memo-edit"><summary>Edit memo</summary>
+            <form method="post" action="/entries/{{.ID}}/memo" class="inline"
+              hx-post="/entries/{{.ID}}/memo" hx-target="#ledger-panel" hx-swap="outerHTML">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <input type="hidden" name="from" value="{{date $st.From}}">
+              <input type="hidden" name="to" value="{{date $st.To}}">
+              <input name="memo" value="{{.Memo}}" maxlength="200" size="16">
+              <button type="submit">Save</button>
+            </form>
+          </details>
+          {{end}}</td>
         <td class="num">{{cents .Amount}}</td><td class="num">{{cents .Balance}}</td>
         <td>
           {{if .Reversible}}

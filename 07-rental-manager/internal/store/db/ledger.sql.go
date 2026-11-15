@@ -141,6 +141,38 @@ func (q *Queries) GetReversalOf(ctx context.Context, entryID int64) (LedgerEntry
 	return i, err
 }
 
+const updateLedgerEntryMemo = `-- name: UpdateLedgerEntryMemo :one
+UPDATE ledger_entries
+SET memo = $2
+WHERE id = $1
+RETURNING id, lease_id, entry_date, kind, amount_cents, period, reverses_entry_id,
+    idempotency_key, memo, created_by, created_at
+`
+
+type UpdateLedgerEntryMemoParams struct {
+	ID   int64
+	Memo string
+}
+
+func (q *Queries) UpdateLedgerEntryMemo(ctx context.Context, arg UpdateLedgerEntryMemoParams) (LedgerEntry, error) {
+	row := q.db.QueryRow(ctx, updateLedgerEntryMemo, arg.ID, arg.Memo)
+	var i LedgerEntry
+	err := row.Scan(
+		&i.ID,
+		&i.LeaseID,
+		&i.EntryDate,
+		&i.Kind,
+		&i.AmountCents,
+		&i.Period,
+		&i.ReversesEntryID,
+		&i.IdempotencyKey,
+		&i.Memo,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listLeaseEntries = `-- name: ListLeaseEntries :many
 SELECT id, lease_id, entry_date, kind, amount_cents, period, reverses_entry_id,
     idempotency_key, memo, created_by, created_at

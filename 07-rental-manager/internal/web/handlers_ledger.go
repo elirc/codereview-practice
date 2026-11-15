@@ -191,3 +191,34 @@ func (s *Server) reverseEntry(w http.ResponseWriter, r *http.Request) {
 	s.flash(r, msg)
 	http.Redirect(w, r, s.ledgerURL(target.LeaseID), http.StatusSeeOther)
 }
+
+func (s *Server) updateEntryMemo(w http.ResponseWriter, r *http.Request) {
+	id, ok := int64Param(r, "id")
+	if !ok {
+		s.fail(w, r, errNotFound)
+		return
+	}
+	f, err := postForm(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	memo := f.text("memo", false, 200)
+	if err := f.err(); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
+	entry, err := s.ledger.UpdateMemo(r.Context(), id, memo)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	msg := "Memo of entry " + strconv.FormatInt(id, 10) + " saved."
+	if isHTMX(r) {
+		s.renderLedger(w, r, http.StatusOK, entry.LeaseID, &form{values: f.values}, nil, msg)
+		return
+	}
+	s.flash(r, msg)
+	http.Redirect(w, r, s.ledgerURL(entry.LeaseID), http.StatusSeeOther)
+}

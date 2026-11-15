@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/leases", s.listLeases)
 			r.Get("/leases/{id}", s.showLease)
 			r.Get("/leases/{id}/ledger", s.showLedger)
+			r.Post("/entries/{id}/memo", s.updateEntryMemo)
 			r.Get("/reports/rent-roll", s.rentRoll)
 			r.Get("/reports/aging", s.aging)
 			r.Get("/api/leases/{id}/statement", s.apiStatement)
