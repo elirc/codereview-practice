@@ -39,21 +39,16 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
             async () =>
             {
                 var now = clock.GetUtcNow();
-                var subscriptionIds = events.Select(e => e.SubscriptionId).Distinct().ToArray();
-                var subscriptions = (await db.Subscriptions
-                        .FromSql($"SELECT * FROM subscriptions WHERE id = ANY({subscriptionIds}) ORDER BY id FOR SHARE")
-                        .AsNoTracking()
+                var subscriptionIds = events.Select(e => e.SubscriptionId).Distinct().ToList();
+                var targets = (await (
+                        from subscription in db.Subscriptions.AsNoTracking()
+                        join customer in db.Customers.AsNoTracking() on subscription.CustomerId equals customer.Id
+                        where subscriptionIds.Contains(subscription.Id)
+                        select new { Subscription = subscription, customer.Timezone })
                         .ToListAsync(ct))
-                    .ToDictionary(s => s.Id);
+                    .ToDictionary(x => x.Subscription.Id, x => new UsageTarget(x.Subscription, BillingCalendar.FindZone(x.Timezone)));
 
-                var customerIds = subscriptions.Values.Select(s => s.CustomerId).Distinct().ToList();
-                var zones = (await db.Customers.AsNoTracking()
-                        .Where(c => customerIds.Contains(c.Id))
-                        .Select(c => new { c.Id, c.Timezone })
-                        .ToListAsync(ct))
-                    .ToDictionary(c => c.Id, c => BillingCalendar.FindZone(c.Timezone));
-
-                var productIds = subscriptions.Values.Select(s => s.ProductId).Distinct().ToList();
+                var productIds = targets.Values.Select(t => t.Subscription.ProductId).Distinct().ToList();
                 var soldMeters = (await (
                         from item in db.PlanItems
                         join plan in db.Plans on item.PlanId equals plan.Id
@@ -64,23 +59,47 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
                     .Select(x => (x.ProductId, x.MeterCode!))
                     .ToHashSet();
 
-                var results = new List<UsageEventResult>(events.Count);
-                foreach (var input in events)
+                var results = new UsageEventResult[events.Count];
+                var batch = new List<PendingEvent>();
+                var byKey = new Dictionary<string, PendingEvent>(StringComparer.Ordinal);
+                for (var i = 0; i < events.Count; i++)
                 {
+                    var input = events[i];
                     var occurredAt = TruncateToMicroseconds(input.OccurredAt);
-                    var rejection = Check(input, occurredAt, now, subscriptions, zones, soldMeters);
+                    var rejection = Check(input, occurredAt, now, targets, soldMeters);
                     if (rejection is not null)
                     {
-                        results.Add(new UsageEventResult(input.EventKey, input.SubscriptionId, "rejected", rejection));
+                        results[i] = new UsageEventResult(input.EventKey, input.SubscriptionId, "rejected", rejection);
                         continue;
                     }
 
-                    results.Add(await StoreAsync(input, occurredAt, now, ct));
+                    if (byKey.TryGetValue(input.EventKey, out var first))
+                    {
+                        first.Repeats.Add((i, input, occurredAt));
+                        continue;
+                    }
+
+                    var pending = new PendingEvent(i, input, occurredAt);
+                    byKey.Add(input.EventKey, pending);
+                    batch.Add(pending);
+                }
+
+                await StoreAsync(batch, now, ct);
+                foreach (var pending in batch)
+                {
+                    results[pending.Index] = pending.Inserted
+                        ? new UsageEventResult(pending.Input.EventKey, pending.Input.SubscriptionId, "accepted", null)
+                        : Compare(pending.Stored!, pending.Input, pending.OccurredAt);
+                    var stored = pending.Stored ?? new StoredUsage(pending.Input.MeterCode, pending.Input.Quantity, pending.OccurredAt);
+                    foreach (var (index, input, occurredAt) in pending.Repeats)
+                    {
+                        results[index] = Compare(stored, input, occurredAt);
+                    }
                 }
 
                 logger.LogInformation(
                     "Usage batch of {Count} events: {Accepted} accepted, {Duplicates} duplicates, {Rejected} rejected",
-                    results.Count,
+                    results.Length,
                     results.Count(r => r.Status == "accepted"),
                     results.Count(r => r.Status == "duplicate"),
                     results.Count(r => r.Status == "rejected"));
@@ -128,14 +147,15 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
         UsageEventInput input,
         DateTimeOffset occurredAt,
         DateTimeOffset now,
-        IReadOnlyDictionary<Guid, Subscription> subscriptions,
-        IReadOnlyDictionary<Guid, TimeZoneInfo> zones,
+        IReadOnlyDictionary<Guid, UsageTarget> targets,
         HashSet<(Guid ProductId, string MeterCode)> soldMeters)
     {
-        if (!subscriptions.TryGetValue(input.SubscriptionId, out var subscription))
+        if (!targets.TryGetValue(input.SubscriptionId, out var target))
         {
             return Reasons.UnknownSubscription;
         }
+
+        var (subscription, zone) = target;
 
         if (!soldMeters.Contains((subscription.ProductId, input.MeterCode)))
         {
@@ -152,7 +172,6 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
             return Reasons.TooOld;
         }
 
-        var zone = zones[subscription.CustomerId];
         if (occurredAt < BillingCalendar.StartOfDay(subscription.AnchorDate, zone))
         {
             return Reasons.BeforeBillingStart;
@@ -174,24 +193,68 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
         return null;
     }
 
-    private async Task<UsageEventResult> StoreAsync(UsageEventInput input, DateTimeOffset occurredAt, DateTimeOffset now, CancellationToken ct)
+    /// <summary>
+    /// Inserts the events in one statement, marks the ones that were inserted and attaches the stored row to
+    /// the ones whose key was already taken.
+    /// </summary>
+    private async Task StoreAsync(IReadOnlyList<PendingEvent> batch, DateTimeOffset now, CancellationToken ct)
     {
-        var id = Ids.New(clock);
-        var inserted = await db.Database.SqlQuery<Guid>(
-            $"""
-            INSERT INTO usage_events (id, subscription_id, meter_code, event_key, quantity, occurred_at, received_at, billed_period_id, late)
-            VALUES ({id}, {input.SubscriptionId}, {input.MeterCode}, {input.EventKey}, {input.Quantity}, {occurredAt}, {now}, NULL, false)
-            ON CONFLICT (subscription_id, event_key) DO NOTHING
-            RETURNING id AS "Value"
-            """).ToListAsync(ct);
-        if (inserted.Count == 1)
+        if (batch.Count == 0)
         {
-            return new UsageEventResult(input.EventKey, input.SubscriptionId, "accepted", null);
+            return;
         }
 
-        var existing = await db.UsageEvents.AsNoTracking()
-            .SingleAsync(e => e.SubscriptionId == input.SubscriptionId && e.EventKey == input.EventKey, ct);
-        var same = existing.MeterCode == input.MeterCode && existing.Quantity == input.Quantity && existing.OccurredAt == occurredAt;
+        var ids = batch.Select(_ => Ids.New(clock)).ToArray();
+        var subscriptionIds = batch.Select(p => p.Input.SubscriptionId).ToArray();
+        var meterCodes = batch.Select(p => p.Input.MeterCode).ToArray();
+        var eventKeys = batch.Select(p => p.Input.EventKey).ToArray();
+        var quantities = batch.Select(p => p.Input.Quantity).ToArray();
+        var occurredAts = batch.Select(p => p.OccurredAt).ToArray();
+
+        var inserted = (await db.Database.SqlQuery<UsageKey>(
+                $"""
+                INSERT INTO usage_events (id, subscription_id, meter_code, event_key, quantity, occurred_at, received_at, billed_period_id, late)
+                SELECT e.id, e.subscription_id, e.meter_code, e.event_key, e.quantity, e.occurred_at, {now}, NULL::uuid, false
+                FROM unnest({ids}, {subscriptionIds}, {meterCodes}, {eventKeys}, {quantities}, {occurredAts})
+                    AS e (id, subscription_id, meter_code, event_key, quantity, occurred_at)
+                ON CONFLICT (subscription_id, event_key) DO NOTHING
+                RETURNING subscription_id AS "SubscriptionId", event_key AS "EventKey"
+                """).ToListAsync(ct))
+            .Select(k => (k.SubscriptionId, k.EventKey))
+            .ToHashSet();
+
+        var taken = batch.Where(p => !inserted.Contains((p.Input.SubscriptionId, p.Input.EventKey))).ToList();
+        foreach (var pending in batch)
+        {
+            pending.Inserted = inserted.Contains((pending.Input.SubscriptionId, pending.Input.EventKey));
+        }
+
+        if (taken.Count == 0)
+        {
+            return;
+        }
+
+        var takenSubscriptions = taken.Select(p => p.Input.SubscriptionId).ToArray();
+        var takenKeys = taken.Select(p => p.Input.EventKey).ToArray();
+        var existing = (await db.UsageEvents
+                .FromSql(
+                    $"""
+                    SELECT * FROM usage_events
+                    WHERE (subscription_id, event_key) IN (SELECT * FROM unnest({takenSubscriptions}, {takenKeys}))
+                    """)
+                .AsNoTracking()
+                .ToListAsync(ct))
+            .ToDictionary(e => (e.SubscriptionId, e.EventKey));
+        foreach (var pending in taken)
+        {
+            var row = existing[(pending.Input.SubscriptionId, pending.Input.EventKey)];
+            pending.Stored = new StoredUsage(row.MeterCode, row.Quantity, row.OccurredAt);
+        }
+    }
+
+    private static UsageEventResult Compare(StoredUsage stored, UsageEventInput input, DateTimeOffset occurredAt)
+    {
+        var same = stored.MeterCode == input.MeterCode && stored.Quantity == input.Quantity && stored.OccurredAt == occurredAt;
         return same
             ? new UsageEventResult(input.EventKey, input.SubscriptionId, "duplicate", null)
             : new UsageEventResult(input.EventKey, input.SubscriptionId, "rejected", Reasons.KeyConflict);
@@ -199,4 +262,32 @@ public sealed class UsageService(BillingDbContext db, TimeProvider clock, Billin
 
     private static DateTimeOffset TruncateToMicroseconds(DateTimeOffset value) =>
         new(value.UtcTicks - (value.UtcTicks % 10), TimeSpan.Zero);
+
+    private sealed record UsageTarget(Subscription Subscription, TimeZoneInfo Zone);
+
+    private sealed record StoredUsage(string MeterCode, long Quantity, DateTimeOffset OccurredAt);
+
+    /// <summary>An event of the batch that passed the checks, with any later events of the batch that share its key.</summary>
+    private sealed class PendingEvent(int index, UsageEventInput input, DateTimeOffset occurredAt)
+    {
+        public int Index { get; } = index;
+
+        public UsageEventInput Input { get; } = input;
+
+        public DateTimeOffset OccurredAt { get; } = occurredAt;
+
+        public List<(int Index, UsageEventInput Input, DateTimeOffset OccurredAt)> Repeats { get; } = [];
+
+        public bool Inserted { get; set; }
+
+        public StoredUsage? Stored { get; set; }
+    }
+}
+
+/// <summary>The key of a stored usage event.</summary>
+public sealed class UsageKey
+{
+    public Guid SubscriptionId { get; set; }
+
+    public string EventKey { get; set; } = string.Empty;
 }

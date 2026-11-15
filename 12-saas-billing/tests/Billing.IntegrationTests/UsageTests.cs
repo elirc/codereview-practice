@@ -108,6 +108,20 @@ public sealed class UsageTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task FullBatchIsStoredWithOneResultPerEvent()
+    {
+        await CatalogAsync();
+        var sub = await Data.SubscribeAsync(await Data.CustomerAsync(), "metered");
+        var at = Clock.GetUtcNow();
+
+        var results = await SendAsync(Enumerable.Range(0, 500).Select(i => Event($"bulk-{i}", sub, "api_calls", 1, at)).ToArray());
+
+        Assert.Equal(500, results.Count);
+        Assert.All(results, r => Assert.Equal(("accepted", (string?)null), r));
+        Assert.Equal(500, await App.WithDbAsync(db => db.UsageEvents.CountAsync()));
+    }
+
+    [Fact]
     public async Task UsageDuringTheTrialIsRejected()
     {
         await CatalogAsync(trialDays: 14);
