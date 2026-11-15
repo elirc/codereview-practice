@@ -242,6 +242,12 @@ func TestWriteRoutesEnforceRoles(t *testing.T) {
 			want: map[auth.Role]int{auth.RoleViewer: 403, auth.RoleManager: 303, auth.RoleAdmin: 303},
 		},
 		{
+			name: "record payment from the rent roll", method: http.MethodPost,
+			path: fixed("/reports/rent-roll/" + leaseID + "/payments"),
+			form: func(auth.Role) url.Values { return url.Values{"amount": {"10"}} },
+			want: map[auth.Role]int{auth.RoleViewer: 403, auth.RoleManager: 303, auth.RoleAdmin: 303},
+		},
+		{
 			name: "reverse entry", method: http.MethodPost,
 			path: func(r auth.Role) string { return targets[r] },
 			form: func(auth.Role) url.Values { return url.Values{"memo": {"entered twice"}} },
@@ -507,6 +513,46 @@ func TestEditEntryMemo(t *testing.T) {
 	resp, body := c.do(http.MethodPost, path, url.Values{"memo": {"check 1043"}}, headers)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "check 1043") {
 		t.Errorf("htmx edit: status %d", resp.StatusCode)
+	}
+}
+
+func TestRecordPaymentFromRentRoll(t *testing.T) {
+	h := newHarness(t)
+	c := h.as(auth.RoleManager)
+	l := h.f.ActiveLease(testdb.LeaseOptions{})
+	h.f.Insert(l.ID, billing.KindRent, "2026-03-01", 100000, "2026-03")
+	path := "/reports/rent-roll/" + store.FormatUUID(l.ID) + "/payments"
+
+	resp, body := c.do(http.MethodGet, "/reports/rent-roll", nil, nil)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `action="`+path+`"`) {
+		t.Fatalf("rent roll: status %d, payment form missing", resp.StatusCode)
+	}
+
+	if resp, body := c.post(path, url.Values{"amount": {"600"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status %d\n%s", resp.StatusCode, body)
+	}
+	headers := http.Header{"Hx-Request": {"true"}, "X-Csrf-Token": {c.token()}}
+	resp, body = c.do(http.MethodPost, path, url.Values{"amount": {"400"}}, headers)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `id="rent-roll"`) || !strings.Contains(body, "$400.00 recorded") {
+		t.Fatalf("htmx payment: status %d", resp.StatusCode)
+	}
+
+	var payments []int64
+	for _, e := range h.f.Entries(l.ID) {
+		if e.Kind == "payment" {
+			payments = append(payments, e.AmountCents)
+			if store.ToDate(e.EntryDate).String() != today {
+				t.Errorf("payment dated %s, want %s", store.ToDate(e.EntryDate), today)
+			}
+		}
+	}
+	if len(payments) != 2 || payments[0] != -60000 || payments[1] != -40000 {
+		t.Errorf("payments = %v", payments)
+	}
+
+	resp, _ = c.do(http.MethodPost, path, url.Values{"amount": {"0"}}, headers)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("zero amount: status %d, want 422", resp.StatusCode)
 	}
 }
 

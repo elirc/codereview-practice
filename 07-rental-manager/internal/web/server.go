@@ -132,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/leases/{id}/end", s.endLease)
 				r.Post("/leases/{id}/delete", s.deleteLease)
 				r.Post("/leases/{id}/entries", s.createEntry)
+				r.Post("/reports/rent-roll/{id}/payments", s.recordRentRollPayment)
 			})
 
 			r.Group(func(r chi.Router) {
