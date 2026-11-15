@@ -176,6 +176,40 @@ public sealed class ChangeAndCancelTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task ChangePreviewShowsTheProrationWithoutChangingAnything()
+    {
+        await Data.TaxRateAsync("US", null, 825);
+        Clock.Set(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var sub = await Data.SubscribeAsync(await Data.CustomerAsync(), "basic");
+
+        Clock.Set(new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero));
+        var preview = await (await Data.ServiceAsync()).GetAsync($"/v1/subscriptions/{sub}/change-preview?planCode=pro");
+
+        Assert.Equal(200, preview.Status);
+        Assert.Equal("immediate", preview["timing"].GetString());
+        Assert.Equal("2026-01-22", preview["effectiveOn"].GetString());
+        Assert.Equal(new long[] { -968, 1613 }, preview["lines"].EnumerateArray().Select(l => l.GetProperty("amountMinor").GetInt64()).ToArray());
+        Assert.Equal(698, preview["totalMinor"].GetInt64());
+        Assert.Equal("basic", (await Data.SubscriptionAsync(sub)).GetProperty("planCode").GetString());
+        Assert.Single(await Data.InvoicesAsync(sub));
+    }
+
+    [Fact]
+    public async Task ChangePreviewOfADowngradeAppliesAtThePeriodEnd()
+    {
+        Clock.Set(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var sub = await Data.SubscribeAsync(await Data.CustomerAsync(), "basic");
+
+        var preview = await (await Data.ServiceAsync()).GetAsync($"/v1/subscriptions/{sub}/change-preview?planCode=mini");
+
+        Assert.Equal(200, preview.Status);
+        Assert.Equal("next_period", preview["timing"].GetString());
+        Assert.Equal("2026-02-01", preview["effectiveOn"].GetString());
+        Assert.Empty(preview["lines"].EnumerateArray());
+        Assert.Equal(0, preview["totalMinor"].GetInt64());
+    }
+
+    [Fact]
     public async Task PlanOfAnotherProductIsIncompatible()
     {
         var other = await Data.ProductAsync("Other");

@@ -1,6 +1,7 @@
 using Billing.Api.Infrastructure;
 using Billing.Api.Requests;
 using Billing.Api.Validation;
+using Billing.Core.Errors;
 using Billing.Core.Services;
 
 namespace Billing.Api.Endpoints;
@@ -12,6 +13,7 @@ public static class SubscriptionEndpoints
         var read = v1.MapGroup("/subscriptions").RequireRole(Roles.Everyone);
         read.MapGet(string.Empty, List);
         read.MapGet("/{id:guid}", Get);
+        read.MapGet("/{id:guid}/change-preview", PreviewChange);
 
         var write = v1.MapGroup("/subscriptions").RequireRole(Roles.Writers);
         write.MapPost(string.Empty, Create).Validate<CreateSubscriptionRequest>();
@@ -33,6 +35,23 @@ public static class SubscriptionEndpoints
             StatusCodes.Status200OK,
             () => lifecycle.ChangeAsync(id, body.PlanCode, body.Quantity, ct),
             ct);
+
+    private static async Task<IResult> PreviewChange(
+        Guid id,
+        string? planCode,
+        int? quantity,
+        SubscriptionLifecycle lifecycle,
+        CancellationToken ct)
+    {
+        var errors = new ValidationErrors();
+        new ChangeSubscriptionValidator().Validate(new ChangeSubscriptionRequest(planCode, quantity), errors);
+        if (errors.HasErrors)
+        {
+            throw DomainException.Validation(errors.Fields);
+        }
+
+        return Results.Ok(await lifecycle.PreviewChangeAsync(id, planCode, quantity, ct));
+    }
 
     private static Task<IResult> Cancel(
         Guid id,

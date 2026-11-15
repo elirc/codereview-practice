@@ -13,16 +13,53 @@ public enum CancelMode
     Immediate,
 }
 
+public enum ChangeTiming
+{
+    Immediate,
+    NextPeriod,
+}
+
+public sealed record ChangePreviewLine(InvoiceLineKind Kind, string Description, long Quantity, long AmountMinor);
+
+/// <summary>What a plan or quantity change would do: when it applies and the proration lines it would invoice.</summary>
+public sealed record ChangePreview(
+    Guid SubscriptionId,
+    string PlanCode,
+    int Quantity,
+    ChangeTiming Timing,
+    DateOnly? EffectiveOn,
+    IReadOnlyList<ChangePreviewLine> Lines,
+    long SubtotalMinor,
+    long TaxMinor,
+    long TotalMinor);
+
 /// <summary>Plan and quantity changes, cancellation and resumption of subscriptions.</summary>
 public sealed class SubscriptionLifecycle(
     BillingDbContext db,
     TimeProvider clock,
     SubscriptionCycle cycle,
     UsageRating usage,
+    InvoiceFinalizer finalizer,
     EventRecorder events,
     ViewLoader views,
     ILogger<SubscriptionLifecycle> logger)
 {
+    private enum ChangeKind
+    {
+        Trial,
+        Increase,
+        Decrease,
+        Equal,
+    }
+
+    private sealed record PlannedChange(
+        Plan CurrentPlan,
+        Plan NewPlan,
+        int NewQuantity,
+        DateOnly Today,
+        ChangeKind Kind,
+        IReadOnlyList<ProrationLine> Lines);
+
     /// <summary>
     /// Changes the plan and/or quantity: at once while trialing or when the recurring amount does not drop (with a
     /// proration invoice when it rises), otherwise as a pending change for the next boundary.
@@ -32,64 +69,69 @@ public sealed class SubscriptionLifecycle(
             async () =>
             {
                 var subscription = await db.LockSubscriptionAsync(subscriptionId, ct) ?? throw DomainException.NotFound("Subscription");
-                if (subscription.Status == SubscriptionStatus.Canceled || subscription.CancelAtPeriodEnd)
+                var change = await PlanChangeAsync(subscription, planCode, quantity, ct);
+                var previous = new SubscriptionSnapshot(change.CurrentPlan.Code, subscription.Quantity, subscription.Status);
+
+                switch (change.Kind)
                 {
-                    throw DomainException.InvalidState("A canceled or cancelling subscription cannot be changed.");
-                }
+                    case ChangeKind.Increase:
+                        await UpgradeAsync(subscription, change, ct);
+                        break;
 
-                var customer = await db.Customers.AsNoTracking().SingleAsync(c => c.Id == subscription.CustomerId, ct);
-                var zone = BillingCalendar.FindZone(customer.Timezone);
-                var today = BillingCalendar.Today(clock.GetUtcNow(), zone);
+                    case ChangeKind.Decrease:
+                        subscription.PendingPlanId = change.NewPlan.Id;
+                        subscription.PendingQuantity = change.NewQuantity;
+                        logger.LogInformation(
+                            "Subscription {SubscriptionId} scheduled a change to {PlanCode} x{Quantity} at the next boundary",
+                            subscription.Id,
+                            change.NewPlan.Code,
+                            change.NewQuantity);
+                        break;
 
-                var currentPlan = await LoadPlanAsync(subscription.PlanId, ct);
-                var newPlan = planCode is null || planCode == currentPlan.Code
-                    ? currentPlan
-                    : await db.PlanWithItemsAsync(planCode, ct) ?? throw DomainException.NotFound("Plan");
-                EnsureCompatible(currentPlan, newPlan);
-
-                var newQuantity = quantity ?? subscription.Quantity;
-                var previous = new SubscriptionSnapshot(currentPlan.Code, subscription.Quantity, subscription.Status);
-
-                if (subscription.Status == SubscriptionStatus.Trialing)
-                {
-                    ApplyNow(subscription, newPlan, newQuantity);
-                    await events.SubscriptionUpdatedAsync(subscription, previous, ct);
-                    return await views.SubscriptionAsync(subscription, ct);
-                }
-
-                if (today >= subscription.CurrentPeriodEnd)
-                {
-                    throw DomainException.Conflict(ErrorCodes.RenewalInProgress, "The current period has ended and is being renewed.");
-                }
-
-                var currentCharges = currentPlan.AdvanceCharges(subscription.Quantity);
-                var newCharges = newPlan.AdvanceCharges(newQuantity);
-                var currentRecurring = Proration.Recurring(currentCharges);
-                var newRecurring = Proration.Recurring(newCharges);
-
-                if (newRecurring > currentRecurring)
-                {
-                    await UpgradeAsync(subscription, customer, zone, today, newPlan, newQuantity, currentCharges, newCharges, ct);
-                }
-                else if (newRecurring < currentRecurring)
-                {
-                    subscription.PendingPlanId = newPlan.Id;
-                    subscription.PendingQuantity = newQuantity;
-                    logger.LogInformation(
-                        "Subscription {SubscriptionId} scheduled a change to {PlanCode} x{Quantity} at the next boundary",
-                        subscription.Id,
-                        newPlan.Code,
-                        newQuantity);
-                }
-                else
-                {
-                    ApplyNow(subscription, newPlan, newQuantity);
+                    default:
+                        ApplyNow(subscription, change.NewPlan, change.NewQuantity);
+                        break;
                 }
 
                 await events.SubscriptionUpdatedAsync(subscription, previous, ct);
                 return await views.SubscriptionAsync(subscription, ct);
             },
             ct);
+
+    /// <summary>
+    /// Returns what <see cref="ChangeAsync"/> would do with the same plan and quantity: when the change applies and,
+    /// for an increase, the proration lines and totals of its invoice. Nothing is stored.
+    /// </summary>
+    public async Task<ChangePreview> PreviewChangeAsync(Guid subscriptionId, string? planCode, int? quantity, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.AsNoTracking().SingleOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw DomainException.NotFound("Subscription");
+        var change = await PlanChangeAsync(subscription, planCode, quantity, ct);
+
+        var lines = change.Lines
+            .Select(l => new ChangePreviewLine(LineKind(l), l.Description, l.Quantity, l.AmountMinor))
+            .ToList();
+        var subtotal = Proration.Total(change.Lines);
+        var tax = 0L;
+        if (lines.Count > 0)
+        {
+            var customer = await db.Customers.AsNoTracking().SingleAsync(c => c.Id == subscription.CustomerId, ct);
+            tax = TaxMath.LineTax(subtotal, await finalizer.TaxRateAsync(customer, change.Today, ct));
+        }
+
+        var timing = change.Kind == ChangeKind.Decrease ? ChangeTiming.NextPeriod : ChangeTiming.Immediate;
+        var effectiveOn = timing == ChangeTiming.NextPeriod ? subscription.CurrentPeriodEnd : change.Today;
+        return new ChangePreview(
+            subscription.Id,
+            change.NewPlan.Code,
+            change.NewQuantity,
+            timing,
+            effectiveOn,
+            lines,
+            subtotal,
+            tax,
+            subtotal + tax);
+    }
 
     /// <summary>Cancels the subscription at the end of its period or at once.</summary>
     public Task<SubscriptionView> CancelAsync(Guid subscriptionId, CancelMode mode, CancellationToken ct) =>
@@ -177,40 +219,69 @@ public sealed class SubscriptionLifecycle(
             ct);
     }
 
-    private async Task UpgradeAsync(
-        Subscription subscription,
-        Customer customer,
-        TimeZoneInfo zone,
-        DateOnly today,
-        Plan newPlan,
-        int newQuantity,
-        IReadOnlyList<AdvanceCharge> currentCharges,
-        IReadOnlyList<AdvanceCharge> newCharges,
-        CancellationToken ct)
+    /// <summary>Checks that the subscription may change to the plan and quantity and works out how the change applies.</summary>
+    private async Task<PlannedChange> PlanChangeAsync(Subscription subscription, string? planCode, int? quantity, CancellationToken ct)
     {
+        if (subscription.Status == SubscriptionStatus.Canceled || subscription.CancelAtPeriodEnd)
+        {
+            throw DomainException.InvalidState("A canceled or cancelling subscription cannot be changed.");
+        }
+
+        var currentPlan = await LoadPlanAsync(subscription.PlanId, ct);
+        var newPlan = planCode is null || planCode == currentPlan.Code
+            ? currentPlan
+            : await db.PlanWithItemsAsync(planCode, ct) ?? throw DomainException.NotFound("Plan");
+        EnsureCompatible(currentPlan, newPlan);
+
+        var newQuantity = quantity ?? subscription.Quantity;
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        if (subscription.Status == SubscriptionStatus.Trialing)
+        {
+            return new PlannedChange(currentPlan, newPlan, newQuantity, today, ChangeKind.Trial, []);
+        }
+
+        if (today >= subscription.CurrentPeriodEnd)
+        {
+            throw DomainException.Conflict(ErrorCodes.RenewalInProgress, "The current period has ended and is being renewed.");
+        }
+
+        var currentCharges = currentPlan.AdvanceCharges(subscription.Quantity);
+        var newCharges = newPlan.AdvanceCharges(newQuantity);
+        var currentRecurring = Proration.Recurring(currentCharges);
+        var newRecurring = Proration.Recurring(newCharges);
+        if (newRecurring < currentRecurring)
+        {
+            return new PlannedChange(currentPlan, newPlan, newQuantity, today, ChangeKind.Decrease, []);
+        }
+
+        if (newRecurring == currentRecurring)
+        {
+            return new PlannedChange(currentPlan, newPlan, newQuantity, today, ChangeKind.Equal, []);
+        }
+
         var periodEnd = subscription.CurrentPeriodEnd!.Value;
-        var periodStart = subscription.CurrentPeriodStart!.Value;
         var remainingDays = BillingCalendar.DaysBetween(today, periodEnd);
-        var periodDays = BillingCalendar.DaysBetween(periodStart, periodEnd);
+        var periodDays = BillingCalendar.DaysBetween(subscription.CurrentPeriodStart!.Value, periodEnd);
+        var lines = Proration.Lines(currentCharges, newCharges, remainingDays, periodDays);
+        return new PlannedChange(currentPlan, newPlan, newQuantity, today, ChangeKind.Increase, lines);
+    }
+
+    private async Task UpgradeAsync(Subscription subscription, PlannedChange change, CancellationToken ct)
+    {
+        var customer = await db.Customers.AsNoTracking().SingleAsync(c => c.Id == subscription.CustomerId, ct);
+        var zone = BillingCalendar.FindZone(customer.Timezone);
+        var periodEnd = subscription.CurrentPeriodEnd!.Value;
         var period = await db.SubscriptionPeriods
             .SingleAsync(p => p.SubscriptionId == subscription.Id && p.Index == subscription.PeriodIndex, ct);
 
-        var invoice = cycle.NewInvoice(subscription, customer.Currency, InvoiceKind.Proration, today, periodEnd);
-        foreach (var line in Proration.Lines(currentCharges, newCharges, remainingDays, periodDays))
+        var invoice = cycle.NewInvoice(subscription, customer.Currency, InvoiceKind.Proration, change.Today, periodEnd);
+        foreach (var line in change.Lines)
         {
-            invoice.AddLine(
-                clock,
-                line.IsCredit ? InvoiceLineKind.ProrationCredit : InvoiceLineKind.ProrationCharge,
-                line.IsCredit ? $"Unused time on {line.Name}" : $"Remaining time on {line.Name}",
-                line.Quantity,
-                line.AmountMinor,
-                line.PlanItemId,
-                today,
-                periodEnd);
+            invoice.AddLine(clock, LineKind(line), line.Description, line.Quantity, line.AmountMinor, line.PlanItemId, change.Today, periodEnd);
         }
 
         var periodPlan = await LoadPlanAsync(period.PlanId, ct);
-        var keptMeters = newPlan.UsageItems().Select(i => i.MeterCode!).ToHashSet();
+        var keptMeters = change.NewPlan.UsageItems().Select(i => i.MeterCode!).ToHashSet();
         var droppedMeters = periodPlan.UsageItems().Select(i => i.MeterCode!).Where(m => !keptMeters.Contains(m)).ToList();
         if (droppedMeters.Count > 0)
         {
@@ -218,16 +289,19 @@ public sealed class SubscriptionLifecycle(
             usage.AddUsageLines(invoice, await usage.RateAsync(sealedUsage, periodPlan, ct), period);
         }
 
-        ApplyNow(subscription, newPlan, newQuantity);
-        period.PlanId = newPlan.Id;
+        ApplyNow(subscription, change.NewPlan, change.NewQuantity);
+        period.PlanId = change.NewPlan.Id;
         await cycle.SaveAndFinalizeAsync(invoice, ct);
         logger.LogInformation(
             "Subscription {SubscriptionId} upgraded to {PlanCode} x{Quantity} with proration invoice {InvoiceId}",
             subscription.Id,
-            newPlan.Code,
-            newQuantity,
+            change.NewPlan.Code,
+            change.NewQuantity,
             invoice.Id);
     }
+
+    private static InvoiceLineKind LineKind(ProrationLine line) =>
+        line.IsCredit ? InvoiceLineKind.ProrationCredit : InvoiceLineKind.ProrationCharge;
 
     private static void ApplyNow(Subscription subscription, Plan plan, int quantity)
     {

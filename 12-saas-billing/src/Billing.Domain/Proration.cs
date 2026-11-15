@@ -9,7 +9,10 @@ public sealed record AdvanceCharge(Guid PlanItemId, PlanItemKind Kind, string Na
 }
 
 /// <summary>One line of a proration invoice; credits carry a negative amount.</summary>
-public sealed record ProrationLine(Guid PlanItemId, bool IsCredit, string Name, long Quantity, long AmountMinor);
+public sealed record ProrationLine(Guid PlanItemId, bool IsCredit, string Name, long Quantity, long AmountMinor)
+{
+    public string Description => IsCredit ? $"Unused time on {Name}" : $"Remaining time on {Name}";
+}
 
 /// <summary>Mid-period plan and quantity change arithmetic.</summary>
 public static class Proration
@@ -35,21 +38,17 @@ public static class Proration
         IReadOnlyList<AdvanceCharge> current,
         IReadOnlyList<AdvanceCharge> next,
         int remainingDays,
-        int periodDays)
+        int periodDays) =>
+        current.Select(charge => Line(charge, isCredit: true, remainingDays, periodDays))
+            .Concat(next.Select(charge => Line(charge, isCredit: false, remainingDays, periodDays)))
+            .ToList();
+
+    /// <summary>Returns the sum of the line amounts, credits included.</summary>
+    public static long Total(IEnumerable<ProrationLine> lines) => lines.Sum(l => l.AmountMinor);
+
+    private static ProrationLine Line(AdvanceCharge charge, bool isCredit, int remainingDays, int periodDays)
     {
-        var lines = new List<ProrationLine>(current.Count + next.Count);
-        foreach (var charge in current)
-        {
-            var amount = Prorate(charge.AmountMinor, remainingDays, periodDays);
-            lines.Add(new ProrationLine(charge.PlanItemId, true, charge.Name, charge.BilledQuantity, -amount));
-        }
-
-        foreach (var charge in next)
-        {
-            var amount = Prorate(charge.AmountMinor, remainingDays, periodDays);
-            lines.Add(new ProrationLine(charge.PlanItemId, false, charge.Name, charge.BilledQuantity, amount));
-        }
-
-        return lines;
+        var amount = isCredit ? -charge.AmountMinor : charge.AmountMinor;
+        return new ProrationLine(charge.PlanItemId, isCredit, charge.Name, charge.BilledQuantity, Prorate(amount, remainingDays, periodDays));
     }
 }

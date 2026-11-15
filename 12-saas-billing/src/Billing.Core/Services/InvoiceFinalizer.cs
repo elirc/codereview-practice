@@ -108,7 +108,8 @@ public sealed class InvoiceFinalizer(
         }
     }
 
-    private async Task<int> TaxRateAsync(Customer customer, DateOnly issueDate, CancellationToken ct)
+    /// <summary>Returns the tax rate in basis points that applies to the customer on the issue date.</summary>
+    public async Task<int> TaxRateAsync(Customer customer, DateOnly issueDate, CancellationToken ct)
     {
         if (customer.TaxExempt)
         {
