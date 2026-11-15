@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { changeSlug } from "@/actions/posts";
+import { GET as exitPreview } from "@/app/api/preview/exit/route";
 import { GET } from "@/app/api/preview/route";
-import { loadPreview } from "@/services/preview";
-import { createTestUser, signInAs, signOut } from "./support/fixtures";
+import { loadLatestBySlug, loadPreview } from "@/services/preview";
+import { createTestUser, expectOk, signInAs, signOut } from "./support/fixtures";
 import { requestContext } from "./support/request-context";
-import { addRevision, makePost } from "./support/records";
+import { addRevision, getPost, makePost } from "./support/records";
+import { toState } from "./support/states";
 
 function previewRequest(postId: string, revisionId: string): Request {
   return new Request(`http://localhost/api/preview?postId=${postId}&revisionId=${revisionId}`);
@@ -92,5 +95,40 @@ describe("preview page loader", () => {
     await expect(loadPreview(otherAuthor, post.id, revision.id)).rejects.toMatchObject({
       code: "not_found",
     });
+  });
+});
+
+describe("latest revision on the site", () => {
+  it("shows pending edits of a published post", async () => {
+    const { owner, editor, post } = await scene();
+    await toState.published(editor, post.id);
+    await addRevision(owner, post.id, { title: "Pending title", body: "Pending **edit**" });
+
+    const result = await loadLatestBySlug("draft-preview");
+
+    expect(result).toMatchObject({ kind: "post", title: "Pending title", slug: "draft-preview" });
+    expect(result?.kind === "post" && result.html).toContain("<strong>edit</strong>");
+  });
+
+  it("redirects an old slug to the current one", async () => {
+    const { editor, post } = await scene();
+    await toState.published(editor, post.id);
+    await signInAs(editor);
+    const { version } = await getPost(post.id);
+    expectOk(await changeSlug({ postId: post.id, expectedVersion: version, slug: "renamed" }));
+
+    expect(await loadLatestBySlug("draft-preview")).toEqual({ kind: "redirect", slug: "renamed" });
+  });
+
+  it("turns draft mode off when leaving the preview", async () => {
+    requestContext.draftMode.enable();
+
+    const response = await exitPreview(
+      new Request("http://localhost/api/preview/exit?slug=draft-preview"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("/posts/draft-preview");
+    expect(requestContext.draftMode.isEnabled).toBe(false);
   });
 });

@@ -15,9 +15,12 @@ export type PublishedPost = {
   excerpt: string;
   coverMediaId: string | null;
   html: string;
-  publishedAt: string;
-  firstPublishedAt: string;
+  publishedAt: string | null;
+  firstPublishedAt: string | null;
 };
+
+/** Which revision of a post to show: the published one, or the latest one for previews. */
+export type ContentSource = "published" | "latest";
 
 export type PublicPostResult = PublishedPost | { kind: "redirect"; slug: string } | null;
 
@@ -53,10 +56,16 @@ export async function resolveSlug(slug: string): Promise<string | null> {
 }
 
 /**
- * The published revision of a post as requested under `slug`. Returns a redirect when `slug`
- * is one of the post's old slugs, and null when the post is not public or the slug is not its own.
+ * The published (or latest) revision of a post as requested under `slug`. Returns a redirect
+ * when `slug` is one of the post's old slugs, and null when there is nothing to show or the slug
+ * is not the post's own.
  */
-export async function loadPublishedPost(postId: string, slug: string): Promise<PublicPostResult> {
+export async function loadPostContent(
+  postId: string,
+  slug: string,
+  source: ContentSource = "published",
+): Promise<PublicPostResult> {
+  const revisionId = source === "latest" ? posts.latestRevisionId : posts.publishedRevisionId;
   const [row] = await db
     .select({
       id: posts.id,
@@ -69,10 +78,10 @@ export async function loadPublishedPost(postId: string, slug: string): Promise<P
       coverMediaId: revisions.coverMediaId,
     })
     .from(posts)
-    .innerJoin(revisions, eq(revisions.id, posts.publishedRevisionId))
+    .innerJoin(revisions, eq(revisions.id, revisionId))
     .where(eq(posts.id, postId))
     .limit(1);
-  if (!row || !row.publishedAt) return null;
+  if (!row || (source === "published" && !row.publishedAt)) return null;
 
   if (row.slug !== slug) {
     const [redirect] = await db
@@ -91,8 +100,8 @@ export async function loadPublishedPost(postId: string, slug: string): Promise<P
     excerpt: row.excerpt,
     coverMediaId: row.coverMediaId,
     html: renderMarkdown(row.body),
-    publishedAt: row.publishedAt.toISOString(),
-    firstPublishedAt: (row.firstPublishedAt ?? row.publishedAt).toISOString(),
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+    firstPublishedAt: (row.firstPublishedAt ?? row.publishedAt)?.toISOString() ?? null,
   };
 }
 

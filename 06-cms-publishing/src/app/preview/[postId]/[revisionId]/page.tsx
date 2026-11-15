@@ -33,6 +33,8 @@ export default async function PreviewPage({
       <div className="banner">
         Preview of revision {revision.number} ({post.status}).{" "}
         <Link href={`/admin/posts/${post.id}`}>Back to editor</Link>
+        {" · "}
+        <Link href={`/posts/${post.slug}`}>Latest revision on the site</Link>
       </div>
       <main>
         <PostArticle

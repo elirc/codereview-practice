@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import {
   listPublishedPage,
-  loadPublishedPost,
+  loadPostContent,
   resolveSlug,
   type PublicPostResult,
   type PublishedPostPage,
@@ -15,7 +15,7 @@ export async function getPublishedPostBySlug(slug: string): Promise<PublicPostRe
   })();
   if (!postId) return null;
 
-  return unstable_cache(() => loadPublishedPost(postId, slug), ["public-post", postId, slug], {
+  return unstable_cache(() => loadPostContent(postId, slug), ["public-post", postId, slug], {
     tags: [postTag(postId), postSlugTag(slug)],
   })();
 }
