@@ -7,6 +7,7 @@ import type { AppointmentView } from "@/services/access";
 import { listAppointments } from "@/services/appointments";
 import { getProfile } from "@/services/auth";
 import { CancelButton } from "./CancelButton";
+import { ReasonButton } from "./ReasonButton";
 
 const STATUS_LABELS = {
   BOOKED: "Booked",
@@ -58,6 +59,7 @@ export default async function AppointmentsPage() {
               <th>When</th>
               <th>Provider</th>
               <th>Clinic</th>
+              <th>Reason</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -67,8 +69,10 @@ export default async function AppointmentsPage() {
                 <td>{when(a)}</td>
                 <td>{a.provider.displayName}</td>
                 <td>{a.provider.clinic.name}</td>
+                <td>{a.reason ?? <span className="muted">None given</span>}</td>
                 <td>
                   <Link href={rescheduleHref(a)}>Reschedule</Link>{" "}
+                  <ReasonButton appointmentId={a.id} current={a.reason} />{" "}
                   <CancelButton appointmentId={a.id} />
                 </td>
               </tr>

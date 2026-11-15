@@ -3,6 +3,7 @@ import { POST as cancel } from "@/app/api/appointments/[id]/cancel/route";
 import { POST as complete } from "@/app/api/appointments/[id]/complete/route";
 import { POST as noShow } from "@/app/api/appointments/[id]/no-show/route";
 import { POST as reschedule } from "@/app/api/appointments/[id]/reschedule/route";
+import { PATCH as updateAppointment } from "@/app/api/appointments/[id]/route";
 import { POST as createAppointment } from "@/app/api/appointments/route";
 import { db } from "@/server/db";
 import {
@@ -242,5 +243,40 @@ describe("completion and no-shows", () => {
 
     const byPatient = await act(cancel, "cancel", patient, second);
     expect(byPatient.status).toBe(409);
+  });
+});
+
+describe("visit reason", () => {
+  function setReason(user: TestUser, id: string, reason: string | null) {
+    return call(updateAppointment, {
+      method: "PATCH",
+      path: `/api/appointments/${id}`,
+      params: { id },
+      token: user.token,
+      body: { reason },
+    });
+  }
+
+  it("lets the patient change or clear the reason before the visit", async () => {
+    const { provider, patient } = await scenario();
+    const id = await book(patient, provider.providerId, "2026-07-06T13:00:00Z");
+
+    const changed = await setReason(patient, id, "  Follow-up on blood test  ");
+    expect(changed.status).toBe(200);
+    expect(changed.body.appointment.reason).toBe("Follow-up on blood test");
+
+    const cleared = await setReason(patient, id, "");
+    expect(cleared.body.appointment.reason).toBeNull();
+  });
+
+  it("refuses once the appointment has started or is no longer booked", async () => {
+    const { provider, patient } = await scenario();
+    const started = await book(patient, provider.providerId, "2026-07-06T13:00:00Z");
+    const cancelled = await book(patient, provider.providerId, "2026-07-08T13:00:00Z");
+    await act(cancel, "cancel", patient, cancelled);
+
+    freezeTime("2026-07-06T13:00:00Z");
+    expect((await setReason(patient, started, "Running late")).status).toBe(409);
+    expect((await setReason(patient, cancelled, "Never mind")).status).toBe(409);
   });
 });

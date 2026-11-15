@@ -78,6 +78,8 @@ export const bookingBody = z
 
 export const cancelBody = z.object({ reason: reason.optional() }).strict();
 
+export const updateAppointmentBody = z.object({ reason: reason.nullable() }).strict();
+
 export const rescheduleBody = z.object({ providerId: uuid.optional(), startsAt: instant }).strict();
 
 export const closeDayBody = z

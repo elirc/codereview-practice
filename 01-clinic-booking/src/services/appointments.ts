@@ -83,6 +83,28 @@ export async function cancelAppointment(
   return getAppointmentView(id);
 }
 
+/** Replaces the visit reason on an upcoming booked appointment. */
+export async function updateAppointmentReason(
+  actor: Actor,
+  id: string,
+  reason: string | null,
+  now: DateTime,
+): Promise<AppointmentView> {
+  cancellerRole(actor);
+  const appointment = await db.appointment.findUnique({ where: { id } });
+  if (!appointment) throw notFound("Appointment");
+  if (appointment.status !== "BOOKED" || appointment.startsAt.getTime() <= now.toMillis()) {
+    throw invalidState();
+  }
+
+  const { count } = await db.appointment.updateMany({
+    where: { id, status: "BOOKED" },
+    data: { reason },
+  });
+  if (count === 0) throw invalidState();
+  return getAppointmentView(id);
+}
+
 export interface RescheduleRequest {
   providerId?: string;
   startsAt: DateTime;
