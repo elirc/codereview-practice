@@ -4,13 +4,16 @@ import { addDays, isLocalDate, localDateOf, localDayRange } from "@/domain/time"
 import type { Actor } from "@/server/auth/actor";
 import { requirePageActor } from "@/server/auth/page";
 import { clock } from "@/server/clock";
+import { isoInstant } from "@/server/dates";
 import { AppError } from "@/server/errors";
 import { uuid } from "@/server/validation";
 import type { AppointmentView } from "@/services/access";
 import { listAppointments } from "@/services/appointments";
 import { getClinic, listClinicProviders, listClinics } from "@/services/clinics";
+import { getClinicOpenSlots, type ClinicOpenSlots } from "@/services/slots";
 import { ActionButton } from "../../_components/ActionButton";
 import { longDate, timeIn } from "../../_lib/format";
+import { BookForPatient } from "./BookForPatient";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -79,6 +82,9 @@ export default async function DayViewPage({ searchParams }: { searchParams: Sear
   );
   const appointments = await listAppointments(actor, { scope: "clinic", date, clinicId });
   const canCancel = actor.role === "STAFF" || actor.role === "ADMIN";
+  const openSlots: ClinicOpenSlots = canCancel
+    ? await getClinicOpenSlots(actor, clinic.id, date, clock.now())
+    : { timezone: zone, providers: [] };
   const link = (day: string) =>
     `/staff/day?${new URLSearchParams({ clinicId: clinic.id, date: day }).toString()}`;
 
@@ -115,6 +121,7 @@ export default async function DayViewPage({ searchParams }: { searchParams: Sear
       <div className="day-columns">
         {providers.map((provider) => {
           const own = appointments.filter((a) => a.providerId === provider.id);
+          const open = openSlots.providers.find((p) => p.providerId === provider.id)?.slots ?? [];
           return (
             <section key={provider.id}>
               <h2>{provider.displayName}</h2>
@@ -136,6 +143,24 @@ export default async function DayViewPage({ searchParams }: { searchParams: Sear
               {own.map((a) => (
                 <AppointmentCard key={a.id} appointment={a} zone={zone} canCancel={canCancel} />
               ))}
+              {open.length > 0 && (
+                <>
+                  <h3>Open times</h3>
+                  <div className="slots">
+                    {open.map((slot) => {
+                      const startsAt = isoInstant(slot.startsAt);
+                      return (
+                        <BookForPatient
+                          key={startsAt}
+                          providerId={provider.id}
+                          startsAt={startsAt}
+                          label={timeIn(startsAt, zone)}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </section>
           );
         })}

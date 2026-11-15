@@ -7,7 +7,7 @@ export interface ApiError {
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
 export interface ApiRequestInit {
-  method?: "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
 }

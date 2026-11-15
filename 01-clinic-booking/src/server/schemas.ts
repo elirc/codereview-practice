@@ -84,6 +84,10 @@ export const closeDayBody = z
   .object({ providerId: uuid, localDate, reason: reason.optional() })
   .strict();
 
+export const openSlotsQuery = z.object({ date: localDate });
+
+export const patientLookupQuery = z.object({ email });
+
 export const appointmentListQuery = z.object({
   scope: z.enum(["mine", "clinic"]).default("mine"),
   date: localDate.optional(),

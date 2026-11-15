@@ -2,6 +2,7 @@ import type {
   AvailabilityException,
   AvailabilityRule,
   Clinic,
+  Patient,
   Provider,
   User,
 } from "@prisma/client";
@@ -36,6 +37,10 @@ export function serializeProviderAccount(
     email: provider.user.email,
     clinicName: provider.clinic.name,
   };
+}
+
+export function serializePatient(patient: Patient) {
+  return { id: patient.id, fullName: patient.fullName, timezone: patient.timezone };
 }
 
 export function serializeStaff(user: User) {
