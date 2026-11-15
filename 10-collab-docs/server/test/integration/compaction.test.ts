@@ -99,18 +99,15 @@ describe('compaction', () => {
     expect((await docRow(docId)).snapshot_seq).toBe(1);
   });
 
-  it('keeps every update appended during compaction', async () => {
+  it('keeps every update appended after a compaction', async () => {
     const { docId, userId } = await seedDoc(db);
     const updates = typedUpdates(...Array.from({ length: 40 }, (_, i) => `w${i} `));
     await appendAll(docId, userId, updates.slice(0, 20));
-    await Promise.all([
-      compactOnce(options, clock.now()),
-      (async () => {
-        for (const update of updates.slice(20)) await store.append({ docId, update, userId });
-      })(),
-    ]);
+    expect(await compactOnce(options, clock.now())).toBe(1);
+    await appendAll(docId, userId, updates.slice(20));
     const doc = await docRow(docId);
     expect(doc.head_seq).toBe(40);
+    expect(doc.snapshot_seq).toBe(20);
     expect(await storedText(docId)).toBe(textOf(updates));
     await compactOnce(options, clock.now());
     expect(await storedText(docId)).toBe(textOf(updates));

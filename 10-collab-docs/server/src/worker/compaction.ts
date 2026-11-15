@@ -1,8 +1,8 @@
 import { sql } from 'kysely';
 import * as Y from 'yjs';
 import { docFromLog } from '../collab/docState.js';
-import { readDocLog } from '../collab/docStore.js';
-import { toBytea, type Db } from '../db/db.js';
+import { loadAtHeadIn } from '../collab/docStore.js';
+import { readSnapshot, toBytea, type Db } from '../db/db.js';
 import type { Logger } from '../lib/logger.js';
 
 export interface CompactionOptions {
@@ -20,79 +20,95 @@ export function needsCompaction(
   return doc.head_seq - doc.snapshot_seq >= options.minUpdates || doc.log_bytes >= options.minBytes;
 }
 
+/** Lists the untrashed documents over the compaction thresholds. */
+async function candidates(options: CompactionOptions): Promise<string[]> {
+  const rows = await options.db
+    .selectFrom('docs')
+    .select('id')
+    .where('trashed_at', 'is', null)
+    .where(
+      sql<boolean>`(head_seq - snapshot_seq >= ${options.minUpdates} or log_bytes >= ${options.minBytes})`,
+    )
+    .orderBy('id')
+    .execute();
+  return rows.map((row) => row.id);
+}
+
+/** Builds a document's full state at its head from one consistent read, or null if it is gone. */
+async function mergedState(
+  db: Db,
+  docId: string,
+): Promise<{ head: number; state: Uint8Array; updates: number } | null> {
+  const loaded = await readSnapshot(db, (trx) => loadAtHeadIn(trx, docId));
+  if (!loaded) return null;
+  const merged = docFromLog(loaded.log, loaded.headSeq);
+  try {
+    return {
+      head: loaded.headSeq,
+      state: Y.encodeStateAsUpdate(merged),
+      updates: loaded.log.updates.length,
+    };
+  } finally {
+    merged.destroy();
+  }
+}
+
 /**
- * Compacts one candidate document in its own transaction and reports whether
- * it was compacted, or returns null when no unlocked candidate outside `skip` remains.
+ * Compacts one document: builds the merged state first, then stores it as
+ * the document's snapshot in a short transaction. Returns false when the
+ * document is locked, trashed, below the thresholds or already compacted.
  */
-async function compactNext(
-  options: CompactionOptions,
-  skip: string[],
-  now: Date,
-): Promise<{ docId: string; compacted: boolean } | null> {
+async function compactDoc(options: CompactionOptions, docId: string, now: Date): Promise<boolean> {
+  const built = await mergedState(options.db, docId);
+  if (!built) return false;
+  const { head, state } = built;
+
   return options.db.transaction().execute(async (trx) => {
-    let query = trx
+    const doc = await trx
       .selectFrom('docs')
-      .select(['id', 'head_seq', 'snapshot_seq', 'log_bytes'])
-      .where('trashed_at', 'is', null)
-      .where(
-        sql<boolean>`(head_seq - snapshot_seq >= ${options.minUpdates} or log_bytes >= ${options.minBytes})`,
-      );
-    if (skip.length > 0) query = query.where('id', 'not in', skip);
-    const doc = await query.orderBy('id').limit(1).forUpdate().skipLocked().executeTakeFirst();
-    if (!doc) return null;
-    skip.push(doc.id);
-    if (!needsCompaction(doc, options)) return { docId: doc.id, compacted: false };
+      .select(['head_seq', 'snapshot_seq', 'log_bytes', 'trashed_at'])
+      .where('id', '=', docId)
+      .forUpdate()
+      .skipLocked()
+      .executeTakeFirst();
+    if (!doc || doc.trashed_at !== null || doc.snapshot_seq >= head) return false;
+    if (!needsCompaction(doc, options)) return false;
 
-    const head = doc.head_seq;
-    const log = await readDocLog(trx, doc.id);
-    const merged = docFromLog(log, head);
-    try {
-      const state = Y.encodeStateAsUpdate(merged);
-
-      await trx
-        .insertInto('doc_snapshots')
-        .values({ doc_id: doc.id, upto_seq: head, state: toBytea(state), created_at: now })
-        .execute();
-      await trx
-        .deleteFrom('doc_updates')
-        .where('doc_id', '=', doc.id)
-        .where('seq', '<=', head)
-        .execute();
-      await trx
-        .deleteFrom('doc_snapshots')
-        .where('doc_id', '=', doc.id)
-        .where('upto_seq', '<', head)
-        .execute();
-      await trx
-        .updateTable('docs')
-        .set({ snapshot_seq: head, snapshot_bytes: state.byteLength, log_bytes: 0 })
-        .where('id', '=', doc.id)
-        .execute();
-      options.logger.info(
-        { docId: doc.id, uptoSeq: head, updates: log.updates.length, bytes: state.byteLength },
-        'document compacted',
-      );
-    } finally {
-      merged.destroy();
-    }
-    return { docId: doc.id, compacted: true };
+    await trx
+      .insertInto('doc_snapshots')
+      .values({ doc_id: docId, upto_seq: head, state: toBytea(state), created_at: now })
+      .execute();
+    await trx
+      .deleteFrom('doc_updates')
+      .where('doc_id', '=', docId)
+      .where('seq', '<=', doc.head_seq)
+      .execute();
+    await trx
+      .deleteFrom('doc_snapshots')
+      .where('doc_id', '=', docId)
+      .where('upto_seq', '<', head)
+      .execute();
+    await trx
+      .updateTable('docs')
+      .set({ snapshot_seq: head, snapshot_bytes: state.byteLength, log_bytes: 0 })
+      .where('id', '=', docId)
+      .execute();
+    options.logger.info(
+      { docId, uptoSeq: head, updates: built.updates, bytes: state.byteLength },
+      'document compacted',
+    );
+    return true;
   });
 }
 
 /** Compacts every document over the thresholds; returns how many were compacted. */
 export async function compactOnce(options: CompactionOptions, now: Date): Promise<number> {
-  const skip: string[] = [];
   let compacted = 0;
-  for (;;) {
-    const before = skip.length;
+  for (const docId of await candidates(options)) {
     try {
-      const outcome = await compactNext(options, skip, now);
-      if (outcome === null) break;
-      if (outcome.compacted) compacted += 1;
+      if (await compactDoc(options, docId, now)) compacted += 1;
     } catch (error) {
-      const docId = skip.length > before ? skip[skip.length - 1] : null;
       options.logger.error({ err: error, docId }, 'compaction failed');
-      if (docId === null) throw error;
     }
   }
   return compacted;
