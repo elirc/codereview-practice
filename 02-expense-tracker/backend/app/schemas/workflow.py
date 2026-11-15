@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from app.domain.enums import StepKind
 from app.schemas.common import StrictModel, VersionedAction
@@ -30,6 +30,21 @@ class ReassignIn(StrictModel):
 
 class ReimburseIn(VersionedAction):
     payment_reference: PaymentReference
+
+
+class BulkApproveItem(StrictModel):
+    report_id: uuid.UUID
+    step_id: uuid.UUID
+    expected_version: int
+
+
+class BulkApproveIn(StrictModel):
+    items: Annotated[list[BulkApproveItem], Field(min_length=1, max_length=50)]
+    comment: Comment | None = None
+
+
+class BulkApproveOut(BaseModel):
+    approved: list[uuid.UUID]
 
 
 class PendingApprovalOut(ReportSummaryOut):

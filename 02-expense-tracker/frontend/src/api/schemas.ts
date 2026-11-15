@@ -109,6 +109,8 @@ export const pendingApprovalSchema = reportSummarySchema.extend({
   current_step_position: z.number().int(),
 });
 
+export const bulkApproveResultSchema = z.object({ approved: z.array(z.string()) });
+
 export const rateSchema = z.object({
   id: z.string(),
   from_currency: z.string(),

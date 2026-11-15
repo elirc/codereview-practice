@@ -7,8 +7,14 @@ from app.api.deps import Ctx, Page
 from app.domain.enums import StepKind
 from app.schemas.common import Paginated
 from app.schemas.users import UserSummary
-from app.schemas.workflow import AuditEntityType, AuditEventOut, PendingApprovalOut
-from app.services import approvals, audit_log, report_views
+from app.schemas.workflow import (
+    AuditEntityType,
+    AuditEventOut,
+    BulkApproveIn,
+    BulkApproveOut,
+    PendingApprovalOut,
+)
+from app.services import approvals, audit_log, report_views, workflow
 
 router = APIRouter(tags=["approvals"])
 
@@ -26,6 +32,12 @@ def pending_approvals(ctx: Ctx, page: Page) -> Paginated[PendingApprovalOut]:
         for report, step in rows
     ]
     return Paginated[PendingApprovalOut](items=items, limit=page.limit, offset=page.offset)
+
+
+@router.post("/approvals/approve")
+def approve_pending(ctx: Ctx, body: BulkApproveIn) -> BulkApproveOut:
+    approved = workflow.approve_many(ctx, body.items, body.comment)
+    return BulkApproveOut(approved=approved)
 
 
 @router.get("/audit")

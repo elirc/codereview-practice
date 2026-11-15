@@ -414,3 +414,26 @@ def test_reimbursement_is_recorded_once(db: Session, org: Org, client_for: Clien
     assert fresh_retry.status_code == 409
     assert error_code(fresh_retry) == "invalid_state"
     assert len(db.scalars(select(Reimbursement)).all()) == 1
+
+
+def test_finance_approves_several_reports_at_once(
+    db: Session, org: Org, client_for: ClientFor
+) -> None:
+    owner = client_for(create_user(db))
+    first = submitted(owner, draft(owner, 1000))
+    second = submitted(owner, draft(owner, 2000))
+    items = [
+        {"report_id": r["id"], "step_id": r["current_step_id"], "expected_version": r["version"]}
+        for r in (first, second)
+    ]
+
+    response = client_for(org.finance).post("/api/approvals/approve", json={"items": items})
+
+    assert response.status_code == 200, response.text
+    assert sorted(response.json()["approved"]) == sorted([first["id"], second["id"]])
+    for report in (first, second):
+        assert ok(owner.get(f"/api/reports/{report['id']}"))["status"] == "approved"
+    step_actions = db.scalars(
+        select(AuditEvent.action).where(AuditEvent.entity_type == "step")
+    ).all()
+    assert step_actions == ["step.approved", "step.approved"]

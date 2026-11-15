@@ -1,7 +1,9 @@
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.core.logging import get_logger
 from app.domain.approval_chain import ChainMember, build_chain
@@ -12,6 +14,7 @@ from app.domain.money import Money
 from app.domain.policy import requires_receipt
 from app.domain.state_machine import ReportAction, next_status
 from app.models import ApprovalStep, ExpenseLine, Reimbursement, Report, User
+from app.schemas.workflow import BulkApproveItem
 from app.services import audit
 from app.services.access import (
     ensure_role,
@@ -19,6 +22,7 @@ from app.services.access import (
     get_own_report,
     get_visible_report,
     touch,
+    visible_reports_clause,
 )
 from app.services.context import ServiceContext
 from app.services.conversions import convert_lines
@@ -181,16 +185,15 @@ def _step_of(report: Report, step_id: uuid.UUID) -> ApprovalStep:
     raise NotFound("not_found", "Step not found.")
 
 
-def decide(
+def _decidable_step(
     ctx: ServiceContext,
-    report_id: uuid.UUID,
+    report: Report,
     step_id: uuid.UUID,
     *,
     approve: bool,
     expected_version: int,
-    comment: str | None,
-) -> None:
-    report = get_visible_report(ctx, report_id, lock=True)
+) -> ApprovalStep:
+    """Return the step `step_id` of `report` once the caller may decide it now."""
     next_status(report.status, ReportAction.APPROVE_STEP if approve else ReportAction.REJECT_STEP)
     ensure_version(report, expected_version)
 
@@ -201,7 +204,18 @@ def decide(
     error = decision_error(ctx.actor, report, step)
     if error is not None:
         raise error
+    return step
 
+
+def _record_decision(
+    ctx: ServiceContext,
+    report: Report,
+    step: ApprovalStep,
+    *,
+    approve: bool,
+    comment: str | None,
+) -> str:
+    """Apply a decision to `step` and its report and add the audit events; returns the action."""
     before_report = audit.snapshot(report, REPORT_WORKFLOW_FIELDS)
     before_step = audit.snapshot(step, STEP_AUDIT_FIELDS)
     step.decided_by = ctx.actor.id
@@ -239,8 +253,50 @@ def decide(
         after=new,
     )
     _report_event(ctx, report, action, before_report)
+    return action
+
+
+def decide(
+    ctx: ServiceContext,
+    report_id: uuid.UUID,
+    step_id: uuid.UUID,
+    *,
+    approve: bool,
+    expected_version: int,
+    comment: str | None,
+) -> None:
+    report = get_visible_report(ctx, report_id, lock=True)
+    step = _decidable_step(ctx, report, step_id, approve=approve, expected_version=expected_version)
+    action = _record_decision(ctx, report, step, approve=approve, comment=comment)
     ctx.db.commit()
     log.info(action.replace(".", "_"), report_id=str(report.id), step_id=str(step.id))
+
+
+def approve_many(
+    ctx: ServiceContext, items: Sequence[BulkApproveItem], comment: str | None
+) -> list[uuid.UUID]:
+    """Approve the current step of several reports in one transaction.
+
+    Either every item is approved or, on the first refusal, none is. Returns the report ids.
+    """
+    wanted = {item.report_id: item for item in items}
+    reports = ctx.db.scalars(
+        select(Report)
+        .where(Report.id.in_(list(wanted)), visible_reports_clause(ctx.actor))
+        .options(selectinload(Report.steps))
+    ).all()
+    if len(reports) != len(wanted):
+        raise NotFound()
+
+    for report in reports:
+        item = wanted[report.id]
+        step = _decidable_step(
+            ctx, report, item.step_id, approve=True, expected_version=item.expected_version
+        )
+        _record_decision(ctx, report, step, approve=True, comment=comment)
+    ctx.db.commit()
+    log.info("steps_approved_in_bulk", count=len(reports))
+    return list(wanted)
 
 
 def _reassignment_allowed(ctx: ServiceContext, previous: User, candidate: User | None) -> bool:
