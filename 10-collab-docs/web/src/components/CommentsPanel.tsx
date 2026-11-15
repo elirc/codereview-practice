@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent, type RefObject } from 'react';
-import * as Y from 'yjs';
-import { api, ApiError, withLink, type Thread } from '../api';
+import type * as Y from 'yjs';
+import { api, ApiError, withLink, type Comment, type Thread } from '../api';
 import { errorMessage } from '../auth';
+import { selectionAnchor } from '../collab/anchors';
 import { canComment, canEdit, type DocRole } from '../collab/roles';
 
 interface Props {
@@ -17,18 +18,13 @@ interface Props {
 const RETRIES = 5;
 const RETRY_MS = 400;
 
-function encode(position: Y.RelativePosition): string {
-  let binary = '';
-  for (const byte of Y.encodeRelativePosition(position)) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export function CommentsPanel({ docId, link, role, ydoc, textarea, refreshKey, userId }: Props) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [body, setBody] = useState('');
   const [replies, setReplies] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -61,11 +57,11 @@ export function CommentsPanel({ docId, link, role, ydoc, textarea, refreshKey, u
       setError('Select some text to comment on.');
       return;
     }
-    const text = ydoc.getText('content');
-    const anchor = {
-      start: encode(Y.createRelativePositionFromTypeIndex(text, element.selectionStart, 0)),
-      end: encode(Y.createRelativePositionFromTypeIndex(text, element.selectionEnd, -1)),
-    };
+    const anchor = selectionAnchor(
+      ydoc.getText('content'),
+      element.selectionStart,
+      element.selectionEnd,
+    );
     await run(async () => {
       for (let attempt = 0; ; attempt += 1) {
         try {
@@ -88,7 +84,19 @@ export function CommentsPanel({ docId, link, role, ydoc, textarea, refreshKey, u
     element.setSelectionRange(thread.range.start, thread.range.end);
   }
 
+  function saveEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+    const { id, body: edited } = editing;
+    void run(async () => {
+      await api('PATCH', `/comments/${id}`, { body: edited });
+      setEditing(null);
+    });
+  }
+
   const commenting = userId !== null && canComment(role);
+  const ownComment = (comment: Comment) =>
+    commenting && comment.authorId === userId && !comment.deletedAt;
 
   return (
     <section className="panel">
@@ -106,18 +114,40 @@ export function CommentsPanel({ docId, link, role, ydoc, textarea, refreshKey, u
             {thread.quotedText}
             {thread.detached && <em> (text removed)</em>}
           </blockquote>
-          {thread.comments.map((comment) => (
-            <p key={comment.id}>
-              <strong>{comment.authorName}</strong>:{' '}
-              {comment.deletedAt ? <em>deleted</em> : comment.body}
-              {comment.editedAt && !comment.deletedAt && <small> (edited)</small>}
-              {commenting && comment.authorId === userId && !comment.deletedAt && (
-                <button onClick={() => void run(() => api('DELETE', `/comments/${comment.id}`))}>
-                  Delete
+          {thread.comments.map((comment) =>
+            editing?.id === comment.id ? (
+              <form key={comment.id} className="inline" onSubmit={saveEdit}>
+                <input
+                  value={editing.body}
+                  onChange={(e) => setEditing({ id: comment.id, body: e.target.value })}
+                  maxLength={4000}
+                  required
+                />
+                <button type="submit">Save</button>
+                <button type="button" onClick={() => setEditing(null)}>
+                  Cancel
                 </button>
-              )}
-            </p>
-          ))}
+              </form>
+            ) : (
+              <p key={comment.id}>
+                <strong>{comment.authorName}</strong>:{' '}
+                {comment.deletedAt ? <em>deleted</em> : comment.body}
+                {comment.editedAt && !comment.deletedAt && <small> (edited)</small>}
+                {ownComment(comment) && (
+                  <>
+                    <button onClick={() => setEditing({ id: comment.id, body: comment.body })}>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => void run(() => api('DELETE', `/comments/${comment.id}`))}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+              </p>
+            ),
+          )}
           {commenting && (
             <form
               className="inline"

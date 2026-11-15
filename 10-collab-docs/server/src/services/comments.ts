@@ -289,15 +289,16 @@ async function requireOwnComment(
 ): Promise<{ docId: string; deletedAt: Date | null }> {
   const comment = await ctx.db
     .selectFrom('comments')
-    .select(['thread_id', 'author_id', 'deleted_at'])
-    .where('id', '=', commentId)
+    .innerJoin('comment_threads', 'comment_threads.id', 'comments.thread_id')
+    .select(['comment_threads.doc_id', 'comment_threads.created_by', 'comments.deleted_at'])
+    .where('comments.id', '=', commentId)
     .executeTakeFirst();
   if (!comment) throw errors.notFound('Comment not found.');
-  const thread = await requireThread(ctx, comment.thread_id, principal, now).catch(() => {
+  const access = await requireDocAccess(ctx.db, comment.doc_id, principal, now).catch(() => {
     throw errors.notFound('Comment not found.');
   });
-  if (!canComment(thread.role) || comment.author_id !== principal.userId) throw errors.forbidden();
-  return { docId: thread.docId, deletedAt: comment.deleted_at };
+  if (!canComment(access.role) || comment.created_by !== principal.userId) throw errors.forbidden();
+  return { docId: comment.doc_id, deletedAt: comment.deleted_at };
 }
 
 /** Changes the body of the caller's own comment. */
