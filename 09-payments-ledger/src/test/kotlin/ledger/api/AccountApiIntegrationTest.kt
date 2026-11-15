@@ -130,6 +130,26 @@ class AccountApiIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `an owner's balances are listed by currency`() {
+        val owner = UUID.randomUUID()
+        val usd = wallet(owner)
+        val eur = wallet(owner, Currency.EUR)
+        val shop = merchant(owner)
+        fund(usd, 1_500)
+        fund(eur, 700)
+        fund(shop, 300)
+
+        val body = json(get("/v1/owners/$owner/balances", serviceKey))
+        assertEquals(owner.toString(), body.path("ownerId").asText())
+        val balances = body.path("balances").associate { it.path("accountId").asText() to it.path("postedMinor").asLong() }
+        assertEquals(mapOf(usd.toString() to 1_500L, eur.toString() to 700L, shop.toString() to 300L), balances)
+        assertEquals("EUR", body.path("balances")[0].path("currency").asText())
+
+        val own = json(get("/v1/owners/$owner/balances", newKey(Role.MERCHANT, owner)))
+        assertEquals(3, own.path("balances").size())
+    }
+
+    @Test
     fun `merchant and auditor keys cannot create accounts`() {
         val body = mapOf("ownerId" to UUID.randomUUID(), "type" to "customer_wallet", "currency" to "USD")
         assertEquals(403, post("/v1/accounts", auditorKey, body).response.status)

@@ -39,12 +39,16 @@ data class BalanceView(
     val version: Long
 )
 
+/** The balances of every account of one owner. */
+data class OwnerBalances(val ownerId: UUID, val balances: List<BalanceView>)
+
 /** Creates accounts and answers questions about them. */
 @Service
 class AccountService(
     private val tx: Tx,
     private val accounts: Accounts,
     private val balances: BalanceStore,
+    private val balanceViews: BalanceViews,
     private val entries: EntryQueries,
     private val expectations: BankExpectations,
     private val events: LedgerEvents,
@@ -107,9 +111,15 @@ class AccountService(
 
     /** Returns the balance of an account the caller may see. */
     fun balance(caller: Caller, id: UUID): BalanceView {
-        val account = get(caller, id)
-        val row = balances.read(id) ?: throw Errors.accountNotFound(id)
-        return BalanceView(id, row.postedMinor, row.heldMinor, row.availableMinor, account.currency, row.version)
+        val owned = balanceViews.find(id) ?: throw Errors.accountNotFound(id)
+        if (caller.isMerchant && owned.ownerId != null && owned.ownerId != caller.ownerId) throw Errors.accountNotFound(id)
+        return owned.view
+    }
+
+    /** Returns the balances of all accounts of [ownerId]; merchant keys get their own owner's balances only. */
+    fun ownerBalances(caller: Caller, ownerId: UUID): OwnerBalances {
+        if (caller.isMerchant && ownerId != caller.ownerId) return OwnerBalances(ownerId, emptyList())
+        return OwnerBalances(ownerId, balanceViews.forOwner(ownerId))
     }
 
     /** Lists the postings of an account the caller may see. */
