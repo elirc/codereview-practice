@@ -131,8 +131,8 @@ function content(ctx: AppContext, row: OutboxRow): Delivery | { subject: string;
 			const shift = loadShift(ctx, parsePayload(row, shiftChangedPayload).shiftId);
 			const startsAt = formatInstant(shift.startsAt, ctx.zone);
 			return {
-				subject: `Time changed: ${shift.title}`,
-				text: `${shift.title} at ${shift.location} now starts ${startsAt}.`
+				subject: `Shift updated: ${shift.title}`,
+				text: `${shift.title} now starts ${startsAt} at ${shift.location}.`
 			};
 		}
 		case 'reminder-24h': {

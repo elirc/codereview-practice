@@ -72,7 +72,7 @@ describe('one-off shifts', () => {
 		createSignupRow(ctx, shift.id, confirmed.id, 'confirmed');
 		createSignupRow(ctx, shift.id, waiting.id, 'waitlisted', 1);
 
-		updateShift(ctx, shift.id, oneOff({ capacity: 1, location: 'Annex' }));
+		updateShift(ctx, shift.id, oneOff({ capacity: 1, title: 'Evening sort' }));
 		expect(ctx.db.select().from(outbox).all()).toHaveLength(0);
 
 		const moved = updateShift(ctx, shift.id, oneOff({ capacity: 1, startTime: '10:00' }));
@@ -87,6 +87,20 @@ describe('one-off shifts', () => {
 				.map((id) => `shift-changed:${shift.id}:${moved.startsAt}:${id}:email`)
 				.sort()
 		);
+	});
+
+	it('notify volunteers when the location changes', () => {
+		const shift = createShift(ctx, oneOff());
+		const volunteer = createUser(ctx, { smsOptIn: true, phone: '+15550100210' });
+		createSignupRow(ctx, shift.id, volunteer.id, 'confirmed');
+
+		updateShift(ctx, shift.id, oneOff({ location: 'Annex' }));
+		const notices = ctx.db.select().from(outbox).where(eq(outbox.template, 'shift-changed')).all();
+		expect(notices.map((row) => `${row.userId}:${row.channel}`).sort()).toEqual([
+			`${volunteer.id}:email`,
+			`${volunteer.id}:sms`
+		]);
+		expect(getShift(ctx.db, shift.id)?.location).toBe('Annex');
 	});
 
 	it('promote the first waitlisted volunteers when capacity is raised', () => {

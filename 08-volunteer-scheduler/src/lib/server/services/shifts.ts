@@ -58,8 +58,8 @@ export function sameShiftValues(shift: ShiftRow, next: ShiftValues): boolean {
 }
 
 /**
- * Updates a scheduled shift, notifying its volunteers when the start moves
- * and filling from the waitlist when capacity grows.
+ * Updates a scheduled shift, notifying its volunteers when the start or the
+ * location changes and filling from the waitlist when capacity grows.
  */
 export function applyShiftChanges(
 	tx: Tx,
@@ -73,7 +73,9 @@ export function applyShiftChanges(
 		.where(eq(shifts.id, shift.id))
 		.returning()
 		.get();
-	if (next.startsAt !== shift.startsAt) {
+	const moved = next.startsAt !== shift.startsAt;
+	const relocated = next.location !== shift.location;
+	if (moved || relocated) {
 		enqueueShiftChanged(tx, now, shift.id, next.startsAt, activeSignupUserIds(tx, shift.id));
 	}
 	if (next.capacity > shift.capacity) {

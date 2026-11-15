@@ -85,6 +85,7 @@
 			/>
 		</label>
 		<button type="submit">Save changes</button>
+		<span class="muted">Volunteers are told when the time or location changes.</span>
 	</form>
 
 	<form method="POST" action="?/cancel" use:enhance>
