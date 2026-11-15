@@ -30,3 +30,12 @@ Each project was built as a series of PR-sized commits. To read one project's hi
 Nothing has been installed or run yet: the first `npm install` / `pip install` /
 `bundle install` / `go mod tidy` / `gradle build` / `dotnet restore` / `cargo build`
 and CI run is the first real check.
+
+## Review practice branches
+
+Every project also has a `planted/NN-<slug>` branch: 3–4 PR-style commits on top of
+`main` that introduce 8–9 realistic defects (a mix of easy, medium and hard, always
+including concurrency/ordering and authorization issues). Review them as incoming PRs,
+write your findings first, then compare against the answer key kept outside this repo.
+
+    git log --reverse -p main..planted/03-issue-tracker
