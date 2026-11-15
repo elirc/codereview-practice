@@ -67,7 +67,7 @@ src/main/kotlin/ledger/
   outbox/                  outbox writer, event envelope, relay, Kafka publisher, stats
   jobs/                    periodic jobs and the worker schedule
   seed/                    development dataset
-src/main/resources/db/migration/   Flyway SQL (V1–V8)
+src/main/resources/db/migration/   Flyway SQL (V1–V10)
 ```
 
 Request flow: `RequestIdFilter` → `ApiKeyInterceptor` (resolves the caller) → controller validates the body → `IdempotentRequests` opens the transaction and records the key → service checks the role and performs the work through `LedgerService.post` → domain events go to the `outbox` table in the same transaction → `ApiExceptionHandler` renders any error envelope. The worker's relay later publishes outbox rows to Kafka.

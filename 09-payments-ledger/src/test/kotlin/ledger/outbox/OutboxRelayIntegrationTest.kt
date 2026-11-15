@@ -55,7 +55,7 @@ class OutboxRelayIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `a failed publish stops the pass and later rows wait behind it`() {
+    fun `a failed row is retried on the next pass while the rest are published`() {
         val a = wallet()
         fund(a, 1_000)
         fund(a, 2_000)
@@ -67,8 +67,8 @@ class OutboxRelayIntegrationTest : IntegrationTest() {
         val failed = relay.runOnce(clock.instant())
 
         assertTrue(failed.failed)
-        assertEquals(3, failed.published)
-        assertEquals(3, unpublished())
+        assertEquals(5, failed.published)
+        assertEquals(1, unpublished())
         val error = jdbc.sql("SELECT attempts, last_error FROM outbox WHERE id = :id")
             .param("id", ids[3])
             .query { rs, _ -> rs.getInt("attempts") to rs.getString("last_error") }
@@ -77,12 +77,12 @@ class OutboxRelayIntegrationTest : IntegrationTest() {
         assertEquals("broker unavailable", error.second)
 
         relay.runOnce(clock.instant())
-        assertEquals(3, unpublished())
+        assertEquals(1, unpublished())
 
         publisher.failWhen = { false }
         val resumed = relay.runOnce(clock.instant())
-        assertEquals(3, resumed.published)
-        assertEquals(ids, publisher.records().map { it.id })
+        assertEquals(1, resumed.published)
+        assertEquals(ids - ids[3] + ids[3], publisher.records().map { it.id })
     }
 
     @Test
@@ -101,6 +101,7 @@ class OutboxRelayIntegrationTest : IntegrationTest() {
 
         val stats = json(get("/v1/outbox/stats", operatorKey))
         assertEquals(unpublished(), stats.path("unpublishedCount").asLong())
+        assertEquals(unpublished(), stats.path("failingCount").asLong())
 
         publisher.failWhen = { false }
         relay.runOnce(clock.instant())
@@ -160,6 +161,7 @@ class OutboxRelayIntegrationTest : IntegrationTest() {
         val empty = json(get("/v1/outbox/stats", operatorKey))
         assertEquals(0, empty.path("unpublishedCount").asLong())
         assertTrue(empty.path("oldestUnpublishedAgeSeconds").isNull)
+        assertEquals(0, empty.path("failingCount").asLong())
 
         fund(wallet(), 100)
         clock.advance(Duration.ofSeconds(90))

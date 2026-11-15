@@ -15,7 +15,7 @@ data class RelayResult(val published: Int, val failed: Boolean, val skipped: Boo
     }
 }
 
-/** Publishes unpublished outbox rows in id order. */
+/** Publishes unpublished outbox rows in id order and records the error on rows that fail. */
 class OutboxRelay(
     private val tx: Tx,
     private val jdbc: JdbcClient,
@@ -24,7 +24,10 @@ class OutboxRelay(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** Publishes up to [batchSize] unpublished rows in id order, marks them published at [now] and returns the outcome. */
+    /**
+     * Sends up to [batchSize] unpublished rows in id order, marks the sent rows published at [now], counts an attempt
+     * with its error on each row that failed and returns the outcome.
+     */
     fun runOnce(now: Instant): RelayResult = tx.inTx {
         val locked = jdbc.sql("SELECT pg_try_advisory_xact_lock(:key)")
             .param("key", LOCK_KEY)
@@ -55,16 +58,13 @@ class OutboxRelay(
             .list()
 
         val published = mutableListOf<Long>()
-        var failedRow: OutboxRecord? = null
-        var failure: Exception? = null
+        val failures = mutableListOf<Pair<OutboxRecord, Exception>>()
         for (row in rows) {
             try {
                 publisher.publish(row)
                 published += row.id
             } catch (e: Exception) {
-                failedRow = row
-                failure = e
-                break
+                failures += row to e
             }
         }
 
@@ -74,17 +74,18 @@ class OutboxRelay(
                 .param("ids", published)
                 .update()
         }
-        val failed = failedRow
-        if (failed != null) {
-            val message = (failure?.message ?: failure?.javaClass?.name ?: "unknown error").take(MAX_ERROR_LENGTH)
-            jdbc.sql("UPDATE outbox SET attempts = attempts + 1, last_error = :error WHERE id = :id")
-                .param("error", message)
-                .param("id", failed.id)
-                .update()
-            log.atWarn().addKeyValue("outboxId", failed.id).addKeyValue("eventId", failed.eventId)
-                .log("Publishing an outbox event failed: {}", message)
-        }
-        RelayResult(published.size, failed = failed != null, skipped = false)
+        failures.forEach { (row, failure) -> recordFailure(row, failure) }
+        RelayResult(published.size, failed = failures.isNotEmpty(), skipped = false)
+    }
+
+    private fun recordFailure(row: OutboxRecord, failure: Exception) {
+        val message = (failure.message ?: failure.javaClass.name).take(MAX_ERROR_LENGTH)
+        jdbc.sql("UPDATE outbox SET attempts = attempts + 1, last_error = :error WHERE id = :id")
+            .param("error", message)
+            .param("id", row.id)
+            .update()
+        log.atWarn().addKeyValue("outboxId", row.id).addKeyValue("eventId", row.eventId)
+            .log("Publishing an outbox event failed: {}", message)
     }
 
     companion object {

@@ -23,12 +23,11 @@ enum class CauseType(@get:JsonValue override val wire: String) : WireValue {
 @Component
 class LedgerEvents(private val outbox: OutboxWriter) {
     fun entryPosted(entry: JournalEntry) {
-        outbox.record(
+        record(
             topic = Topics.ENTRIES,
-            partitionKey = entry.id.toString(),
             type = "entry.posted",
             aggregateType = "journal_entry",
-            aggregateId = entry.id.toString(),
+            aggregateId = entry.id,
             sequence = entry.sequence,
             occurredAt = entry.createdAt,
             data = mapOf(
@@ -48,12 +47,11 @@ class LedgerEvents(private val outbox: OutboxWriter) {
     }
 
     fun balanceChanged(account: Account, balance: BalanceRow, causeType: CauseType, causeId: UUID, occurredAt: Instant) {
-        outbox.record(
+        record(
             topic = Topics.ACCOUNTS,
-            partitionKey = account.id.toString(),
             type = "account.balance_changed",
             aggregateType = "account",
-            aggregateId = account.id.toString(),
+            aggregateId = account.id,
             sequence = balance.version,
             occurredAt = occurredAt,
             data = mapOf(
@@ -69,12 +67,11 @@ class LedgerEvents(private val outbox: OutboxWriter) {
     }
 
     fun statusChanged(account: Account, previous: AccountStatus, version: Long, occurredAt: Instant) {
-        outbox.record(
+        record(
             topic = Topics.ACCOUNTS,
-            partitionKey = account.id.toString(),
             type = "account.status_changed",
             aggregateType = "account",
-            aggregateId = account.id.toString(),
+            aggregateId = account.id,
             sequence = version,
             occurredAt = occurredAt,
             data = mapOf(
@@ -86,12 +83,12 @@ class LedgerEvents(private val outbox: OutboxWriter) {
     }
 
     fun payout(type: String, expectation: BankExpectation, sequence: Long, occurredAt: Instant) {
-        outbox.record(
+        record(
             topic = Topics.SETTLEMENT,
-            partitionKey = expectation.accountId.toString(),
             type = type,
             aggregateType = "bank_expectation",
-            aggregateId = expectation.id.toString(),
+            aggregateId = expectation.id,
+            partitionKey = expectation.accountId,
             sequence = sequence,
             occurredAt = occurredAt,
             data = mapOf(
@@ -106,12 +103,11 @@ class LedgerEvents(private val outbox: OutboxWriter) {
     }
 
     fun hold(type: String, hold: Hold, occurredAt: Instant) {
-        outbox.record(
+        record(
             topic = Topics.ACCOUNTS,
-            partitionKey = hold.accountId.toString(),
             type = type,
             aggregateType = "hold",
-            aggregateId = hold.id.toString(),
+            aggregateId = hold.id,
             sequence = hold.version,
             occurredAt = occurredAt,
             data = mapOf(
@@ -135,12 +131,11 @@ class LedgerEvents(private val outbox: OutboxWriter) {
         paidTotalMinor: Long,
         occurredAt: Instant
     ) {
-        outbox.record(
+        record(
             topic = Topics.SETTLEMENT,
-            partitionKey = batchId.toString(),
             type = "settlement.batch_completed",
             aggregateType = "settlement_batch",
-            aggregateId = batchId.toString(),
+            aggregateId = batchId,
             sequence = 1,
             occurredAt = occurredAt,
             data = mapOf(
@@ -163,12 +158,11 @@ class LedgerEvents(private val outbox: OutboxWriter) {
         currency: Currency,
         occurredAt: Instant
     ) {
-        outbox.record(
+        record(
             topic = Topics.SETTLEMENT,
-            partitionKey = statementId.toString(),
             type = "reconciliation.discrepancy_found",
             aggregateType = "statement",
-            aggregateId = statementId.toString(),
+            aggregateId = statementId,
             sequence = lineNo.toLong(),
             occurredAt = occurredAt,
             data = mapOf(
@@ -179,6 +173,29 @@ class LedgerEvents(private val outbox: OutboxWriter) {
                 "expectedAmountMinor" to expectedAmountMinor,
                 "currency" to currency
             )
+        )
+    }
+
+    /** Writes one event to the outbox; its record key is [partitionKey]. */
+    private fun record(
+        topic: String,
+        type: String,
+        aggregateType: String,
+        aggregateId: UUID,
+        sequence: Long,
+        occurredAt: Instant,
+        data: Map<String, Any?>,
+        partitionKey: UUID = aggregateId
+    ) {
+        outbox.record(
+            topic = topic,
+            partitionKey = partitionKey.toString(),
+            type = type,
+            aggregateType = aggregateType,
+            aggregateId = aggregateId.toString(),
+            sequence = sequence,
+            occurredAt = occurredAt,
+            data = data
         )
     }
 }
