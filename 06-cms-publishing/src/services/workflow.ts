@@ -5,7 +5,7 @@ import { posts, revisions, type NewPost, type Post } from "@/db/schema";
 import { DomainError } from "./errors";
 import { assertExpectedVersion, lockPostFor } from "./post-guards";
 import type { PublicChange } from "./posts";
-import { lockReferencedMedia } from "./revisions";
+import { referencedMediaIds } from "./revisions";
 import { nextStatus, type WorkflowAction } from "./workflow-rules";
 
 export const MIN_SCHEDULE_LEAD_MS = 60_000;
@@ -77,7 +77,7 @@ async function assertRevisionOfPost(tx: Executor, post: Post, revisionId: string
   if (!revision) {
     throw new DomainError("invalid_revision", "That revision does not belong to this post.");
   }
-  await lockReferencedMedia(tx, revision);
+  await referencedMediaIds(tx, revision);
 }
 
 function publicationFields(post: Post, revisionId: string, now: Date): Partial<NewPost> {

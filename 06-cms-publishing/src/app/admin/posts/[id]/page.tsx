@@ -18,6 +18,7 @@ import { getPostForActor } from "@/services/posts";
 import { listRevisions } from "@/services/revisions";
 import { nextStatus, type WorkflowAction } from "@/services/workflow-rules";
 import { ActionButton } from "../../_components/action-button";
+import { DuplicatePostForm } from "../../_components/duplicate-post-form";
 import { PostEditor } from "../../_components/post-editor";
 import { ScheduleForm } from "../../_components/schedule-form";
 import { SlugForm } from "../../_components/slug-form";
@@ -133,6 +134,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
       ) : (
         <p className="muted">Slug: {post.slug}</p>
       )}
+      <DuplicatePostForm postId={post.id} slug={post.slug} />
 
       <PostEditor
         key={`${latest.id}:${post.version}`}

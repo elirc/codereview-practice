@@ -1,9 +1,20 @@
 import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 import { canOnPost, type Actor } from "@/auth/policy";
-import { db } from "@/db/client";
-import { posts, revisions, slugRedirects, users, type Post, type PostStatus } from "@/db/schema";
+import { db, type Executor } from "@/db/client";
+import {
+  posts,
+  revisionMedia,
+  revisions,
+  slugRedirects,
+  users,
+  type Post,
+  type PostStatus,
+} from "@/db/schema";
 import { notFoundError } from "./errors";
+import { assertMediaExists } from "./media";
+import { extractMediaIds } from "./media-references";
 import { assertExpectedVersion, lockPostFor } from "./post-guards";
+import type { RevisionContent } from "./revisions";
 import { assertSlugAvailable, lockSlugs } from "./slugs";
 
 /** Identifies public content that changed: the post and every slug whose page may differ. */
@@ -38,6 +49,38 @@ export function toPostState(post: Post): PostState {
   };
 }
 
+/** Inserts a draft post owned by `authorId` whose first revision holds `content`. */
+async function insertDraft(
+  tx: Executor,
+  values: { slug: string; authorId: string; content: RevisionContent; now: Date },
+): Promise<Post> {
+  const { slug, authorId, content, now } = values;
+  await lockSlugs(tx, [slug]);
+  await assertSlugAvailable(tx, slug, null);
+  const mediaIds = extractMediaIds(content.body, content.coverMediaId);
+  await assertMediaExists(tx, mediaIds);
+
+  const [post] = await tx
+    .insert(posts)
+    .values({ slug, authorId, status: "draft", createdAt: now, updatedAt: now })
+    .returning();
+  const [revision] = await tx
+    .insert(revisions)
+    .values({ postId: post.id, number: 1, ...content, createdBy: authorId, createdAt: now })
+    .returning();
+  if (mediaIds.length > 0) {
+    await tx
+      .insert(revisionMedia)
+      .values(mediaIds.map((mediaId) => ({ revisionId: revision.id, mediaId })));
+  }
+  const [withRevision] = await tx
+    .update(posts)
+    .set({ latestRevisionId: revision.id })
+    .where(eq(posts.id, post.id))
+    .returning();
+  return withRevision;
+}
+
 /** Creates a draft post together with its first revision. */
 export async function createPost(input: {
   actor: Actor;
@@ -46,24 +89,39 @@ export async function createPost(input: {
   now: Date;
 }): Promise<Post> {
   const { actor, slug, title, now } = input;
-  return db.transaction(async (tx) => {
-    await lockSlugs(tx, [slug]);
-    await assertSlugAvailable(tx, slug, null);
+  return db.transaction((tx) =>
+    insertDraft(tx, {
+      slug,
+      authorId: actor.id,
+      content: { title, excerpt: "", body: "", coverMediaId: null },
+      now,
+    }),
+  );
+}
 
-    const [post] = await tx
-      .insert(posts)
-      .values({ slug, authorId: actor.id, status: "draft", createdAt: now, updatedAt: now })
-      .returning();
-    const [revision] = await tx
-      .insert(revisions)
-      .values({ postId: post.id, number: 1, title, createdBy: actor.id, createdAt: now })
-      .returning();
-    const [withRevision] = await tx
-      .update(posts)
-      .set({ latestRevisionId: revision.id })
-      .where(eq(posts.id, post.id))
-      .returning();
-    return withRevision;
+/** Creates a new draft owned by the actor that starts from another post's latest revision. */
+export async function duplicatePost(input: {
+  actor: Actor;
+  sourcePostId: string;
+  slug: string;
+  now: Date;
+}): Promise<Post> {
+  const { actor, sourcePostId, slug, now } = input;
+  return db.transaction(async (tx) => {
+    const [source] = await tx
+      .select({
+        title: revisions.title,
+        excerpt: revisions.excerpt,
+        body: revisions.body,
+        coverMediaId: revisions.coverMediaId,
+      })
+      .from(posts)
+      .innerJoin(revisions, eq(revisions.id, posts.latestRevisionId))
+      .where(eq(posts.id, sourcePostId))
+      .limit(1);
+    if (!source) throw notFoundError("Post not found.");
+
+    return insertDraft(tx, { slug, authorId: actor.id, content: source, now });
   });
 }
 

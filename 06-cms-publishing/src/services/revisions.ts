@@ -1,17 +1,10 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Actor } from "@/auth/policy";
 import { db, type Executor } from "@/db/client";
-import {
-  media,
-  posts,
-  revisionMedia,
-  revisions,
-  users,
-  type Post,
-  type Revision,
-} from "@/db/schema";
+import { posts, revisionMedia, revisions, users, type Post, type Revision } from "@/db/schema";
 import { lineDiff, type DiffLine } from "./diff";
 import { DomainError, notFoundError } from "./errors";
+import { assertMediaExists } from "./media";
 import { extractMediaIds } from "./media-references";
 import { assertExpectedVersion, lockPostFor } from "./post-guards";
 import { getPostForActor } from "./posts";
@@ -35,27 +28,12 @@ function hasSameContent(revision: Revision, content: RevisionContent): boolean {
 }
 
 /** Returns the media ids referenced by the body and cover; throws if any does not exist. */
-export async function lockReferencedMedia(
+export async function referencedMediaIds(
   tx: Executor,
   content: Pick<RevisionContent, "body" | "coverMediaId">,
 ): Promise<string[]> {
   const ids = extractMediaIds(content.body, content.coverMediaId);
-  if (ids.length === 0) return ids;
-
-  const found = await tx
-    .select({ id: media.id })
-    .from(media)
-    .where(inArray(media.id, ids))
-    .for("key share");
-  const foundIds = new Set(found.map((row) => row.id));
-  const missing = ids.filter((mediaId) => !foundIds.has(mediaId));
-  if (missing.length > 0) {
-    throw new DomainError(
-      "invalid_media_reference",
-      "The post refers to media that does not exist.",
-      { missing },
-    );
-  }
+  await assertMediaExists(tx, ids);
   return ids;
 }
 
@@ -67,7 +45,7 @@ async function appendRevision(
   now: Date,
   restoredFromNumber: number | null,
 ): Promise<{ post: Post; revision: Revision }> {
-  const mediaIds = await lockReferencedMedia(tx, content);
+  const mediaIds = await referencedMediaIds(tx, content);
 
   const [{ maxNumber }] = await tx
     .select({ maxNumber: sql<number>`coalesce(max(${revisions.number}), 0)::int` })

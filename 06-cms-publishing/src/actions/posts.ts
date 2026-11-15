@@ -11,6 +11,7 @@ import { runAction, type ActionResult } from "./result";
 import {
   changeSlugSchema,
   createPostSchema,
+  duplicatePostSchema,
   postCommandSchema,
   restoreRevisionSchema,
   saveRevisionSchema,
@@ -29,6 +30,21 @@ export async function createPost(input: unknown): Promise<ActionResult<PostState
     const actor = await requireUser();
     assertCan(actor, "createPost");
     const post = await postService.createPost({ actor, ...data, now: clock.now() });
+    return toPostState(post);
+  });
+}
+
+export async function duplicatePost(input: unknown): Promise<ActionResult<PostState>> {
+  return runAction("duplicatePost", async () => {
+    const { postId, slug } = duplicatePostSchema.parse(input);
+    const actor = await requireUser();
+    assertCan(actor, "createPost");
+    const post = await postService.duplicatePost({
+      actor,
+      sourcePostId: postId,
+      slug,
+      now: clock.now(),
+    });
     return toPostState(post);
   });
 }

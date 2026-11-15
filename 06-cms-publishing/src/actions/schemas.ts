@@ -85,6 +85,8 @@ export const scheduleSchema = z
 
 export const changeSlugSchema = z.object({ postId: id, expectedVersion, slug }).strict();
 
+export const duplicatePostSchema = z.object({ postId: id, slug }).strict();
+
 export const deleteMediaSchema = z.object({ mediaId: id }).strict();
 
 export const previewQuerySchema = z.object({ postId: id, revisionId: id }).strict();

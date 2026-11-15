@@ -1,10 +1,10 @@
-import { desc, eq, or } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { assertCanDeleteMedia, type Actor } from "@/auth/policy";
 import { db, type Executor } from "@/db/client";
 import { media, posts, revisionMedia, users, type Media, type NewMedia } from "@/db/schema";
 import { logger } from "@/logger";
 import type { MediaStorage } from "@/media/storage";
-import { notFoundError } from "./errors";
+import { DomainError, notFoundError } from "./errors";
 
 export type MediaUsage = { referencedByAnyRevision: boolean; referencedByLiveRevision: boolean };
 
@@ -16,6 +16,24 @@ const liveRevisionJoin = or(
 export async function insertMedia(values: NewMedia): Promise<Media> {
   const [row] = await db.insert(media).values(values).returning();
   return row;
+}
+
+/** Throws `invalid_media_reference` unless every id names an existing media row. */
+export async function assertMediaExists(executor: Executor, mediaIds: string[]): Promise<void> {
+  if (mediaIds.length === 0) return;
+  const found = await executor
+    .select({ id: media.id })
+    .from(media)
+    .where(inArray(media.id, mediaIds));
+  const foundIds = new Set(found.map((row) => row.id));
+  const missing = mediaIds.filter((mediaId) => !foundIds.has(mediaId));
+  if (missing.length > 0) {
+    throw new DomainError(
+      "invalid_media_reference",
+      "The post refers to media that does not exist.",
+      { missing },
+    );
+  }
 }
 
 export async function findMediaById(mediaId: string): Promise<Media | null> {
