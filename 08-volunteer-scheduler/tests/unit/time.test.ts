@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysBetween, isCivilDate, weekdayIndex } from '../../src/lib/domain/dates';
+import {
+	addDays,
+	daysBetween,
+	isCivilDate,
+	minutesOfDay,
+	weekdayIndex
+} from '../../src/lib/domain/dates';
 import {
 	isoWithOffset,
 	nextWallTime,
@@ -24,6 +30,12 @@ describe('civil dates', () => {
 		expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
 		expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
 		expect(daysBetween('2026-01-01', '2026-03-01')).toBe(59);
+	});
+
+	it('reads wall times as minutes after midnight', () => {
+		expect(minutesOfDay('00:00')).toBe(0);
+		expect(minutesOfDay('09:30')).toBe(570);
+		expect(minutesOfDay('23:59')).toBe(1439);
 	});
 
 	it('numbers weekdays from Monday', () => {

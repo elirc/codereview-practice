@@ -40,6 +40,12 @@ export function parseWallTime(time: string): { hour: number; minute: number } {
 	return { hour: Number(match[1]), minute: Number(match[2]) };
 }
 
+/** Minutes after midnight for an `HH:MM` wall time. */
+export function minutesOfDay(time: string): number {
+	const { hour, minute } = parseWallTime(time);
+	return hour * 60 + minute;
+}
+
 /** Days since 1970-01-01. */
 export function toDayNumber(date: CivilDate): number {
 	const { year, month, day } = parseCivilDate(date);

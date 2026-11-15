@@ -178,6 +178,15 @@ describe('end conditions', () => {
 		]);
 	});
 
+	it('leaves out skipped dates', () => {
+		const r = rule({ freq: 'WEEKLY', byWeekday: ['MO', 'TH'], dtstart: '2026-01-05' });
+		const skip = new Set(['2026-01-08', '2026-01-12']);
+		expect(occurrences(r, '2026-01-05', '2026-01-18', { skip })).toEqual([
+			'2026-01-05',
+			'2026-01-15'
+		]);
+	});
+
 	it('clips to the range end', () => {
 		expect(occurrences(rule({}), '2026-01-01', '2026-01-03')).toEqual([
 			'2026-01-01',

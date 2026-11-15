@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gt, gte, sql } from 'drizzle-orm';
-import { addDays, type CivilDate } from '../../domain/dates';
+import { addDays, minutesOfDay, type CivilDate } from '../../domain/dates';
 import {
 	isOccurrence,
 	occurrences,
@@ -10,7 +10,7 @@ import {
 	type RecurrenceRule,
 	type Weekday
 } from '../../domain/recurrence';
-import { orgDate, wallTimeToInstant } from '../../domain/time';
+import { orgDate, startOfOrgDay } from '../../domain/time';
 import type { AppContext } from '../context';
 import { IMMEDIATE, type Tx } from '../db/client';
 import {
@@ -34,6 +34,7 @@ import {
 export const HORIZON_DAYS = 60;
 
 const MINUTE_MS = 60_000;
+const DAY_START_CACHE_SIZE = 4096;
 
 export interface SeriesInput {
 	title: string;
@@ -106,6 +107,28 @@ function loadExceptions(tx: Tx, seriesId: string): Map<CivilDate, SeriesExceptio
 	return new Map(rows.map((row) => [row.occurrenceDate, row]));
 }
 
+function cancelledDates(exceptions: Map<CivilDate, SeriesExceptionRow>): Set<CivilDate> {
+	const dates = new Set<CivilDate>();
+	for (const [date, exception] of exceptions) {
+		if (exception.kind === 'cancelled') dates.add(date);
+	}
+	return dates;
+}
+
+const dayStarts = new Map<string, number>();
+
+/** Local midnight of `date` in `zone`; every series occurring that day shares the lookup. */
+function dayStart(date: CivilDate, zone: string): number {
+	const key = `${zone}|${date}`;
+	let start = dayStarts.get(key);
+	if (start === undefined) {
+		if (dayStarts.size >= DAY_START_CACHE_SIZE) dayStarts.clear();
+		start = startOfOrgDay(date, zone);
+		dayStarts.set(key, start);
+	}
+	return start;
+}
+
 /** Concrete shift values for one occurrence, applying a `modified` exception if given. */
 export function occurrenceValues(
 	series: ShiftSeriesRow,
@@ -114,7 +137,8 @@ export function occurrenceValues(
 	zone: string
 ): ShiftValues {
 	const modified = exception?.kind === 'modified' ? exception : undefined;
-	const startsAt = wallTimeToInstant(date, modified?.startTime ?? series.startTime, zone);
+	const startTime = modified?.startTime ?? series.startTime;
+	const startsAt = dayStart(date, zone) + minutesOfDay(startTime) * MINUTE_MS;
 	const duration = modified?.durationMinutes ?? series.durationMinutes;
 	return {
 		title: series.title,
@@ -168,10 +192,9 @@ export function materializeSeries(
 	let inserted = 0;
 	if (from <= end) {
 		const exceptions = loadExceptions(tx, series.id);
-		for (const date of occurrences(ruleOf(series), from, end)) {
-			const exception = exceptions.get(date);
-			if (exception?.kind === 'cancelled') continue;
-			if (insertOccurrence(tx, now, zone, series, date, exception)) inserted += 1;
+		const skip = cancelledDates(exceptions);
+		for (const date of occurrences(ruleOf(series), from, end, { skip })) {
+			if (insertOccurrence(tx, now, zone, series, date, exceptions.get(date))) inserted += 1;
 		}
 	}
 	if (!through || through < end) {
@@ -214,11 +237,8 @@ function applyPatternChange(
 	end: CivilDate
 ): void {
 	const exceptions = loadExceptions(tx, series.id);
-	const wanted = new Set(
-		occurrences(ruleOf(series), effectiveFrom, end).filter(
-			(date) => exceptions.get(date)?.kind !== 'cancelled'
-		)
-	);
+	const skip = cancelledDates(exceptions);
+	const wanted = new Set(occurrences(ruleOf(series), effectiveFrom, end, { skip }));
 	const existing = tx
 		.select()
 		.from(shifts)
