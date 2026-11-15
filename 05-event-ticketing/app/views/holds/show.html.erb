@@ -28,6 +28,12 @@
 
   <%= button_to "Release tickets", hold_path(@hold), method: :delete %>
 <% else %>
-  <p class="flash alert" data-error-code="hold_expired">This hold is no longer active.</p>
+  <p class="flash alert" data-error-code="hold_expired">
+    <% if @hold.active? && @hold.past_expiry?(@now) %>
+      Your hold ran out at <%= format_in_zone(@hold.expires_at, @event.time_zone) %>. The tickets are going back on sale.
+    <% else %>
+      This hold is no longer active.
+    <% end %>
+  </p>
   <p><%= link_to "Back to the event", event_path(@event) %></p>
 <% end %>

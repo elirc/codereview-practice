@@ -21,6 +21,11 @@ class Hold < ApplicationRecord
     active? && expires_at > now
   end
 
+  # True once the hold's time has run out, whether or not expiry has run.
+  def past_expiry?(now)
+    expires_at < now
+  end
+
   def subtotal_cents
     unit_price_cents * quantity
   end

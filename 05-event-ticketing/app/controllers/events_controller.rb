@@ -10,6 +10,7 @@ class EventsController < ApplicationController
     @now = Time.current
     @availabilities = TierAvailability.for_event(@event, now: @now)
     @my_entries = my_waitlist_entries
+    @allowance = Holds::EventAllowance.remaining(user: current_user, event: @event, now: @now) if authenticated?
   end
 
   private

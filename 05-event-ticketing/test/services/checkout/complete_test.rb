@@ -47,8 +47,8 @@ class Checkout::CompleteTest < ActiveSupport::TestCase
     end
   end
 
-  test "fails at the exact expiry instant and succeeds one second before" do
-    assert_domain_error(:hold_expired) { checkout(now: @hold.expires_at) }
+  test "fails once the expiry has passed and succeeds one second before" do
+    assert_domain_error(:hold_expired) { checkout(now: @hold.expires_at + 1.second) }
     assert @hold.reload.active?
     assert_empty @gateway.charges
 

@@ -32,4 +32,20 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
   end
+
+  test "tells a signed-in customer how many more tickets they can get" do
+    travel_to TicketingHelpers::NOW
+    place_hold(users(:customer), ticket_tiers(:general), 3)
+    sign_in_as users(:customer)
+
+    get event_path(events(:concert))
+
+    assert_select "#allowance", text: /up to 5 more tickets/
+  end
+
+  test "guests are not shown an allowance" do
+    get event_path(events(:concert))
+
+    assert_select "#allowance", count: 0
+  end
 end

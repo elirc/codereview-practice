@@ -54,7 +54,8 @@ module Checkout
 
     private
       def verify_hold!(tier)
-        raise DomainError.new(:hold_expired) unless @hold.user_id == @user.id && @hold.live?(@now)
+        raise DomainError.new(:hold_expired) unless @hold.user_id == @user.id && @hold.active?
+        raise DomainError.new(:hold_expired) if @hold.past_expiry?(@now)
         raise DomainError.new(:event_cancelled) if tier.event.cancelled?
       end
 

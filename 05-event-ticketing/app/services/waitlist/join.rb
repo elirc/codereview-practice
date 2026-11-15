@@ -30,7 +30,7 @@ module Waitlist
           raise DomainError.new(:tickets_available, details: { available: tier.available })
         end
 
-        Holds::EventAllowance.check!(user: @user, event:, quantity: @quantity, now: @now)
+        Holds::EventAllowance.check!(user: @user, tier:, quantity: @quantity, now: @now)
 
         tier.waitlist_entries.create!(user: @user, quantity: @quantity, status: :waiting, created_at: @now)
       end

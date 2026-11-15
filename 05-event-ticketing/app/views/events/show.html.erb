@@ -19,6 +19,16 @@
 
 <h2>Tickets</h2>
 
+<% if @allowance && @event.on_sale?(@now) %>
+  <p class="muted" id="allowance">
+    <% if @allowance.zero? %>
+      You have reached the limit of <%= Holds::EventAllowance::LIMIT %> tickets for this event.
+    <% else %>
+      You can hold or buy up to <%= @allowance %> more <%= "ticket".pluralize(@allowance) %> for this event.
+    <% end %>
+  </p>
+<% end %>
+
 <% polling = @event.on_sale?(@now) ? { controller: "availability", availability_url_value: availability_api_event_path(@event) } : {} %>
 <%= tag.table data: polling do %>
   <thead>
