@@ -166,6 +166,37 @@ public sealed class InvoiceTests(BillingApp app) : IntegrationTest(app)
     }
 
     [Fact]
+    public async Task DraftCreatedWithAnIdempotencyKeyIsCreatedOnce()
+    {
+        var customer = await Data.CustomerAsync();
+        var ops = await App.ClientAsync(ApiRole.BillingOps);
+        var body = new { customerId = customer, lines = new[] { new { description = "Setup", quantity = 1, unitAmountMinor = 2500 } } };
+
+        var first = await ops.PostAsync("/v1/invoices", body, "draft-key-1");
+        var second = await ops.PostAsync("/v1/invoices", body, "draft-key-1");
+
+        Assert.Equal(201, first.Status);
+        Assert.Equal(201, second.Status);
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(1, await App.WithDbAsync(db => db.Invoices.CountAsync(i => i.CustomerId == customer)));
+    }
+
+    [Fact]
+    public async Task RetriedFinalizationWithTheSameKeyReturnsTheOriginalResponse()
+    {
+        var customer = await Data.CustomerAsync();
+        var (ops, id) = await DraftAsync(customer, (1, 1000));
+
+        var first = await ops.PostAsync($"/v1/invoices/{id}/finalize", idempotencyKey: "finalize-key-1");
+        var retried = await ops.PostAsync($"/v1/invoices/{id}/finalize", idempotencyKey: "finalize-key-1");
+        var withoutKey = await ops.PostAsync($"/v1/invoices/{id}/finalize");
+
+        Assert.Equal(200, first.Status);
+        Assert.Equal(first.Text, retried.Text);
+        Assert.Equal(409, withoutKey.Status);
+    }
+
+    [Fact]
     public async Task FinalizedInvoiceLinesCannotBeChangedThroughTheApi()
     {
         var customer = await Data.CustomerAsync();

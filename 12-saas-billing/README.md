@@ -30,7 +30,7 @@ The `migrate` and `seed` commands must be the first argument after `--`.
 
 Worker loops and their intervals: `billing` (60 s), `payments` (30 s), `refunds` (60 s), `webhook-fanout` (2 s), `webhook-delivery` (2 s), `purge` (daily).
 
-Every request needs `Authorization: Bearer <api key>`. `POST /v1/subscriptions`, `/subscriptions/{id}/change`, `/subscriptions/{id}/cancel`, `/invoices/{id}/credit-notes` and `/customers/{id}/credit-adjustments` also need an `Idempotency-Key` header (8–128 characters).
+Every request needs `Authorization: Bearer <api key>`. `POST /v1/subscriptions`, `/subscriptions/{id}/change`, `/subscriptions/{id}/cancel`, `/invoices/{id}/credit-notes` and `/customers/{id}/credit-adjustments` also need an `Idempotency-Key` header (8–128 characters). `POST /v1/invoices`, `/invoices/{id}/finalize`, `/invoices/{id}/void` and `/invoices/{id}/pay` accept one too; without it they run as before.
 
 Webhook receivers verify `Billing-Signature: t=<unix seconds>,v1=<hex>[,v1=<hex>]`, where `v1` is the lower-case hex HMAC-SHA256 of `"<t>." + raw body`, keyed with the UTF-8 bytes of the endpoint secret (including its `whsec_` prefix).
 

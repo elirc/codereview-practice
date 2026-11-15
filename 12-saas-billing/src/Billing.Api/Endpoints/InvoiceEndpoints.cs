@@ -45,21 +45,33 @@ public static class InvoiceEndpoints
     private static async Task<IResult> Get(Guid id, InvoiceService invoices, CancellationToken ct) =>
         Results.Ok(await invoices.GetAsync(id, ct));
 
-    private static async Task<IResult> Create(CreateInvoiceRequest body, InvoiceService invoices, CancellationToken ct)
+    private static async Task<IResult> Create(
+        CreateInvoiceRequest body,
+        HttpContext http,
+        IdempotentExecutor idempotency,
+        InvoiceService invoices,
+        CancellationToken ct)
     {
-        var invoice = await invoices.CreateDraftAsync(body.CustomerId!.Value, body.Lines!.Select(l => l.ToLine()).ToList(), ct);
+        var customerId = body.CustomerId!.Value;
+        var lines = body.Lines!.Select(l => l.ToLine()).ToList();
+        if (IdempotentExecutor.HasKey(http))
+        {
+            return await idempotency.ExecuteAsync(http, body, StatusCodes.Status201Created, () => invoices.CreateDraftAsync(customerId, lines, ct), ct);
+        }
+
+        var invoice = await invoices.CreateDraftAsync(customerId, lines, ct);
         return Results.Created($"/v1/invoices/{invoice.Id}", invoice);
     }
 
     private static async Task<IResult> ReplaceLines(Guid id, ReplaceInvoiceLinesRequest body, InvoiceService invoices, CancellationToken ct) =>
         Results.Ok(await invoices.ReplaceLinesAsync(id, body.Lines!.Select(l => l.ToLine()).ToList(), ct));
 
-    private static async Task<IResult> FinalizeInvoice(Guid id, InvoiceService invoices, CancellationToken ct) =>
-        Results.Ok(await invoices.FinalizeAsync(id, ct));
+    private static Task<IResult> FinalizeInvoice(Guid id, HttpContext http, IdempotentExecutor idempotency, InvoiceService invoices, CancellationToken ct) =>
+        idempotency.ExecuteOptionalAsync(http, new { id }, StatusCodes.Status200OK, () => invoices.FinalizeAsync(id, ct), ct);
 
-    private static async Task<IResult> VoidInvoice(Guid id, InvoiceService invoices, CancellationToken ct) =>
-        Results.Ok(await invoices.VoidAsync(id, ct));
+    private static Task<IResult> VoidInvoice(Guid id, HttpContext http, IdempotentExecutor idempotency, InvoiceService invoices, CancellationToken ct) =>
+        idempotency.ExecuteOptionalAsync(http, new { id }, StatusCodes.Status200OK, () => invoices.VoidAsync(id, ct), ct);
 
-    private static async Task<IResult> RetryPayment(Guid id, PaymentService payments, CancellationToken ct) =>
-        Results.Ok(await payments.RetryNowAsync(id, ct));
+    private static Task<IResult> RetryPayment(Guid id, HttpContext http, IdempotentExecutor idempotency, PaymentService payments, CancellationToken ct) =>
+        idempotency.ExecuteOptionalAsync(http, new { id }, StatusCodes.Status200OK, () => payments.RetryNowAsync(id, ct), ct);
 }

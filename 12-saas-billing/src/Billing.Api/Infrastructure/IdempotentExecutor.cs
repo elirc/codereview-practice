@@ -18,22 +18,51 @@ public sealed class IdempotentExecutor(BillingDbContext db, TimeProvider clock)
     /// Returns the stored response for a key already used with the same request, or runs the operation in one
     /// transaction with the key's record and stores its success or business-rule response.
     /// </summary>
-    public async Task<IResult> ExecuteAsync<T>(
+    public Task<IResult> ExecuteAsync<T>(
+        HttpContext http,
+        object request,
+        int successStatus,
+        Func<Task<T>> operation,
+        CancellationToken ct) =>
+        RunAsync(http, ReadKey(http), request, successStatus, operation, ct);
+
+    /// <summary>
+    /// Runs the operation as <see cref="ExecuteAsync{T}"/> does when the request carries an <c>Idempotency-Key</c>,
+    /// and runs it directly, answering with <paramref name="successStatus"/>, when it does not.
+    /// </summary>
+    public async Task<IResult> ExecuteOptionalAsync<T>(
         HttpContext http,
         object request,
         int successStatus,
         Func<Task<T>> operation,
         CancellationToken ct)
     {
-        var key = ReadKey(http);
+        if (!HasKey(http))
+        {
+            return Results.Json(await operation(), BillingJson.Options, statusCode: successStatus);
+        }
+
+        return await RunAsync(http, ReadKey(http), request, successStatus, operation, ct);
+    }
+
+    /// <summary>Returns whether the request carries an <c>Idempotency-Key</c> header.</summary>
+    public static bool HasKey(HttpContext http) => http.Request.Headers.ContainsKey(HeaderName);
+
+    private async Task<IResult> RunAsync<T>(
+        HttpContext http,
+        string key,
+        object request,
+        int successStatus,
+        Func<Task<T>> operation,
+        CancellationToken ct)
+    {
         var caller = http.GetCaller();
         var requestHash = Hash(http, request);
 
         for (var attempt = 1; ; attempt++)
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var existing = await db.IdempotencyRecords.AsNoTracking()
-                .SingleOrDefaultAsync(r => r.KeyId == caller.KeyId && r.Key == key, ct);
+            var existing = await FindAsync(key, ct);
             if (existing is not null)
             {
                 return Replay(existing, requestHash);
@@ -78,13 +107,19 @@ public sealed class IdempotentExecutor(BillingDbContext db, TimeProvider clock)
                 body = ErrorEnvelope.Serialize(ex.Code, ex.Message, ex.Details, http.TraceIdentifier);
             }
 
-            await db.IdempotencyRecords
-                .Where(r => r.KeyId == caller.KeyId && r.Key == key)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ResponseStatus, status).SetProperty(r => r.ResponseBody, body), ct);
+            await StoreResponseAsync(key, status, body, ct);
             await transaction.CommitAsync(ct);
             return Results.Content(body, "application/json", Encoding.UTF8, status);
         }
     }
+
+    private Task<IdempotencyRecord?> FindAsync(string key, CancellationToken ct) =>
+        db.IdempotencyRecords.AsNoTracking().FirstOrDefaultAsync(r => r.Key == key, ct);
+
+    private Task<int> StoreResponseAsync(string key, int status, string body, CancellationToken ct) =>
+        db.IdempotencyRecords
+            .Where(r => r.Key == key)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.ResponseStatus, status).SetProperty(r => r.ResponseBody, body), ct);
 
     private static string ReadKey(HttpContext http)
     {
