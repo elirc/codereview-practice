@@ -32,6 +32,30 @@ def test_finance_creates_lists_and_updates_rates(db: Session, client_for: Client
     assert events[1].after == {"rate": "1.09"}
 
 
+def test_rate_quoted_per_unit_of_base_is_stored_inverted(
+    db: Session, client_for: ClientFor
+) -> None:
+    client = client_for(create_user(db, role="finance"))
+
+    created = client.post(
+        "/api/exchange-rates",
+        json={
+            "from_currency": "JPY",
+            "effective_date": "2026-03-01",
+            "rate": "149.25",
+            "inverse": True,
+        },
+    )
+    updated = client.patch(
+        f"/api/exchange-rates/{created.json()['id']}", json={"rate": "160", "inverse": True}
+    )
+
+    assert created.status_code == 201
+    assert created.json()["rate"] == "0.0067001675"
+    assert updated.status_code == 200
+    assert updated.json()["rate"] == "0.00625"
+
+
 def test_admin_may_manage_rates_but_employee_and_manager_may_not(
     db: Session, client_for: ClientFor
 ) -> None:

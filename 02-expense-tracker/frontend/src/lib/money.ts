@@ -1,6 +1,7 @@
 export type ParseResult = { ok: true; minor: number } | { ok: false; error: string };
 
 const AMOUNT_PATTERN = /^(\d+)(?:\.(\d*))?$/;
+const GROUPING_SEPARATOR = /,/g;
 const MAX_SAFE_DIGITS = 15;
 
 function tooManyDecimals(exponent: number): string {
@@ -10,9 +11,9 @@ function tooManyDecimals(exponent: number): string {
   return `Use at most ${exponent} decimal places.`;
 }
 
-/** Parse a user-entered amount such as "12.34" into integer minor units. */
+/** Parse a user-entered amount such as "12.34" or "1,234.50" into integer minor units. */
 export function parseMinor(input: string, exponent: number): ParseResult {
-  const match = AMOUNT_PATTERN.exec(input.trim());
+  const match = AMOUNT_PATTERN.exec(input.trim().replace(GROUPING_SEPARATOR, ""));
   if (!match) {
     return { ok: false, error: "Enter an amount such as 12.34." };
   }

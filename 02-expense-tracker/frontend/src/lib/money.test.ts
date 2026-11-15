@@ -42,8 +42,14 @@ describe("parseMinor", () => {
     expect(parseMinor("1.5001", 3).ok).toBe(false);
   });
 
+  it("accepts thousands separators", () => {
+    expect(parseMinor("1,234.56", 2)).toEqual({ ok: true, minor: 123456 });
+    expect(parseMinor("150,000", 0)).toEqual({ ok: true, minor: 150000 });
+    expect(parseMinor("2,500.750", 3)).toEqual({ ok: true, minor: 2500750 });
+  });
+
   it("rejects malformed and negative input", () => {
-    for (const input of ["", "abc", "-5", "1,000", "1e3", ".5", "1.2.3"]) {
+    for (const input of ["", "abc", "-5", "1e3", ".5", "1.2.3"]) {
       expect(parseMinor(input, 2).ok).toBe(false);
     }
   });

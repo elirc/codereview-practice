@@ -73,6 +73,7 @@ export function RatesPage() {
   const [currency, setCurrency] = useState("");
   const [effective, setEffective] = useState("");
   const [value, setValue] = useState("");
+  const [inverse, setInverse] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   const rates = useQuery({
@@ -85,8 +86,12 @@ export function RatesPage() {
   });
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["rates"] });
   const create = useMutation({
-    mutationFn: (body: { from_currency: string; effective_date: string; rate: string }) =>
-      apiSend("POST", "/exchange-rates", rateSchema, body),
+    mutationFn: (body: {
+      from_currency: string;
+      effective_date: string;
+      rate: string;
+      inverse: boolean;
+    }) => apiSend("POST", "/exchange-rates", rateSchema, body),
     onSuccess: () => {
       setValue("");
       refresh();
@@ -107,7 +112,7 @@ export function RatesPage() {
       return;
     }
     setProblem(null);
-    create.mutate(parsed.data);
+    create.mutate({ ...parsed.data, inverse });
   };
 
   return (
@@ -133,6 +138,10 @@ export function RatesPage() {
         <label>
           Rate
           <input value={value} onChange={(e) => setValue(e.target.value)} />
+        </label>
+        <label>
+          <input type="checkbox" checked={inverse} onChange={(e) => setInverse(e.target.checked)} />
+          Quoted per 1 {me.base_currency}
         </label>
         <button type="submit" disabled={create.isPending}>
           Add rate

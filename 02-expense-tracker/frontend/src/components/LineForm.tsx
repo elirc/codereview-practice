@@ -104,7 +104,12 @@ export function LineForm({
       </label>
       <label>
         Amount
-        <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <input
+          inputMode="decimal"
+          placeholder="1,234.56"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
       </label>
       <label>
         Currency
