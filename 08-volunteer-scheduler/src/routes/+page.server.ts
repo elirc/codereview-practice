@@ -1,7 +1,8 @@
 import { formatDate } from '$lib/domain/time';
 import { isManager, requireUser } from '$lib/server/auth/guard';
 import { attempt, parseForm } from '$lib/server/forms';
-import { shiftIdSchema, signupIdSchema } from '$lib/server/schemas';
+import { cancelSignupSchema, shiftIdSchema } from '$lib/server/schemas';
+import type { RosterEntry } from '$lib/server/services/shifts';
 import {
 	cancelSignup,
 	listUpcoming,
@@ -18,6 +19,7 @@ interface DayGroup {
 		confirmed: number;
 		remaining: number;
 		full: boolean;
+		going: RosterEntry[];
 		mine: { signupId: string; status: string; position: number | null } | null;
 		canCancel: boolean;
 	})[];
@@ -40,11 +42,12 @@ export const load: PageServerLoad = (event) => {
 			confirmed: item.confirmed,
 			remaining: Math.max(0, item.shift.capacity - item.confirmed),
 			full: item.confirmed >= item.shift.capacity,
+			going: item.going,
 			mine: item.mine,
 			canCancel: isManager(user) || now <= item.shift.startsAt - VOLUNTEER_CANCEL_CUTOFF_MS
 		});
 	}
-	return { groups };
+	return { groups, canRemove: isManager(user) };
 };
 
 export const actions: Actions = {
@@ -63,11 +66,14 @@ export const actions: Actions = {
 	},
 	cancel: async (event) => {
 		const user = requireUser(event);
-		const parsed = await parseForm(event, signupIdSchema);
+		const parsed = await parseForm(event, cancelSignupSchema);
 		if (!parsed.ok) return parsed.failure;
+		const { signupId, shiftId } = parsed.data;
 		const result = attempt(event, parsed.values, () =>
-			cancelSignup(event.locals.ctx, parsed.data.signupId, user)
+			cancelSignup(event.locals.ctx, signupId, user, { shiftId })
 		);
-		return result.ok ? { notice: 'Your signup was cancelled.' } : result.failure;
+		if (!result.ok) return result.failure;
+		const own = result.value.signup.userId === user.id;
+		return { notice: own ? 'Your signup was cancelled.' : 'Volunteer removed.' };
 	}
 };

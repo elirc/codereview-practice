@@ -9,6 +9,7 @@ import {
 } from '../../src/lib/server/services/shifts';
 import {
 	cancelSignup,
+	listUpcoming,
 	setAttendance,
 	signUp,
 	type Actor
@@ -257,6 +258,21 @@ describe('waitlist promotion', () => {
 		const waiting = [1, 2, 3].map(() => join(createUser(ctx), target));
 		updateShift(ctx, target.id, input({ capacity: 3 }));
 		expect(waiting.map((s) => statusOf(s.id))).toEqual(['confirmed', 'confirmed', 'waitlisted']);
+	});
+});
+
+describe('upcoming shifts', () => {
+	it('list the confirmed volunteers going on each shift', () => {
+		const target = shift({ capacity: 1 });
+		const ada = createUser(ctx, { name: 'Ada Lovelace' });
+		join(ada, target);
+		join(createUser(ctx), target);
+		const empty = shift({ date: '2026-01-11' });
+
+		const upcoming = listUpcoming(ctx, ada.id);
+		const byShift = new Map(upcoming.map((item) => [item.shift.id, item]));
+		expect(byShift.get(target.id)?.going.map((entry) => entry.name)).toEqual(['Ada Lovelace']);
+		expect(byShift.get(empty.id)?.going).toEqual([]);
 	});
 });
 

@@ -6,6 +6,10 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const notice = $derived(form && 'notice' in form ? form.notice : null);
+
+	function firstName(name: string): string {
+		return name.trim().split(/\s+/)[0] ?? name;
+	}
 </script>
 
 <svelte:head>
@@ -20,7 +24,9 @@
 	<h2>{group.label}</h2>
 	<table>
 		<thead>
-			<tr><th>Time</th><th>Shift</th><th>Location</th><th>Spots left</th><th>You</th></tr>
+			<tr>
+				<th>Time</th><th>Shift</th><th>Location</th><th>Spots left</th><th>Going</th><th>You</th>
+			</tr>
 		</thead>
 		<tbody>
 			{#each group.shifts as shift (shift.id)}
@@ -32,6 +38,26 @@
 					<td>{shift.title}</td>
 					<td>{shift.location}</td>
 					<td>{shift.full ? 'full (waitlist open)' : `${shift.remaining} of ${shift.capacity}`}</td>
+					<td>
+						{#if shift.going.length === 0}
+							<span class="muted">nobody yet</span>
+						{:else}
+							<ul class="going">
+								{#each shift.going as person (person.signupId)}
+									<li>
+										{firstName(person.name)}
+										{#if data.canRemove}
+											<form method="POST" action="?/cancel" class="inline" use:enhance>
+												<input type="hidden" name="signupId" value={person.signupId} />
+												<input type="hidden" name="shiftId" value={shift.id} />
+												<button type="submit" class="link">Remove</button>
+											</form>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</td>
 					<td>
 						{#if shift.mine}
 							{shift.mine.status}

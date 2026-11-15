@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, ne, sql, type SQL } from 'drizzle-orm';
 import { addDays } from '../../domain/dates';
 import { startOfOrgDay } from '../../domain/time';
 import type { AppContext } from '../context';
@@ -8,7 +8,7 @@ import { shifts, signups, users, type Role, type ShiftRow, type SignupRow } from
 import { DomainError, notFound } from '../errors';
 import { enqueueSignupNotice } from '../outbox/enqueue';
 import { horizon } from './series';
-import { confirmedCountSql, getShift } from './shifts';
+import { confirmedCountSql, getShift, rosters, type RosterEntry } from './shifts';
 import {
 	countConfirmed,
 	hasOverlappingConfirmed,
@@ -25,6 +25,11 @@ export interface Actor {
 
 function isManager(actor: Actor): boolean {
 	return actor.role === 'coordinator' || actor.role === 'admin';
+}
+
+function signupScope(actor: Actor, shiftId: string | undefined): SQL | undefined {
+	if (shiftId) return eq(signups.shiftId, shiftId);
+	return isManager(actor) ? undefined : eq(signups.userId, actor.id);
 }
 
 function alreadySignedUp(): DomainError {
@@ -112,11 +117,12 @@ export function cancelSignup(
 ): { signup: SignupRow; changed: boolean } {
 	const now = ctx.now();
 	return ctx.db.transaction((tx) => {
-		const signup = tx.select().from(signups).where(eq(signups.id, signupId)).get();
-		const visible = signup && (isManager(actor) || signup.userId === actor.id);
-		if (!signup || !visible || (options.shiftId && signup.shiftId !== options.shiftId)) {
-			throw notFound('Signup not found.');
-		}
+		const signup = tx
+			.select()
+			.from(signups)
+			.where(and(eq(signups.id, signupId), signupScope(actor, options.shiftId)))
+			.get();
+		if (!signup) throw notFound('Signup not found.');
 		if (signup.status === 'cancelled') return { signup, changed: false };
 
 		const shift = getShift(tx, signup.shiftId);
@@ -202,6 +208,8 @@ function waitlistPositions(tx: Tx, mine: SignupRow[]): Map<string, number> {
 export interface UpcomingShift {
 	shift: ShiftRow;
 	confirmed: number;
+	/** Confirmed volunteers, in roster order. */
+	going: RosterEntry[];
 	mine: { signupId: string; status: 'confirmed' | 'waitlisted'; position: number | null } | null;
 }
 
@@ -238,11 +246,17 @@ export function listUpcoming(ctx: AppContext, userId: string): UpcomingShift[] {
 					.all();
 	const positions = waitlistPositions(ctx.db, mine);
 	const byShift = new Map(mine.map((signup) => [signup.shiftId, signup]));
+	const going = new Map<string, RosterEntry[]>();
+	for (const entry of rosters(ctx.db, ids)) {
+		if (entry.status !== 'confirmed') continue;
+		going.set(entry.shiftId, [...(going.get(entry.shiftId) ?? []), entry]);
+	}
 	return rows.map(({ shift, confirmed }) => {
 		const signup = byShift.get(shift.id);
 		return {
 			shift,
 			confirmed,
+			going: going.get(shift.id) ?? [],
 			mine:
 				signup && signup.status !== 'cancelled'
 					? {

@@ -141,6 +141,7 @@ export const shiftFilterSchema = z.object({
 
 export const shiftIdSchema = z.object({ shiftId: uuidField });
 export const signupIdSchema = z.object({ signupId: uuidField });
+export const cancelSignupSchema = z.object({ signupId: uuidField, shiftId: uuidField.optional() });
 export const emailField = z.string().trim().toLowerCase().email('Enter a valid email address.');
 export const rosterAddSchema = z.object({ email: emailField });
 

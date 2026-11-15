@@ -199,6 +199,7 @@ export function listShifts(ctx: AppContext, filter: ShiftFilter, limit = 500): S
 }
 
 export interface RosterEntry {
+	shiftId: string;
 	signupId: string;
 	userId: string;
 	name: string;
@@ -212,8 +213,15 @@ export interface RosterEntry {
 }
 
 export function roster(tx: Tx, shiftId: string): RosterEntry[] {
+	return rosters(tx, [shiftId]);
+}
+
+/** Roster entries for several shifts, in roster order within each shift. */
+export function rosters(tx: Tx, shiftIds: readonly string[]): RosterEntry[] {
+	if (shiftIds.length === 0) return [];
 	return tx
 		.select({
+			shiftId: signups.shiftId,
 			signupId: signups.id,
 			userId: users.id,
 			name: users.name,
@@ -227,8 +235,9 @@ export function roster(tx: Tx, shiftId: string): RosterEntry[] {
 		})
 		.from(signups)
 		.innerJoin(users, eq(signups.userId, users.id))
-		.where(eq(signups.shiftId, shiftId))
+		.where(inArray(signups.shiftId, [...shiftIds]))
 		.orderBy(
+			asc(signups.shiftId),
 			sql`case ${signups.status} when 'confirmed' then 0 when 'waitlisted' then 1 else 2 end`,
 			asc(signups.waitlistSeq),
 			asc(signups.createdAt),

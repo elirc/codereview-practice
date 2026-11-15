@@ -98,6 +98,19 @@ describe('signups belonging to someone else', () => {
 		const { event } = fakeEvent({ ctx, user: volunteer, form: { signupId: signup.id } });
 		expect(failureOf(await home.actions.cancel(event))).toBeNull();
 	});
+
+	it('can be removed by a coordinator from the home page', async () => {
+		const coordinator = createUser(ctx, { role: 'coordinator' });
+		const signup = signUp(ctx, { userId: volunteer.id, shiftId, actor: volunteer });
+		const { event } = fakeEvent({
+			ctx,
+			user: coordinator,
+			form: { signupId: signup.id, shiftId }
+		});
+		expect(await home.actions.cancel(event)).toEqual({ notice: 'Volunteer removed.' });
+		const stored = ctx.db.select().from(signups).where(eq(signups.id, signup.id)).get();
+		expect(stored?.status).toBe('cancelled');
+	});
 });
 
 describe('volunteer sign-up action', () => {
