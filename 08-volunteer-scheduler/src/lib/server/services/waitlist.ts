@@ -1,7 +1,6 @@
-import { and, asc, eq, gt, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { shifts, signups, type SignupRow } from '../db/schema';
-import { enqueueSignupNotice } from '../outbox/enqueue';
 
 interface ShiftWindow {
 	id: string;
@@ -50,29 +49,30 @@ export function nextWaitlistSeq(tx: Tx, shiftId: string): number {
 
 /**
  * Confirms waitlisted signups in waitlist order while the shift has room,
- * passing over anyone already confirmed on an overlapping shift.
+ * passing over anyone already confirmed on an overlapping shift. Returns
+ * the promoted signups; the caller queues their notices.
  */
-export function promoteWaitlist(
-	tx: Tx,
-	now: number,
-	shift: ShiftWindow & { capacity: number }
-): SignupRow[] {
-	let confirmed = countConfirmed(tx, shift.id);
-	if (confirmed >= shift.capacity) return [];
-	const waiting = tx
+export function promoteWaitlist(tx: Tx, shift: ShiftWindow & { capacity: number }): SignupRow[] {
+	const room = shift.capacity - countConfirmed(tx, shift.id);
+	if (room <= 0) return [];
+	const free = sql`not exists (
+		select 1 from signups other
+		join shifts other_shift on other_shift.id = other.shift_id
+		where other.user_id = ${signups.userId}
+			and other_shift.id <> ${shift.id}
+			and other_shift.status = 'scheduled'
+			and other_shift.starts_at < ${shift.endsAt}
+			and other_shift.ends_at > ${shift.startsAt}
+	)`;
+	const eligible = tx
 		.select()
 		.from(signups)
-		.where(and(eq(signups.shiftId, shift.id), eq(signups.status, 'waitlisted')))
+		.where(and(eq(signups.shiftId, shift.id), eq(signups.status, 'waitlisted'), free))
 		.orderBy(asc(signups.waitlistSeq))
+		.limit(room)
 		.all();
-	const promoted: SignupRow[] = [];
-	for (const signup of waiting) {
-		if (confirmed >= shift.capacity) break;
-		if (hasOverlappingConfirmed(tx, signup.userId, shift)) continue;
-		tx.update(signups).set({ status: 'confirmed' }).where(eq(signups.id, signup.id)).run();
-		enqueueSignupNotice(tx, now, 'waitlist-promoted', signup);
-		promoted.push({ ...signup, status: 'confirmed' });
-		confirmed += 1;
-	}
-	return promoted;
+	if (eligible.length === 0) return [];
+	const ids = eligible.map((signup) => signup.id);
+	tx.update(signups).set({ status: 'confirmed' }).where(inArray(signups.id, ids)).run();
+	return eligible.map((signup): SignupRow => ({ ...signup, status: 'confirmed' }));
 }

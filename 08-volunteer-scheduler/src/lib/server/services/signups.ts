@@ -116,14 +116,14 @@ export function cancelSignup(
 	options: { shiftId?: string } = {}
 ): { signup: SignupRow; changed: boolean } {
 	const now = ctx.now();
-	return ctx.db.transaction((tx) => {
+	const outcome = ctx.db.transaction((tx) => {
 		const signup = tx
 			.select()
 			.from(signups)
 			.where(and(eq(signups.id, signupId), signupScope(actor, options.shiftId)))
 			.get();
 		if (!signup) throw notFound('Signup not found.');
-		if (signup.status === 'cancelled') return { signup, changed: false };
+		if (signup.status === 'cancelled') return { signup, changed: false, promoted: [] };
 
 		const shift = getShift(tx, signup.shiftId);
 		if (!shift) throw notFound('Shift not found.');
@@ -146,11 +146,16 @@ export function cancelSignup(
 		if (actor.id !== signup.userId) {
 			enqueueSignupNotice(tx, now, 'signup-cancelled', signup);
 		}
-		if (signup.status === 'confirmed' && shift.status === 'scheduled') {
-			promoteWaitlist(tx, now, shift);
-		}
-		return { signup: cancelled, changed: true };
+		const promoted =
+			signup.status === 'confirmed' && shift.status === 'scheduled'
+				? promoteWaitlist(tx, shift)
+				: [];
+		return { signup: cancelled, changed: true, promoted };
 	}, IMMEDIATE);
+	for (const signup of outcome.promoted) {
+		enqueueSignupNotice(ctx.db, now, 'waitlist-promoted', signup);
+	}
+	return { signup: outcome.signup, changed: outcome.changed };
 }
 
 /** Records attendance for a confirmed signup once the shift has started. */

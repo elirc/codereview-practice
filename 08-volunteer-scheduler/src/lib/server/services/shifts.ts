@@ -6,7 +6,11 @@ import type { AppContext } from '../context';
 import { IMMEDIATE, type Tx } from '../db/client';
 import { shiftSeries, shifts, signups, users, type ShiftRow } from '../db/schema';
 import { DomainError, notFound } from '../errors';
-import { enqueueShiftCancelled, enqueueShiftChanged } from '../outbox/enqueue';
+import {
+	enqueueShiftCancelled,
+	enqueueShiftChanged,
+	enqueueSignupNotice
+} from '../outbox/enqueue';
 import { promoteWaitlist } from './waitlist';
 
 const MINUTE_MS = 60_000;
@@ -72,7 +76,11 @@ export function applyShiftChanges(
 	if (next.startsAt !== shift.startsAt) {
 		enqueueShiftChanged(tx, now, shift.id, next.startsAt, activeSignupUserIds(tx, shift.id));
 	}
-	if (next.capacity > shift.capacity) promoteWaitlist(tx, now, updated);
+	if (next.capacity > shift.capacity) {
+		for (const signup of promoteWaitlist(tx, updated)) {
+			enqueueSignupNotice(tx, now, 'waitlist-promoted', signup);
+		}
+	}
 	return updated;
 }
 
