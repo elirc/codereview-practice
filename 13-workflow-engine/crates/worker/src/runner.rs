@@ -40,7 +40,7 @@ pub enum RunOutcome {
     Abandoned,
     /// The handler finished but its outcome could not be recorded.
     NotReported,
-    /// The handler stopped because the worker is shutting down; the claim is still held.
+    /// The handler ended after the worker began stopping it; the claim is still held.
     Stopped,
 }
 
@@ -154,11 +154,9 @@ async fn execute(
         cancel: cancel.clone(),
     };
     let mut task = AbortOnDrop(tokio::spawn(async move { handler.run(ctx).await }));
-    match supervise(&env, &claim, job.lease_seconds, &mut task, &cancel, started).await {
-        Supervised::Finished { joined, .. }
-            if claim_ctx.worker_stop.is_cancelled()
-                && matches!(joined, Ok(Err(HandlerError::Cancelled))) =>
-        {
+    let supervised = supervise(&env, &claim, job.lease_seconds, &mut task, &cancel, started).await;
+    match supervised {
+        Supervised::Finished { .. } if claim_ctx.worker_stop.is_cancelled() => {
             tracing::info!("handler stopped for shutdown");
             RunOutcome::Stopped
         }

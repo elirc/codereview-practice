@@ -14,8 +14,9 @@ pub async fn database_now(pool: &PgPool) -> Result<DateTime<Utc>, StoreError> {
     Ok(now)
 }
 
-/// Measures the database clock's offset from `clock`'s local clock, applies it, and returns
-/// it in milliseconds. Offsets larger than `warn_ms` are logged.
+/// Measures the database clock's offset from `clock`'s local clock and returns it in
+/// milliseconds. The clock takes the measured offset when it differs from the offset in use by
+/// more than `warn_ms`; such a change is logged.
 pub async fn sync_clock(
     pool: &PgPool,
     clock: &SyncedClock,
@@ -25,9 +26,15 @@ pub async fn sync_clock(
     let remote = database_now(pool).await?;
     let received = clock.local_now();
     let offset_ms = estimate_offset_ms(sent, remote, received);
-    clock.set_offset_ms(offset_ms);
-    if offset_ms.abs() > warn_ms {
-        tracing::warn!(offset_ms, warn_ms, "local clock differs from the database clock");
+    let current_ms = clock.offset_ms();
+    if (offset_ms - current_ms).abs() > warn_ms {
+        clock.set_offset_ms(offset_ms);
+        tracing::warn!(
+            offset_ms,
+            previous_ms = current_ms,
+            warn_ms,
+            "local clock differs from the database clock; offset updated"
+        );
     } else {
         tracing::debug!(offset_ms, "clock synchronised with the database");
     }

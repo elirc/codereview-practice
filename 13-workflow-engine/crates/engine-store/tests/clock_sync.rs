@@ -54,3 +54,14 @@ async fn a_fast_worker_clock_does_not_shorten_leases(pool: PgPool) {
         .await
         .unwrap();
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn resyncing_keeps_a_slow_clock_aligned(pool: PgPool) {
+    let db_now = database_now(&pool).await.unwrap();
+    let slow_local = Arc::new(FixedClock::new(db_now - Duration::minutes(3)));
+    let synced = SyncedClock::new(slow_local);
+    let first = sync_clock(&pool, &synced, 5_000).await.unwrap();
+    assert!(first > 170_000);
+    sync_clock(&pool, &synced, 5_000).await.unwrap();
+    assert!(close(synced.now(), database_now(&pool).await.unwrap()));
+}

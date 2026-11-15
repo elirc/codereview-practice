@@ -8,7 +8,7 @@ use std::time::Duration;
 use engine_store::claim::ClaimRef;
 use engine_store::StoreError;
 use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
+use tokio::task::{JoinError, JoinSet};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -28,6 +28,25 @@ pub struct WorkerSettings {
 }
 
 type Held = Arc<Mutex<HashMap<Uuid, ClaimRef>>>;
+
+/// What became of the jobs that were running when the worker began to stop.
+#[derive(Debug, Default)]
+struct DrainSummary {
+    reported: usize,
+    stopped: usize,
+    unreported: usize,
+    released: usize,
+}
+
+impl DrainSummary {
+    fn record(&mut self, joined: Result<RunOutcome, JoinError>) {
+        match joined {
+            Ok(RunOutcome::Reported(_)) => self.reported += 1,
+            Ok(RunOutcome::Stopped) => self.stopped += 1,
+            Ok(RunOutcome::Abandoned | RunOutcome::NotReported) | Err(_) => self.unreported += 1,
+        }
+    }
+}
 
 fn lock(held: &Held) -> MutexGuard<'_, HashMap<Uuid, ClaimRef>> {
     held.lock().unwrap_or_else(|p| p.into_inner())
@@ -141,44 +160,63 @@ impl Worker {
 
     async fn drain(&self, mut tasks: JoinSet<RunOutcome>) {
         tracing::info!(running = tasks.len(), "claiming stopped");
-        let finished = tokio::time::timeout(self.settings.shutdown_grace, join_all(&mut tasks))
+        let mut summary = DrainSummary::default();
+        let grace = self.settings.shutdown_grace;
+        let finished = tokio::time::timeout(grace, join_all(&mut tasks, &mut summary))
             .await
             .is_ok();
         if !finished {
             tracing::warn!(running = tasks.len(), "grace period over; cancelling running jobs");
             self.hard_stop.cancel();
-            if tokio::time::timeout(CANCEL_WAIT, join_all(&mut tasks))
+            if tokio::time::timeout(CANCEL_WAIT, join_all(&mut tasks, &mut summary))
                 .await
                 .is_err()
             {
                 tracing::warn!(running = tasks.len(), "jobs did not stop; releasing their claims");
                 tasks.abort_all();
-                join_all(&mut tasks).await;
+                join_all(&mut tasks, &mut summary).await;
             }
         }
         let remaining: Vec<ClaimRef> = lock(&self.held).drain().map(|(_, c)| c).collect();
         for claim in remaining {
-            self.release(&claim).await;
+            if self.release(&claim).await {
+                summary.released += 1;
+            }
         }
+        tracing::info!(
+            reported = summary.reported,
+            stopped = summary.stopped,
+            unreported = summary.unreported,
+            released = summary.released,
+            "running jobs drained"
+        );
     }
 
-    async fn release(&self, claim: &ClaimRef) {
+    /// Releases a claim and returns whether it was released.
+    async fn release(&self, claim: &ClaimRef) -> bool {
         match self.env.store.release(claim, self.env.clock.now()).await {
-            Ok(state) => tracing::info!(
-                job_id = %claim.job_id,
-                state = state.as_str(),
-                "claim released"
-            ),
+            Ok(state) => {
+                tracing::info!(
+                    job_id = %claim.job_id,
+                    state = state.as_str(),
+                    "claim released"
+                );
+                true
+            }
             Err(StoreError::LeaseLost) => {
-                tracing::warn!(job_id = %claim.job_id, "claim no longer held; not released")
+                tracing::warn!(job_id = %claim.job_id, "claim no longer held; not released");
+                false
             }
             Err(err) => {
-                tracing::error!(job_id = %claim.job_id, error = %err, "could not release claim")
+                tracing::error!(job_id = %claim.job_id, error = %err, "could not release claim");
+                false
             }
         }
     }
 }
 
-async fn join_all(tasks: &mut JoinSet<RunOutcome>) {
-    while tasks.join_next().await.is_some() {}
+async fn join_all(tasks: &mut JoinSet<RunOutcome>, summary: &mut DrainSummary) {
+    while let Some(joined) = tasks.join_next().await {
+        summary.record(joined);
+    }
 }
