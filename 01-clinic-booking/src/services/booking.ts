@@ -2,7 +2,7 @@ import type { Appointment } from "@prisma/client";
 import type { DateTime } from "luxon";
 import { checkBookingWindow, type BookingWindowViolation } from "@/domain/policies";
 import { planReminders } from "@/domain/reminders";
-import { findSlot } from "@/domain/slots";
+import { findSlot, type Slot } from "@/domain/slots";
 import { localDateOf, localDayRange } from "@/domain/time";
 import { isClinicStaff, type Actor } from "@/server/auth/actor";
 import { db, LOCKING_TX_OPTIONS, type DbClient } from "@/server/db";
@@ -36,23 +36,26 @@ export async function lockPatient(tx: DbClient, patientId: string): Promise<void
   if (rows.length === 0) throw notFound("Patient");
 }
 
-export interface InsertBookingArgs {
+export interface BookingCheckArgs {
   actor: Actor;
   patientId: string;
   providerId: string;
   startsAt: DateTime;
-  reason: string | null;
-  idempotencyKey: string | null;
-  rescheduledFromId: string | null;
   /** When set, the provider must belong to this clinic. */
   clinicId: string | null;
   now: DateTime;
 }
 
-/** Validates a requested slot and inserts the appointment and its reminders. */
-export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Promise<Appointment> {
+export interface InsertBookingArgs extends BookingCheckArgs {
+  reason: string | null;
+  idempotencyKey: string | null;
+  rescheduledFromId: string | null;
+}
+
+/** Checks that the patient may book the requested start and returns the slot it falls on. */
+export async function validateBooking(client: DbClient, args: BookingCheckArgs): Promise<Slot> {
   const { actor, now } = args;
-  const provider = await tx.provider.findUnique({
+  const provider = await client.provider.findUnique({
     where: { id: args.providerId },
     include: { clinic: true },
   });
@@ -68,7 +71,7 @@ export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Prom
   const { clinic } = provider;
   const zone = clinic.timezone;
   const date = localDateOf(args.startsAt, zone);
-  const schedule = await loadSchedule(tx, provider.id, date, date);
+  const schedule = await loadSchedule(client, provider.id, date, date);
   const slot = findSlot(scheduleSlots(schedule, date, zone), args.startsAt);
   if (!slot) {
     throw new AppError("not_a_slot", "The requested time is not a slot for this provider.");
@@ -84,7 +87,7 @@ export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Prom
   if (violation) throw new AppError(violation, WINDOW_MESSAGES[violation]);
 
   const day = localDayRange(date, zone);
-  const sameDay = await tx.appointment.count({
+  const sameDay = await client.appointment.count({
     where: {
       patientId: args.patientId,
       providerId: provider.id,
@@ -98,11 +101,19 @@ export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Prom
       "The patient already has an appointment with this provider on that day.",
     );
   }
+  return slot;
+}
 
+async function writeBooking(
+  tx: DbClient,
+  args: InsertBookingArgs,
+  slot: Slot,
+): Promise<Appointment> {
+  const { actor, now } = args;
   const appointment = await tx.appointment
     .create({
       data: {
-        providerId: provider.id,
+        providerId: args.providerId,
         patientId: args.patientId,
         startsAt: slot.startsAt.toJSDate(),
         endsAt: slot.endsAt.toJSDate(),
@@ -127,6 +138,12 @@ export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Prom
     });
   }
   return appointment;
+}
+
+/** Validates a requested slot and inserts the appointment and its reminders. */
+export async function insertBooking(tx: DbClient, args: InsertBookingArgs): Promise<Appointment> {
+  const slot = await validateBooking(tx, args);
+  return writeBooking(tx, args, slot);
 }
 
 function overlapError(err: unknown): unknown {
@@ -175,6 +192,23 @@ function replayOf(existing: Appointment, request: BookingRequest): string {
   return existing.id;
 }
 
+/** Runs the booking checks for a request without booking it; returns the slot it would take. */
+export async function checkBooking(
+  actor: Actor,
+  request: BookingRequest,
+  now: DateTime,
+): Promise<Slot> {
+  const patientId = resolvePatientId(actor, request.patientId);
+  return validateBooking(db, {
+    actor,
+    patientId,
+    providerId: request.providerId,
+    startsAt: request.startsAt,
+    clinicId: null,
+    now,
+  });
+}
+
 export async function bookAppointment(
   actor: Actor,
   request: BookingRequest,
@@ -182,6 +216,17 @@ export async function bookAppointment(
 ): Promise<BookingResult> {
   const patientId = resolvePatientId(actor, request.patientId);
   const key = request.idempotencyKey ?? null;
+  const args: InsertBookingArgs = {
+    actor,
+    patientId,
+    providerId: request.providerId,
+    startsAt: request.startsAt,
+    reason: request.reason ?? null,
+    idempotencyKey: key,
+    rescheduledFromId: null,
+    clinicId: null,
+    now,
+  };
 
   const replay = async (client: DbClient) => {
     if (!key) return null;
@@ -194,21 +239,12 @@ export async function bookAppointment(
 
   let outcome: { id: string; replayed: boolean };
   try {
+    const slot = await validateBooking(db, args);
     outcome = await db.$transaction(async (tx) => {
       await lockPatient(tx, patientId);
       const concurrent = await replay(tx);
       if (concurrent) return { id: concurrent, replayed: true };
-      const appointment = await insertBooking(tx, {
-        actor,
-        patientId,
-        providerId: request.providerId,
-        startsAt: request.startsAt,
-        reason: request.reason ?? null,
-        idempotencyKey: key,
-        rescheduledFromId: null,
-        clinicId: null,
-        now,
-      });
+      const appointment = await writeBooking(tx, args, slot);
       return { id: appointment.id, replayed: false };
     }, LOCKING_TX_OPTIONS);
   } catch (err) {

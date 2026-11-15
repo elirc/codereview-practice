@@ -14,11 +14,20 @@ interface Props {
 
 export function SlotButton({ providerId, startsAt, label, rescheduleId }: Props) {
   const router = useRouter();
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function choose() {
+    setError(null);
+    if (!rescheduleId) {
+      setPending(true);
+      const check = await apiRequest("/api/appointments/check", { body: { providerId, startsAt } });
+      setPending(false);
+      if (!check.ok) {
+        setError(describeError(check.error));
+        return;
+      }
+    }
     const verb = rescheduleId ? "Move your appointment to" : "Book";
     if (!window.confirm(`${verb} ${label}?`)) return;
     setPending(true);
@@ -28,7 +37,7 @@ export function SlotButton({ providerId, startsAt, label, rescheduleId }: Props)
         })
       : await apiRequest("/api/appointments", {
           body: { providerId, startsAt },
-          headers: { "Idempotency-Key": idempotencyKey },
+          headers: { "Idempotency-Key": `${providerId}:${startsAt}` },
         });
     setPending(false);
     if (!result.ok) {

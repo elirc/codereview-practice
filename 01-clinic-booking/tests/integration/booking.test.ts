@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POST as checkAppointment } from "@/app/api/appointments/check/route";
 import { POST as createAppointment } from "@/app/api/appointments/route";
 import { db } from "@/server/db";
 import {
@@ -257,5 +258,39 @@ describe("idempotent booking", () => {
       { "idempotency-key": "k".repeat(65) },
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("booking pre-check", () => {
+  function check(token: string, body: Record<string, unknown>) {
+    return call(checkAppointment, { method: "POST", path: `${APPOINTMENTS}/check`, token, body });
+  }
+
+  it("returns the slot a request would take without booking it", async () => {
+    const { provider, patient } = await scenario();
+    const res = await check(patient.token, {
+      providerId: provider.providerId,
+      startsAt: "2026-07-06T09:00:00-04:00",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.slot).toEqual({
+      startsAt: "2026-07-06T13:00:00.000Z",
+      endsAt: "2026-07-06T13:30:00.000Z",
+    });
+    expect(await db.appointment.count()).toBe(0);
+  });
+
+  it("reports the same errors as booking", async () => {
+    const { provider, patient } = await scenario();
+    const providerId = provider.providerId;
+    await book(patient.token, { providerId, startsAt: "2026-07-06T13:00:00Z" });
+
+    const sameDay = await check(patient.token, { providerId, startsAt: "2026-07-06T14:00:00Z" });
+    expect(sameDay.status).toBe(422);
+    expect(sameDay.body.error.code).toBe("daily_limit");
+
+    const offGrid = await check(patient.token, { providerId, startsAt: "2026-07-07T13:10:00Z" });
+    expect(offGrid.body.error.code).toBe("not_a_slot");
   });
 });
