@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from app.schemas.common import OutModel
+from app.schemas.common import OutModel, VersionedAction
 
 
 class ReceiptOut(OutModel):
@@ -11,3 +11,7 @@ class ReceiptOut(OutModel):
     size_bytes: int
     sha256: str
     created_at: datetime
+
+
+class LineReceiptIn(VersionedAction):
+    receipt_id: uuid.UUID | None

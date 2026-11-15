@@ -217,3 +217,46 @@ def test_receipt_can_be_detached_and_moved(db: Session, client_for: ClientFor) -
     assert next(line for line in moved["lines"] if line["id"] == line_id)["receipt"] is None
     other = next(line for line in moved["lines"] if line["description"] == "Other")
     assert other["receipt"]["id"] == receipt["id"]
+
+
+def test_line_receipt_downloads_for_report_viewers(db: Session, client_for: ClientFor) -> None:
+    owner_client = client_for(create_user(db))
+    receipt = upload(owner_client, "hotel.pdf", PDF).json()
+    report = add_line(owner_client, new_report(owner_client), receipt_id=receipt["id"])
+    url = f"/api/reports/{report['id']}/lines/{report['lines'][0]['id']}/receipt"
+
+    mine = owner_client.get(url)
+    finance = client_for(create_user(db, role="finance")).get(url)
+    stranger = client_for(create_user(db)).get(url)
+
+    assert mine.status_code == 200
+    assert mine.content == PDF
+    assert mine.headers["content-disposition"].startswith("attachment;")
+    assert finance.status_code == 200
+    assert stranger.status_code == 404
+
+
+def test_receipt_can_be_replaced_and_removed_from_the_line(
+    db: Session, client_for: ClientFor
+) -> None:
+    client = client_for(create_user(db))
+    first = upload(client, "first.pdf", PDF).json()
+    second = upload(client, "second.png", PNG).json()
+    report = add_line(client, new_report(client), receipt_id=first["id"])
+    url = f"/api/reports/{report['id']}/lines/{report['lines'][0]['id']}/receipt"
+
+    replaced = client.put(
+        url, json={"expected_version": report["version"], "receipt_id": second["id"]}
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["lines"][0]["receipt"]["id"] == second["id"]
+    assert replaced.json()["version"] == report["version"] + 1
+
+    removed = client.put(
+        url, json={"expected_version": replaced.json()["version"], "receipt_id": None}
+    )
+    assert removed.status_code == 200
+    assert removed.json()["lines"][0]["receipt"] is None
+
+    actions = db.scalars(select(AuditEvent.action).order_by(AuditEvent.id)).all()
+    assert actions[-3:] == ["line.updated", "receipt.attached", "line.updated"]

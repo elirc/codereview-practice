@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { useMoney } from "../api/currencies";
-import { useReport } from "../api/reports";
+import { lineReceiptUrl, useReport } from "../api/reports";
 import { useMe } from "../auth/AuthProvider";
 import { AuditTrail } from "../components/AuditTrail";
 import { ErrorMessage } from "../components/ErrorMessage";
@@ -74,7 +74,7 @@ export function ReportDetailPage() {
               <td>{money.format(line.base_amount_minor ?? line.estimated_base_minor, base)}</td>
               <td>
                 {line.receipt ? (
-                  <a href={`/api/receipts/${line.receipt.id}/content`}>
+                  <a href={lineReceiptUrl(current.id, line.id)}>
                     {line.receipt.original_filename || "receipt"}
                   </a>
                 ) : (

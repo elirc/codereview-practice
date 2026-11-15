@@ -3,10 +3,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 
-from app.api.deps import Ctx, Page
+from app.api.deps import Ctx, Page, Storage
+from app.api.receipts import receipt_response
 from app.api.validators import ensure_expense_date_allowed, ensure_known_currency
 from app.domain.enums import ReportStatus
 from app.schemas.common import Paginated
+from app.schemas.receipts import LineReceiptIn
 from app.schemas.reports import (
     LineCreate,
     LineUpdate,
@@ -16,6 +18,7 @@ from app.schemas.reports import (
     ReportSummaryOut,
     ReportUpdate,
 )
+from app.services import receipts as receipts_service
 from app.services import report_views
 from app.services import reports as reports_service
 
@@ -90,4 +93,26 @@ def remove_line(
     expected_version: Annotated[int, Query()],
 ) -> ReportDetailOut:
     reports_service.remove_line(ctx, report_id, line_id, expected_version)
+    return report_views.report_detail(ctx, report_id)
+
+
+@router.get("/{report_id}/lines/{line_id}/receipt")
+def download_line_receipt(
+    ctx: Ctx, storage: Storage, report_id: uuid.UUID, line_id: uuid.UUID
+) -> Response:
+    receipt = receipts_service.line_receipt(ctx, report_id, line_id)
+    return receipt_response(storage, receipt)
+
+
+@router.put("/{report_id}/lines/{line_id}/receipt")
+def set_line_receipt(
+    ctx: Ctx, report_id: uuid.UUID, line_id: uuid.UUID, body: LineReceiptIn
+) -> ReportDetailOut:
+    receipts_service.set_line_receipt(
+        ctx,
+        report_id,
+        line_id,
+        receipt_id=body.receipt_id,
+        expected_version=body.expected_version,
+    )
     return report_views.report_detail(ctx, report_id)

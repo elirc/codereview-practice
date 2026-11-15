@@ -4,7 +4,13 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, apiSend, apiSendNoContent, query } from "../api/client";
 import { useMoney } from "../api/currencies";
-import { postReport, uploadReceipt, useReport, useReportAction } from "../api/reports";
+import {
+  lineReceiptUrl,
+  postReport,
+  uploadReceipt,
+  useReport,
+  useReportAction,
+} from "../api/reports";
 import { reportDetailSchema, type Line, type ReportDetail } from "../api/schemas";
 import { useMe } from "../auth/AuthProvider";
 import { ActionError } from "../components/ActionError";
@@ -76,18 +82,22 @@ export function ReportEditorPage() {
     action.mutate(() => apiSend("DELETE", path, reportDetailSchema));
   };
 
+  const setReceipt = (line: Line, receiptId: string | null) =>
+    apiSend("PUT", `${linePath(line)}/receipt`, reportDetailSchema, {
+      expected_version: current.version,
+      receipt_id: receiptId,
+    });
+
   const attachReceipt = (line: Line, event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
-    action.mutate(async () => {
-      const receipt = await uploadReceipt(file);
-      return apiSend("PATCH", linePath(line), reportDetailSchema, {
-        expected_version: current.version,
-        receipt_id: receipt.id,
-      });
-    });
+    action.mutate(async () => setReceipt(line, (await uploadReceipt(file)).id));
+  };
+
+  const detachReceipt = (line: Line) => {
+    action.mutate(() => setReceipt(line, null));
   };
 
   const rename = (event: FormEvent) => {
@@ -149,9 +159,18 @@ export function ReportEditorPage() {
               <td>{money.format(line.estimated_base_minor, current.base_currency)}</td>
               <td>
                 {line.receipt ? (
-                  <a href={`/api/receipts/${line.receipt.id}/content`}>
-                    {line.receipt.original_filename || "receipt"}
-                  </a>
+                  <>
+                    <a href={lineReceiptUrl(id, line.id)}>
+                      {line.receipt.original_filename || "receipt"}
+                    </a>
+                    <button
+                      type="button"
+                      disabled={action.isPending}
+                      onClick={() => detachReceipt(line)}
+                    >
+                      Remove receipt
+                    </button>
+                  </>
                 ) : (
                   <label>
                     {line.needs_receipt ? "Required" : "Optional"}

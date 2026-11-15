@@ -45,3 +45,7 @@ export function uploadReceipt(file: File) {
   form.append("file", file);
   return apiSend("POST", "/receipts", receiptSchema, form);
 }
+
+export function lineReceiptUrl(reportId: string, lineId: string): string {
+  return `/api/reports/${reportId}/lines/${lineId}/receipt`;
+}
