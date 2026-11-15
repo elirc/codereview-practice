@@ -29,7 +29,7 @@ module Checkout
         end
 
         verify_hold!(tier)
-        promo_codes = lock_promo_codes
+        promo_codes = @hold.promo_codes.order(:id).to_a
         Promos::Validation.new(hold: @hold, user: @user, now: @now).verify!(promo_codes)
         quote = Pricing::Quote.call(@hold, promo_codes)
         charge = collect_payment(quote.total_cents)
@@ -59,10 +59,6 @@ module Checkout
         raise DomainError.new(:event_cancelled) if tier.event.cancelled?
       end
 
-      def lock_promo_codes
-        PromoCode.where(id: @hold.hold_promos.select(:promo_code_id)).order(:id).lock.to_a
-      end
-
       def collect_payment(total_cents)
         return nil unless total_cents.positive?
 
@@ -90,9 +86,14 @@ module Checkout
       end
 
       def redeem(order, quote)
+        codes = PromoCode.where(id: quote.lines.map { |line| line.promo_code.id }).order(:id).lock.index_by(&:id)
+
         quote.lines.each do |line|
-          order.promo_redemptions.create!(promo_code: line.promo_code, user: @user, amount_cents: line.amount_cents)
-          line.promo_code.increment!(:redemptions_count)
+          code = codes.fetch(line.promo_code.id)
+          raise DomainError.new(:promo_exhausted, details: { promo_code: code.code }) if code.exhausted?
+
+          order.promo_redemptions.create!(promo_code: code, user: @user, amount_cents: line.amount_cents)
+          code.increment!(:redemptions_count)
         end
       end
   end

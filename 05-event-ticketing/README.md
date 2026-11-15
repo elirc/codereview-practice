@@ -79,7 +79,7 @@ Logs are one JSON object per line and include the request id (taken from `X-Requ
 |---|---|
 | Capacity counters and locking | `app/models/ticket_tier.rb`, `app/services/holds/create.rb`, `app/services/holds/closing.rb`, `db/migrate/20261114090400_create_ticket_tiers.rb` |
 | Hold replacement and per-event cap | `app/services/holds/create.rb`, `app/services/holds/event_allowance.rb` |
-| Expiry by time, jobs and sweep | `app/models/hold.rb`, `app/services/holds/expire.rb`, `app/jobs/expire_hold_job.rb`, `app/jobs/sweep_expired_holds_job.rb` |
+| Expiry by time, jobs and sweep | `app/models/hold.rb`, `app/services/holds/expire.rb`, `app/services/holds/expire_batch.rb`, `app/jobs/expire_hold_job.rb`, `app/jobs/sweep_expired_holds_job.rb` |
 | Checkout, payment and voiding | `app/services/checkout/complete.rb`, `app/services/payment_gateway.rb`, `app/services/fake_gateway.rb` |
 | Promo validity, stacking and pricing | `app/services/promos/validation.rb`, `app/services/promos/apply.rb`, `app/services/pricing/quote.rb`, `app/models/promo_code.rb` |
 | Waitlist ordering and promotion | `app/services/waitlist/promote.rb`, `app/services/waitlist/join.rb`, `app/services/waitlist/leave.rb`, `app/jobs/promote_waitlist_job.rb`, `app/jobs/sweep_waitlist_job.rb` |

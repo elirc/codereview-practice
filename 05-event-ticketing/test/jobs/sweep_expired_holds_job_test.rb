@@ -30,4 +30,24 @@ class SweepExpiredHoldsJobTest < ActiveJob::TestCase
 
     assert_equal 0, @tier.reload.held_count
   end
+
+  test "expired offers close their entries and the tier is promoted once" do
+    place_hold(users(:other_customer), @tier, 2)
+    place_hold(users(:organizer), @tier, 3)
+    filler, = fill_tier(@tier, 5)
+    entry = join_waitlist(users(:customer), @tier, 2)
+    Holds::Release.call(filler)
+    offer = Waitlist::Promote.call(@tier, now: NOW).sole
+
+    assert_enqueued_jobs 1, only: PromoteWaitlistJob do
+      travel_to NOW + 31.minutes do
+        SweepExpiredHoldsJob.perform_now
+      end
+    end
+
+    assert offer.reload.expired?
+    assert entry.reload.expired?
+    assert_equal 0, Hold.active.where(ticket_tier: @tier).count
+    assert_equal 0, @tier.reload.held_count
+  end
 end

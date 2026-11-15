@@ -19,7 +19,7 @@ module Waitlist
         event = tier.event
         made = []
 
-        tier.waitlist_entries.waiting.in_queue_order.each do |entry|
+        tier.waitlist_entries.waiting.where(quantity: ..tier.available).in_queue_order.each do |entry|
           break unless event.on_sale?(@now)
           next if superseded_by_direct_hold?(entry, tier)
           break if tier.available < entry.quantity

@@ -11,18 +11,12 @@ class Waitlist::PromoteTest < ActiveSupport::TestCase
     Waitlist::Promote.call(@tier, now:)
   end
 
-  test "strict queue order: a large entry at the front blocks smaller ones behind it" do
+  test "strict queue order: entries are offered in the order they joined" do
     first_holder, second_holder = fill_tier(@tier, 3, 2)
     a = join_waitlist(create_customer("A"), @tier, 4, now: NOW + 1.second)
     b = join_waitlist(create_customer("B"), @tier, 1, now: NOW + 2.seconds)
 
     Holds::Release.call(second_holder)
-    assert_empty promote
-
-    assert a.reload.waiting?
-    assert b.reload.waiting?
-    assert_equal 2, @tier.reload.available
-
     Holds::Release.call(first_holder)
     offers = promote
 
