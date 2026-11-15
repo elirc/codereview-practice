@@ -121,19 +121,24 @@ func DecideLateFee(terms FeeTerms, entries []Entry, period string, asOf calendar
 // LateFeesDue returns the fees to post as of asOf, oldest period first.
 // Each fee is added to the working ledger before later periods are
 // decided, as it would be had the job run on every day, so the caller must
-// post them in the returned order.
+// post them in the returned order. Periods up to the latest one that
+// already has a fee were decided by earlier runs and are not evaluated.
 func LateFeesDue(terms FeeTerms, entries []Entry, asOf calendar.Date) []FeeDecision {
 	working := append([]Entry(nil), entries...)
 	sort.Slice(working, func(i, j int) bool { return entryBefore(working[i], working[j]) })
 	nextID := int64(1)
+	assessed := ""
 	for _, e := range working {
 		nextID = max(nextID, e.ID+1)
+		if e.Kind == KindLateFee && e.Period > assessed {
+			assessed = e.Period
+		}
 	}
 
 	var periods []string
 	seen := make(map[string]bool)
 	for _, e := range working {
-		if e.Kind == KindRent && !seen[e.Period] {
+		if e.Kind == KindRent && e.Period > assessed && !seen[e.Period] {
 			seen[e.Period] = true
 			periods = append(periods, e.Period)
 		}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -47,6 +48,10 @@ var (
 // leaseTimeout bounds the work on one lease, which continues after the run
 // is cancelled so that the lease's transaction completes.
 const leaseTimeout = 30 * time.Second
+
+// leaseWorkers is how many leases a run processes at once. Each worker
+// holds at most one pool connection, for its lease's transaction.
+const leaseWorkers = 4
 
 type definition struct {
 	lockKey int64
@@ -184,7 +189,7 @@ func (r *Runner) execute(ctx context.Context, job string, def definition, asOf c
 	log := r.log.With("job", job, "job_run_id", store.FormatUUID(run.ID), "attempt", previous+1, "as_of", asOf.String())
 	log.Info("job started")
 
-	ids, err := q.ListBillableLeaseIDs(ctx)
+	leases, err := q.ListBillableLeases(ctx)
 	if err != nil {
 		res.Status = StatusFailed
 		res.Errors = []LeaseError{{Error: "listing leases failed"}}
@@ -192,22 +197,41 @@ func (r *Runner) execute(ctx context.Context, job string, def definition, asOf c
 		return res, errors.Join(fmt.Errorf("listing leases: %w", err), r.finish(ctx, q, &res))
 	}
 
+	work := make(chan db.Lease)
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	for i := 0; i < leaseWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for l := range work {
+				n, err := r.processLease(ctx, def, l, asOf)
+				if err != nil {
+					leaseID := store.FormatUUID(l.ID)
+					mu.Lock()
+					res.Errors = append(res.Errors, LeaseError{LeaseID: leaseID, Error: err.Error()})
+					mu.Unlock()
+					log.Error("lease failed", "lease_id", leaseID, "error", err)
+					continue
+				}
+				res.EntriesPosted += n
+			}
+		}()
+	}
+
 	interrupted := false
-	for _, id := range ids {
+	for _, l := range leases {
 		if ctx.Err() != nil {
 			interrupted = true
 			break
 		}
 		res.LeasesProcessed++
-		n, err := r.processLease(ctx, def, id, asOf)
-		if err != nil {
-			leaseID := store.FormatUUID(id)
-			res.Errors = append(res.Errors, LeaseError{LeaseID: leaseID, Error: err.Error()})
-			log.Error("lease failed", "lease_id", leaseID, "error", err)
-			continue
-		}
-		res.EntriesPosted += n
+		work <- l
 	}
+	close(work)
+	wg.Wait()
 
 	res.Status = StatusOK
 	if interrupted || len(res.Errors) > 0 {
@@ -226,16 +250,13 @@ func (r *Runner) execute(ctx context.Context, job string, def definition, asOf c
 	return res, nil
 }
 
-func (r *Runner) processLease(ctx context.Context, def definition, id pgtype.UUID, asOf calendar.Date) (int, error) {
+func (r *Runner) processLease(ctx context.Context, def definition, l db.Lease, asOf calendar.Date) (int, error) {
 	txCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), leaseTimeout)
 	defer cancel()
 
 	posted := 0
 	err := store.WithTx(txCtx, r.pool, func(q *db.Queries) error {
-		l, err := ledger.LockLease(txCtx, q, id)
-		if err != nil {
-			return err
-		}
+		var err error
 		posted, err = def.process(txCtx, q, l, asOf)
 		return err
 	})

@@ -191,26 +191,45 @@ func (q *Queries) ListLeases(ctx context.Context) ([]ListLeasesRow, error) {
 	return items, nil
 }
 
-const listBillableLeaseIDs = `-- name: ListBillableLeaseIDs :many
-SELECT id
+const listBillableLeases = `-- name: ListBillableLeases :many
+SELECT id, unit_id, status, start_date, end_date, rent_cents, due_day, grace_days,
+    late_fee_kind, late_fee_flat_cents, late_fee_bps, late_fee_cap_cents, deposit_cents,
+    activated_at, ended_at, created_at
 FROM leases
 WHERE status IN ('active', 'ended')
 ORDER BY id
 `
 
-func (q *Queries) ListBillableLeaseIDs(ctx context.Context) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listBillableLeaseIDs)
+func (q *Queries) ListBillableLeases(ctx context.Context) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, listBillableLeases)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []pgtype.UUID
+	var items []Lease
 	for rows.Next() {
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i Lease
+		if err := rows.Scan(
+			&i.ID,
+			&i.UnitID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentCents,
+			&i.DueDay,
+			&i.GraceDays,
+			&i.LateFeeKind,
+			&i.LateFeeFlatCents,
+			&i.LateFeeBps,
+			&i.LateFeeCapCents,
+			&i.DepositCents,
+			&i.ActivatedAt,
+			&i.EndedAt,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

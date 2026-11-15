@@ -95,6 +95,29 @@ func TestPostRentCatchesUpAndRerunPostsNothing(t *testing.T) {
 	}
 }
 
+func TestRunProcessesEveryBillableLease(t *testing.T) {
+	f := testdb.New(t)
+	r := runnerAt(f, testdb.ClockAt(t, today))
+	var leases []db.Lease
+	for i := 0; i < 9; i++ {
+		leases = append(leases, f.ActiveLease(testdb.LeaseOptions{Start: "2026-02-01"}))
+	}
+	draft := f.DraftLease(testdb.LeaseOptions{Start: "2026-02-01"})
+
+	res := run(t, r, jobs.PostRent, today)
+	if res.Status != jobs.StatusOK || res.LeasesProcessed != 9 || res.EntriesPosted != 18 {
+		t.Fatalf("run = %+v", res)
+	}
+	for _, l := range leases {
+		assertEntries(t, entriesOf(f, l, ""),
+			entry{"rent", "2026-02-01", 100000},
+			entry{"rent", "2026-03-01", 100000})
+	}
+	if n := len(f.Entries(draft.ID)); n != 0 {
+		t.Errorf("draft lease has %d entries", n)
+	}
+}
+
 func TestPostRentUsesBusinessDateNearMidnight(t *testing.T) {
 	f := testdb.New(t)
 	// 03:00 UTC on 1 March is still 28 February in Chicago.

@@ -258,3 +258,24 @@ func TestLateFeesDueEvaluatesOnlyRentPeriods(t *testing.T) {
 		t.Errorf("fee = %+v", due[0])
 	}
 }
+
+func TestLateFeesDueContinuesAfterAssessedPeriods(t *testing.T) {
+	l := newLedger(t)
+	l.rent("2026-01-01", 100000)
+	l.lateFee("2026-01-07", 5000, "2026-01")
+	l.rent("2026-02-01", 100000)
+	l.lateFee("2026-02-07", 5000, "2026-02")
+	l.rent("2026-03-01", 100000)
+	l.rent("2026-04-01", 100000)
+
+	due := LateFeesDue(flat(5000, 5), l.entries, date(t, "2026-04-20"))
+	if len(due) != 2 {
+		t.Fatalf("got %d fees, want 2: %+v", len(due), due)
+	}
+	if due[0].Period != "2026-03" || due[0].Date.String() != "2026-03-07" {
+		t.Errorf("March fee = %+v", due[0])
+	}
+	if due[1].Period != "2026-04" || due[1].Date.String() != "2026-04-07" {
+		t.Errorf("April fee = %+v", due[1])
+	}
+}

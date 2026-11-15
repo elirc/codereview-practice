@@ -39,7 +39,7 @@ type Querier interface {
 	HasSuccessfulJobRun(ctx context.Context, arg HasSuccessfulJobRunParams) (bool, error)
 	InsertLedgerEntry(ctx context.Context, arg InsertLedgerEntryParams) (LedgerEntry, error)
 	LeaseBalance(ctx context.Context, arg LeaseBalanceParams) (int64, error)
-	ListBillableLeaseIDs(ctx context.Context) ([]pgtype.UUID, error)
+	ListBillableLeases(ctx context.Context) ([]Lease, error)
 	ListEntriesThrough(ctx context.Context, asOf pgtype.Date) ([]LedgerEntry, error)
 	ListJobRuns(ctx context.Context, limit int32) ([]JobRun, error)
 	ListLeaseBalances(ctx context.Context, asOf pgtype.Date) ([]ListLeaseBalancesRow, error)

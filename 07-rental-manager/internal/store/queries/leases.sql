@@ -34,8 +34,10 @@ LEFT JOIN lease_tenants lt ON lt.lease_id = l.id AND lt.is_primary
 LEFT JOIN tenants t ON t.id = lt.tenant_id
 ORDER BY p.name, u.label, l.start_date DESC;
 
--- name: ListBillableLeaseIDs :many
-SELECT id
+-- name: ListBillableLeases :many
+SELECT id, unit_id, status, start_date, end_date, rent_cents, due_day, grace_days,
+    late_fee_kind, late_fee_flat_cents, late_fee_bps, late_fee_cap_cents, deposit_cents,
+    activated_at, ended_at, created_at
 FROM leases
 WHERE status IN ('active', 'ended')
 ORDER BY id;
