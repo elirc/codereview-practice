@@ -24,28 +24,25 @@ type CourierStatus struct {
 }
 
 // ApplyCourierStatus projects a courier status change. Changes older than
-// the stored status_version are ignored. When the applied status is not
-// available, the courier's pending offer is cancelled and its delivery
-// searches again.
+// the stored status_version are ignored. When the status is not available,
+// the courier's pending offer is cancelled and its delivery searches again.
 func (s *Service) ApplyCourierStatus(ctx context.Context, tx pgx.Tx, ev CourierStatus) error {
 	q := s.q.WithTx(tx)
-	if err := lockPendingOfferOf(ctx, q, ev.CourierID); err != nil {
-		return err
+	if ev.Status != domain.CourierAvailable {
+		if err := s.cancelPendingOfferOf(ctx, q, ev.CourierID, s.clock.Now()); err != nil {
+			return err
+		}
 	}
-	n, err := q.ApplyCourierStatus(ctx, db.ApplyCourierStatusParams{
+	if _, err := q.ApplyCourierStatus(ctx, db.ApplyCourierStatusParams{
 		CourierID:     ev.CourierID,
 		ZoneID:        ev.ZoneID,
 		Status:        ev.Status,
 		Vehicle:       ev.Vehicle,
 		StatusVersion: ev.Sequence,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("apply courier status: %w", err)
 	}
-	if n == 0 || ev.Status == domain.CourierAvailable {
-		return nil
-	}
-	return s.cancelPendingOfferOf(ctx, q, ev.CourierID, s.clock.Now())
+	return nil
 }
 
 // CourierPosition is a courier.location_updated event.
@@ -67,25 +64,6 @@ func (s *Service) ApplyCourierPosition(ctx context.Context, tx pgx.Tx, ev Courie
 	})
 	if err != nil {
 		return fmt.Errorf("apply courier position: %w", err)
-	}
-	return nil
-}
-
-// lockPendingOfferOf loads the courier's pending offer and its delivery for
-// update, if there is one.
-func lockPendingOfferOf(ctx context.Context, q *db.Queries, courierID uuid.UUID) error {
-	o, err := q.GetPendingOfferForCourier(ctx, courierID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load pending offer: %w", err)
-	}
-	if _, err := q.GetDeliveryForUpdate(ctx, o.DeliveryID); err != nil {
-		return fmt.Errorf("lock delivery: %w", err)
-	}
-	if _, err := q.GetOfferForUpdate(ctx, o.ID); err != nil {
-		return fmt.Errorf("lock offer: %w", err)
 	}
 	return nil
 }

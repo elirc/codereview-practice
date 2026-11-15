@@ -96,7 +96,7 @@ Request flow: router (request id → access log → recover → bearer auth) →
 | Confirm deadline and sweeper | `services/orders/internal/service/lifecycle.go` |
 | Applying delivery events by sequence | `services/orders/internal/domain/delivery.go`, `services/orders/internal/service/deliveryevents.go` |
 | Cancellation saga | `services/orders/internal/service/cancel.go`, `services/dispatch/internal/service/cancel.go`, `services/dispatch/internal/domain/cancel.go`, `services/couriers/internal/service/earnings.go` |
-| Candidate selection and the offer loop | `services/dispatch/internal/store/queries/offers.sql`, `services/dispatch/internal/service/offers.go` |
+| Candidate selection and the offer loop | `services/dispatch/internal/store/queries/offers.sql`, `services/dispatch/internal/service/offers.go`, `services/dispatch/internal/domain/offer.go` |
 | Courier projection | `services/dispatch/internal/service/projection.go`, `services/dispatch/internal/store/queries/couriers.sql` |
 | Reservation handshake | `services/dispatch/internal/service/reservations.go`, `services/couriers/internal/service/reservations.go`, `services/couriers/internal/domain/reservation.go` |
 | Pickup, delivery, abandon | `services/dispatch/internal/service/actions.go` |

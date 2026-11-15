@@ -46,8 +46,8 @@ FROM courier_view
 WHERE courier_view.status = 'available'
   AND courier_view.position_at > @fresh_after::timestamptz
   AND ST_DWithin(
-          ST_SetSRID(ST_MakePoint(courier_view.lon, courier_view.lat), 4326)::geography,
-          ST_SetSRID(ST_MakePoint(@pickup_lon::float8, @pickup_lat::float8), 4326)::geography,
+          ST_SetSRID(ST_MakePoint(courier_view.lon, courier_view.lat), 4326),
+          ST_SetSRID(ST_MakePoint(@pickup_lon::float8, @pickup_lat::float8), 4326),
           @radius_m::float8
       )
   AND NOT EXISTS (

@@ -139,7 +139,7 @@ func (s *Service) CurrentOffer(ctx context.Context) (OfferDetail, error) {
 	if err != nil {
 		return OfferDetail{}, notFoundIfNoRows(err)
 	}
-	if !s.clock.Now().Before(o.ExpiresAt) {
+	if !domain.OfferOpen(o.ExpiresAt, s.clock.Now()) {
 		return OfferDetail{}, apperr.NotFound()
 	}
 	d, err := s.q.GetDelivery(ctx, o.DeliveryID)
@@ -195,7 +195,7 @@ func (s *Service) AcceptOffer(ctx context.Context, id uuid.UUID) (db.Delivery, e
 			return offerNotPending()
 		}
 		now := s.clock.Now()
-		if !now.Before(o.ExpiresAt) {
+		if !domain.OfferOpen(o.ExpiresAt, now) {
 			return apperr.Conflict("offer_expired", "The offer has expired.")
 		}
 		if err := q.CloseOffer(ctx, db.CloseOfferParams{Status: domain.OfferAccepted, ClosedAt: now, ID: o.ID}); err != nil {
@@ -255,8 +255,8 @@ func (s *Service) DeclineOffer(ctx context.Context, id uuid.UUID) (db.Offer, err
 	return out, err
 }
 
-// ExpireOffers closes pending offers whose expiry is at or before now and lets
-// their deliveries search again. It returns how many offers expired.
+// ExpireOffers closes pending offers that are no longer open and lets their
+// deliveries search again. It returns how many offers expired.
 func (s *Service) ExpireOffers(ctx context.Context, now time.Time) (int, error) {
 	due, err := s.q.ListExpiredOffers(ctx, db.ListExpiredOffersParams{Now: now, BatchSize: ExpiryBatch})
 	if err != nil {
@@ -288,7 +288,7 @@ func (s *Service) expireOffer(ctx context.Context, deliveryID, offerID uuid.UUID
 		if err != nil {
 			return fmt.Errorf("lock offer: %w", err)
 		}
-		if o.Status != domain.OfferPending || now.Before(o.ExpiresAt) {
+		if o.Status != domain.OfferPending || domain.OfferOpen(o.ExpiresAt, now) {
 			return nil
 		}
 		expired = true

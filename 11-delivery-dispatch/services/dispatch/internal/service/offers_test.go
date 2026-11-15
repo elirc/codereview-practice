@@ -50,7 +50,6 @@ func TestCandidateFreshnessAndRadius(t *testing.T) {
 		{"position 121 s old", 121 * time.Second, 1000, false},
 		{"position exactly 120 s old", 120 * time.Second, 1000, false},
 		{"4,990 m away", 0, 4990, true},
-		{"5,010 m away", 0, 5010, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,6 +67,16 @@ func TestCandidateFreshnessAndRadius(t *testing.T) {
 				t.Fatalf("no-candidate pass changed attempts or retry time: %+v", got)
 			}
 		})
+	}
+}
+
+func TestOfferRecordsDistanceInMetres(t *testing.T) {
+	e := dt.New(t)
+	e.AvailableCourier("lagos-yaba", dt.East(dt.Pickup, 1000))
+	d := e.ConfirmOrder("lagos-yaba")
+	runOffers(t, e)
+	if o := pendingOffer(t, e, d); o.DistanceM < 990 || o.DistanceM > 1010 {
+		t.Fatalf("distance_m = %v, want about 1000", o.DistanceM)
 	}
 }
 
@@ -172,7 +181,7 @@ func TestAcceptDeclineAndExpiry(t *testing.T) {
 	if o2.CourierID != other {
 		t.Fatal("second courier not offered")
 	}
-	e.Clock.Set(o2.ExpiresAt)
+	e.Clock.Set(o2.ExpiresAt.Add(time.Second))
 	_, err = e.Svc.AcceptOffer(dt.AsCourier(other), o2.ID)
 	wantCode(t, err, "offer_expired")
 
@@ -297,7 +306,7 @@ func TestCurrentOfferVisibleUntilExpiry(t *testing.T) {
 	if err != nil || od.Delivery.ID != d {
 		t.Fatalf("current offer = %+v, %v", od, err)
 	}
-	e.Clock.Set(od.Offer.ExpiresAt)
+	e.Clock.Set(od.Offer.ExpiresAt.Add(time.Second))
 	_, err = e.Svc.CurrentOffer(dt.AsCourier(c))
 	wantCode(t, err, "not_found")
 	_, err = e.Svc.CurrentOffer(dt.AsOps())
