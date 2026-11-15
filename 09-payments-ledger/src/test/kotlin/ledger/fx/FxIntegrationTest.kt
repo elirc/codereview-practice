@@ -57,6 +57,20 @@ class FxIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    fun `publishing the current rate again keeps a single row`() {
+        val first = json(publish("USD", "JPY", "151.23456789"))
+        clock.advance(Duration.ofSeconds(60))
+        val again = publish("USD", "JPY", "151.23456789")
+        assertEquals(201, again.response.status)
+        assertEquals(first.path("id").asText(), json(again).path("id").asText())
+        assertEquals(1, jdbc.sql("SELECT count(*) FROM fx_rates").query(Long::class.javaObjectType).single())
+
+        publish("USD", "JPY", "151.23456789", spread = 40)
+        assertEquals(40, json(get("/v1/fx/rates?sell=USD&buy=JPY", auditorKey)).path("spreadBps").asInt())
+        assertEquals(2, jdbc.sql("SELECT count(*) FROM fx_rates").query(Long::class.javaObjectType).single())
+    }
+
+    @Test
     fun `rate input is validated`() {
         assertEquals(400, publish("USD", "USD", "1.00000000").response.status)
         assertEquals(400, publish("USD", "EUR", "1.123456789").response.status)

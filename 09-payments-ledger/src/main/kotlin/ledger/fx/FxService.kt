@@ -80,29 +80,20 @@ class FxService(
     private val ids: IdSource,
     private val clock: Clock
 ) {
-    /** Appends a rate for the ordered pair and returns it. */
+    /** Appends a rate for the ordered pair and returns it; a rate equal to the pair's current one returns that rate. */
     fun publishRate(caller: Caller, sell: Currency, buy: Currency, midRate: BigDecimal, spreadBps: Int): FxRate {
         caller.require(Role.OPERATOR)
         if (sell == buy) throw validationFailed("buyCurrency", "must differ from sellCurrency")
         if (midRate.signum() <= 0) throw validationFailed("midRate", "must be greater than zero")
-        val rate = FxRate(ids.uuid(), sell, buy, midRate.setScale(FxMath.RATE_SCALE), spreadBps, clock.instant(), caller.keyId)
-        tx.inTx {
-            jdbc.sql(
-                """
-                INSERT INTO fx_rates (id, sell_currency, buy_currency, mid_rate, spread_bps, published_at, published_by)
-                VALUES (:id, :sell, :buy, :midRate, :spreadBps, :publishedAt, :publishedBy)
-                """.trimIndent()
-            )
-                .param("id", rate.id)
-                .param("sell", sell.name)
-                .param("buy", buy.name)
-                .param("midRate", rate.midRate)
-                .param("spreadBps", spreadBps)
-                .param("publishedAt", rate.publishedAt.toDb())
-                .param("publishedBy", caller.keyId)
-                .update()
+        val scaled = midRate.setScale(FxMath.RATE_SCALE)
+        return tx.inTx {
+            val current = latestRate(sell, buy)
+            if (current != null && current.midRate == scaled && current.spreadBps == spreadBps) {
+                current
+            } else {
+                FxRate(ids.uuid(), sell, buy, scaled, spreadBps, clock.instant(), caller.keyId).also { insertRate(it) }
+            }
         }
-        return rate
     }
 
     /** Returns the current rate for the ordered pair. */
@@ -221,6 +212,23 @@ class FxService(
             .query(RATE)
             .optional()
             .orElse(null)
+
+    private fun insertRate(rate: FxRate) {
+        jdbc.sql(
+            """
+            INSERT INTO fx_rates (id, sell_currency, buy_currency, mid_rate, spread_bps, published_at, published_by)
+            VALUES (:id, :sell, :buy, :midRate, :spreadBps, :publishedAt, :publishedBy)
+            """.trimIndent()
+        )
+            .param("id", rate.id)
+            .param("sell", rate.sellCurrency.name)
+            .param("buy", rate.buyCurrency.name)
+            .param("midRate", rate.midRate)
+            .param("spreadBps", rate.spreadBps)
+            .param("publishedAt", rate.publishedAt.toDb())
+            .param("publishedBy", rate.publishedBy)
+            .update()
+    }
 
     private fun findQuote(id: UUID): FxQuote? =
         jdbc.sql("SELECT * FROM fx_quotes WHERE id = :id")
