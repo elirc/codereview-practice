@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"deliverydispatch/pkg/apperr"
 	"deliverydispatch/pkg/auth"
 	"deliverydispatch/services/couriers/internal/domain"
 	"deliverydispatch/services/couriers/internal/store/db"
@@ -36,10 +37,11 @@ func (s *Service) HandleDelivered(ctx context.Context, tx pgx.Tx, deliveryID, co
 	return s.recordEarning(ctx, s.q.WithTx(tx), courierID, deliveryID, domain.EarningDelivery, payoutMinor)
 }
 
-// Earnings is a courier's earning history and total.
+// Earnings is a courier's earning history, total and total per kind.
 type Earnings struct {
 	CourierID  uuid.UUID
 	TotalMinor int64
+	ByKind     map[string]int64
 	Items      []db.CourierEarning
 }
 
@@ -63,6 +65,28 @@ func (s *Service) CourierEarnings(ctx context.Context, id uuid.UUID) (Earnings, 
 	return s.earnings(ctx, id)
 }
 
+// MyDeliveryEarnings returns what the calling courier earned for one
+// delivery. A delivery with no earnings is not found.
+func (s *Service) MyDeliveryEarnings(ctx context.Context, deliveryID uuid.UUID) (Earnings, error) {
+	p, err := auth.Require(ctx, auth.RoleCourier)
+	if err != nil {
+		return Earnings{}, err
+	}
+	items, err := s.q.ListDeliveryEarnings(ctx, deliveryID)
+	if err != nil {
+		return Earnings{}, fmt.Errorf("list delivery earnings: %w", err)
+	}
+	if len(items) == 0 {
+		return Earnings{}, apperr.NotFound()
+	}
+	out := Earnings{CourierID: p.Subject, ByKind: map[string]int64{}, Items: items}
+	for _, it := range items {
+		out.TotalMinor += it.AmountMinor
+		out.ByKind[it.Kind] += it.AmountMinor
+	}
+	return out, nil
+}
+
 func (s *Service) earnings(ctx context.Context, id uuid.UUID) (Earnings, error) {
 	items, err := s.q.ListEarnings(ctx, id)
 	if err != nil {
@@ -72,7 +96,15 @@ func (s *Service) earnings(ctx context.Context, id uuid.UUID) (Earnings, error) 
 	if err != nil {
 		return Earnings{}, fmt.Errorf("sum earnings: %w", err)
 	}
-	return Earnings{CourierID: id, TotalMinor: total, Items: items}, nil
+	kinds, err := s.q.SumEarningsByKind(ctx, id)
+	if err != nil {
+		return Earnings{}, fmt.Errorf("sum earnings by kind: %w", err)
+	}
+	byKind := make(map[string]int64, len(kinds))
+	for _, k := range kinds {
+		byKind[k.Kind] = k.TotalMinor
+	}
+	return Earnings{CourierID: id, TotalMinor: total, ByKind: byKind, Items: items}, nil
 }
 
 // HandleCancelled detaches the named courier from a cancelled delivery and,

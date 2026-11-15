@@ -68,6 +68,12 @@ INSERT INTO courier_earnings (id, courier_id, delivery_id, kind, amount_minor, c
 VALUES (@id, @courier_id, @delivery_id, @kind, @amount_minor, @created_at)
 ON CONFLICT (courier_id, delivery_id, kind) DO NOTHING;
 
+-- name: ListDeliveryEarnings :many
+SELECT id, courier_id, delivery_id, kind, amount_minor, created_at
+FROM courier_earnings
+WHERE delivery_id = @delivery_id
+ORDER BY created_at, id;
+
 -- name: ListEarnings :many
 SELECT id, courier_id, delivery_id, kind, amount_minor, created_at
 FROM courier_earnings
@@ -79,3 +85,10 @@ LIMIT 200;
 SELECT COALESCE(sum(amount_minor), 0)::bigint AS total_minor
 FROM courier_earnings
 WHERE courier_id = @courier_id;
+
+-- name: SumEarningsByKind :many
+SELECT kind, sum(amount_minor)::bigint AS total_minor
+FROM courier_earnings
+WHERE courier_id = @courier_id
+GROUP BY kind
+ORDER BY kind;

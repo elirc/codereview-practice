@@ -176,6 +176,40 @@ func (q *Queries) InsertEarning(ctx context.Context, arg InsertEarningParams) (i
 	return result.RowsAffected(), nil
 }
 
+const listDeliveryEarnings = `-- name: ListDeliveryEarnings :many
+SELECT id, courier_id, delivery_id, kind, amount_minor, created_at
+FROM courier_earnings
+WHERE delivery_id = $1
+ORDER BY created_at, id
+`
+
+func (q *Queries) ListDeliveryEarnings(ctx context.Context, deliveryID uuid.UUID) ([]CourierEarning, error) {
+	rows, err := q.db.Query(ctx, listDeliveryEarnings, deliveryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CourierEarning
+	for rows.Next() {
+		var i CourierEarning
+		if err := rows.Scan(
+			&i.ID,
+			&i.CourierID,
+			&i.DeliveryID,
+			&i.Kind,
+			&i.AmountMinor,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEarnings = `-- name: ListEarnings :many
 SELECT id, courier_id, delivery_id, kind, amount_minor, created_at
 FROM courier_earnings
@@ -250,6 +284,39 @@ func (q *Queries) SumEarnings(ctx context.Context, courierID uuid.UUID) (int64, 
 	var total_minor int64
 	err := row.Scan(&total_minor)
 	return total_minor, err
+}
+
+const sumEarningsByKind = `-- name: SumEarningsByKind :many
+SELECT kind, sum(amount_minor)::bigint AS total_minor
+FROM courier_earnings
+WHERE courier_id = $1
+GROUP BY kind
+ORDER BY kind
+`
+
+type SumEarningsByKindRow struct {
+	Kind       string
+	TotalMinor int64
+}
+
+func (q *Queries) SumEarningsByKind(ctx context.Context, courierID uuid.UUID) ([]SumEarningsByKindRow, error) {
+	rows, err := q.db.Query(ctx, sumEarningsByKind, courierID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SumEarningsByKindRow
+	for rows.Next() {
+		var i SumEarningsByKindRow
+		if err := rows.Scan(&i.Kind, &i.TotalMinor); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateCourierPosition = `-- name: UpdateCourierPosition :exec

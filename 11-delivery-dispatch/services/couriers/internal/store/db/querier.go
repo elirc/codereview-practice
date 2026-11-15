@@ -16,9 +16,11 @@ type Querier interface {
 	GetCourierForUpdate(ctx context.Context, id uuid.UUID) (Courier, error)
 	InsertCourier(ctx context.Context, arg InsertCourierParams) (Courier, error)
 	InsertEarning(ctx context.Context, arg InsertEarningParams) (int64, error)
+	ListDeliveryEarnings(ctx context.Context, deliveryID uuid.UUID) ([]CourierEarning, error)
 	ListEarnings(ctx context.Context, courierID uuid.UUID) ([]CourierEarning, error)
 	MarkPositionPublished(ctx context.Context, arg MarkPositionPublishedParams) error
 	SumEarnings(ctx context.Context, courierID uuid.UUID) (int64, error)
+	SumEarningsByKind(ctx context.Context, courierID uuid.UUID) ([]SumEarningsByKindRow, error)
 	UpdateCourierPosition(ctx context.Context, arg UpdateCourierPositionParams) error
 	UpdateCourierStatus(ctx context.Context, arg UpdateCourierStatusParams) error
 	UpsertCourier(ctx context.Context, arg UpsertCourierParams) error

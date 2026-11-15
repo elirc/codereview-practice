@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"deliverydispatch/pkg/httpx"
+	"deliverydispatch/services/couriers/internal/domain"
 	"deliverydispatch/services/couriers/internal/service"
 )
 
@@ -21,6 +22,7 @@ type earningResponse struct {
 type earningsResponse struct {
 	CourierID  string            `json:"courier_id"`
 	TotalMinor int64             `json:"total_minor"`
+	ByKind     map[string]int64  `json:"by_kind"`
 	Currency   string            `json:"currency"`
 	Earnings   []earningResponse `json:"earnings"`
 }
@@ -29,8 +31,12 @@ func (h *Handler) earningsJSON(e service.Earnings) earningsResponse {
 	out := earningsResponse{
 		CourierID:  e.CourierID.String(),
 		TotalMinor: e.TotalMinor,
+		ByKind:     map[string]int64{domain.EarningDelivery: 0, domain.EarningCompensation: 0},
 		Currency:   h.svc.Currency(),
 		Earnings:   make([]earningResponse, 0, len(e.Items)),
+	}
+	for kind, total := range e.ByKind {
+		out.ByKind[kind] = total
 	}
 	for _, x := range e.Items {
 		out.Earnings = append(out.Earnings, earningResponse{
@@ -46,6 +52,19 @@ func (h *Handler) earningsJSON(e service.Earnings) earningsResponse {
 
 func (h *Handler) myEarnings(w http.ResponseWriter, r *http.Request) error {
 	e, err := h.svc.MyEarnings(r.Context())
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.earningsJSON(e))
+	return nil
+}
+
+func (h *Handler) myDeliveryEarnings(w http.ResponseWriter, r *http.Request) error {
+	id, err := httpx.ParseUUID("delivery_id", chi.URLParam(r, "delivery_id"))
+	if err != nil {
+		return err
+	}
+	e, err := h.svc.MyDeliveryEarnings(r.Context(), id)
 	if err != nil {
 		return err
 	}

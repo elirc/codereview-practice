@@ -72,7 +72,7 @@ func (s *Service) Deliver(ctx context.Context, id uuid.UUID) (db.Delivery, error
 		default:
 			return db.Delivery{}, apperr.InvalidState("Only a picked-up delivery can be delivered.")
 		}
-		payout := domain.CourierPayout(s.cfg.CourierBaseMinor, d.DeliveryFeeMinor, s.cfg.CourierShareBps)
+		payout := domain.CourierPayout(s.cfg.CourierBaseMinor, d.DeliveryFeeMinor, int64(d.SurgeBps), s.cfg.CourierShareBps)
 		d.Status = domain.DeliveryDelivered
 		d.DeliveredAt = &now
 		d.CourierPayoutMinor = &payout
