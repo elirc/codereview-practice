@@ -50,8 +50,7 @@ export function canOnPost(actor: Actor, permission: PostPermission, post: PostFa
     case "changeSlug":
       return isStaff(actor) || (owns && neverPublished);
     case "delete":
-      if (actor.role === "admin") return true;
-      return actor.role === "author" && owns && neverPublished;
+      return actor.role === "admin" || (owns && neverPublished);
   }
 }
 

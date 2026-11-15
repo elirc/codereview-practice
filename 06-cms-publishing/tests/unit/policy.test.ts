@@ -25,7 +25,7 @@ const table: Record<PostPermission, Record<Role, Rule>> = {
   withdraw: { author: "own", editor: "all", admin: "all" },
   publish: { author: "none", editor: "all", admin: "all" },
   changeSlug: { author: "own-never-published", editor: "all", admin: "all" },
-  delete: { author: "own-never-published", editor: "none", admin: "all" },
+  delete: { author: "own-never-published", editor: "own-never-published", admin: "all" },
 };
 
 function expected(rule: Rule, own: boolean, status: PostStatus, everPublished: boolean): boolean {

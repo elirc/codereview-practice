@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, type SQL } from "drizzle-orm";
-import { canOnPost, type Actor } from "@/auth/policy";
+import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
+import { authorizePost, canOnPost, type Actor } from "@/auth/policy";
 import { db, type Executor } from "@/db/client";
 import {
   posts,
@@ -182,6 +182,26 @@ export async function deletePost(input: {
   });
 }
 
+/** Deletes several posts with their revisions and redirects. Every post must be deletable. */
+export async function deletePosts(input: {
+  actor: Actor;
+  postIds: string[];
+}): Promise<{ deleted: string[]; publicChanges: PublicChange[] }> {
+  const { actor, postIds } = input;
+  const ids = [...new Set(postIds)];
+  const rows = await db.select().from(posts).where(inArray(posts.id, ids));
+  if (rows.length !== ids.length) throw notFoundError("Post not found.");
+  for (const post of rows) authorizePost(actor, "delete", post);
+
+  await db.delete(posts).where(inArray(posts.id, ids));
+  return {
+    deleted: ids,
+    publicChanges: rows
+      .filter((post) => post.publishedRevisionId !== null)
+      .map((post) => ({ id: post.id, slugs: [post.slug] })),
+  };
+}
+
 /** A post the actor may view, or `not_found`. */
 export async function getPostForActor(actor: Actor, postId: string): Promise<Post> {
   const [post] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
@@ -199,6 +219,7 @@ export type PostListItem = {
   updatedAt: Date;
   publishedAt: Date | null;
   scheduledFor: Date | null;
+  firstPublishedAt: Date | null;
 };
 
 export async function listPostsForActor(
@@ -221,6 +242,7 @@ export async function listPostsForActor(
       updatedAt: posts.updatedAt,
       publishedAt: posts.publishedAt,
       scheduledFor: posts.scheduledFor,
+      firstPublishedAt: posts.firstPublishedAt,
     })
     .from(posts)
     .innerJoin(users, eq(users.id, posts.authorId))

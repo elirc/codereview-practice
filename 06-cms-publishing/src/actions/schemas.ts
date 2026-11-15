@@ -69,6 +69,8 @@ export const restoreRevisionSchema = z
 
 export const postCommandSchema = z.object({ postId: id, expectedVersion }).strict();
 
+export const deletePostsSchema = z.object({ postIds: z.array(id).min(1).max(50) }).strict();
+
 export const publishSchema = z.object({ postId: id, revisionId: id, expectedVersion }).strict();
 
 export const scheduleSchema = z

@@ -11,6 +11,7 @@ import { runAction, type ActionResult } from "./result";
 import {
   changeSlugSchema,
   createPostSchema,
+  deletePostsSchema,
   duplicatePostSchema,
   postCommandSchema,
   restoreRevisionSchema,
@@ -100,5 +101,15 @@ export async function deletePost(input: unknown): Promise<ActionResult<{ id: str
     const outcome = await postService.deletePost({ actor, ...data });
     if (outcome.publicChange) invalidatePost(outcome.publicChange);
     return { id: data.postId };
+  });
+}
+
+export async function deletePosts(input: unknown): Promise<ActionResult<{ ids: string[] }>> {
+  return runAction("deletePosts", async () => {
+    const { postIds } = deletePostsSchema.parse(input);
+    const actor = await requireUser();
+    const outcome = await postService.deletePosts({ actor, postIds });
+    for (const change of outcome.publicChanges) invalidatePost(change);
+    return { ids: outcome.deleted };
   });
 }
