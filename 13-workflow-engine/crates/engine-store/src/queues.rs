@@ -121,6 +121,59 @@ pub async fn list_queues(
     Ok(queues)
 }
 
+/// Returns how many jobs of `queue` are running under a lease that has not run out at `now`.
+pub(crate) async fn running_jobs(
+    conn: &mut PgConnection,
+    queue: &str,
+    now: DateTime<Utc>,
+) -> Result<i64, StoreError> {
+    let running = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM jobs \
+         WHERE queue = $1 AND state = 'running' AND lease_expires_at > $2",
+    )
+    .bind(queue)
+    .bind(now)
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(running)
+}
+
+/// Refills a rate-limited queue's token bucket up to `now`, stores it and returns it. Returns
+/// `None` for a queue without a rate limit.
+pub(crate) async fn refill_bucket(
+    conn: &mut PgConnection,
+    queue: &Queue,
+    now: DateTime<Utc>,
+) -> Result<Option<Bucket>, StoreError> {
+    let (Some(per_minute), Some(burst)) = (queue.rate_limit_per_minute, queue.rate_burst) else {
+        return Ok(None);
+    };
+    let stored = Bucket {
+        tokens_milli: queue.rate_tokens_milli,
+        refilled_at: queue.rate_refilled_at,
+    };
+    let refilled = refill(stored, per_minute, burst, now);
+    if refilled != stored {
+        save_bucket(conn, &queue.name, refilled).await?;
+    }
+    Ok(Some(refilled))
+}
+
+/// Stores the token bucket of the queue `name`.
+pub(crate) async fn save_bucket(
+    conn: &mut PgConnection,
+    name: &str,
+    bucket: Bucket,
+) -> Result<(), StoreError> {
+    sqlx::query("UPDATE queues SET rate_tokens_milli = $2, rate_refilled_at = $3 WHERE name = $1")
+        .bind(name)
+        .bind(bucket.tokens_milli)
+        .bind(bucket.refilled_at)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 /// Returns the names of the queues among `names` that exist.
 pub async fn existing_queue_names(
     conn: &mut PgConnection,
@@ -224,17 +277,23 @@ pub struct QueueStats {
     /// Number of jobs in each state, including states with no jobs.
     pub counts: BTreeMap<String, i64>,
     pub oldest_pending_run_at: Option<DateTime<Utc>>,
+    /// Concurrency slots free as of now, when the queue has a concurrency cap.
+    pub free_slots: Option<i64>,
     /// Whole tokens in the rate-limit bucket as of now, when the queue has a rate limit.
     pub tokens_available: Option<i64>,
 }
 
-/// Returns the job counts of a queue, its oldest pending `run_at` and its available tokens.
+/// Returns the job counts of a queue, its oldest pending `run_at`, its free concurrency slots
+/// and its available tokens.
 pub async fn queue_stats(
     pool: &PgPool,
     name: &str,
     now: DateTime<Utc>,
 ) -> Result<QueueStats, StoreError> {
-    let queue = get_queue(pool, name).await?;
+    let mut conn = pool.acquire().await?;
+    let queue = find_queue(&mut conn, name)
+        .await?
+        .ok_or(StoreError::NotFound)?;
     let mut counts: BTreeMap<String, i64> = JobState::ALL
         .iter()
         .map(|s| (s.as_str().to_string(), 0))
@@ -243,7 +302,7 @@ pub async fn queue_stats(
         "SELECT state, count(*) FROM jobs WHERE queue = $1 GROUP BY state",
     )
     .bind(name)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     for (state, count) in rows {
         counts.insert(state, count);
@@ -252,23 +311,24 @@ pub async fn queue_stats(
         "SELECT min(run_at) FROM jobs WHERE queue = $1 AND state = 'pending'",
     )
     .bind(name)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
-    let tokens_available = match (queue.rate_limit_per_minute, queue.rate_burst) {
-        (Some(per_minute), Some(burst)) => {
-            let bucket = Bucket {
-                tokens_milli: queue.rate_tokens_milli,
-                refilled_at: queue.rate_refilled_at,
-            };
-            Some(refill(bucket, per_minute, burst, now).tokens_milli / 1000)
+    let free_slots = match queue.max_concurrency {
+        Some(max) => {
+            let running = running_jobs(&mut conn, name, now).await?;
+            Some((i64::from(max) - running).max(0))
         }
-        _ => None,
+        None => None,
     };
+    let tokens_available = refill_bucket(&mut conn, &queue, now)
+        .await?
+        .map(|bucket| bucket.tokens_milli / 1000);
     Ok(QueueStats {
         queue: queue.name,
         paused: queue.paused,
         counts,
         oldest_pending_run_at,
+        free_slots,
         tokens_available,
     })
 }

@@ -1,13 +1,13 @@
 //! Claiming pending jobs for a worker.
 
 use chrono::{DateTime, Utc};
-use engine_core::rate::{allowance, consume, refill, Bucket};
+use engine_core::rate::{allowance, consume};
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::{Queue, QUEUE_COLUMNS};
-use crate::queues::find_queue;
+use crate::queues::{find_queue, refill_bucket, running_jobs, save_bucket};
 use crate::StoreError;
 
 /// Identifies one claim of a job: the job and the lease epoch it was claimed under.
@@ -85,28 +85,10 @@ pub async fn claim(
     }
 
     let running = match q.max_concurrency {
-        Some(_) => {
-            sqlx::query_scalar::<_, i64>(
-                "SELECT count(*) FROM jobs WHERE queue = $1 AND state = 'running'",
-            )
-            .bind(queue)
-            .fetch_one(&mut *tx)
-            .await?
-        }
+        Some(_) => running_jobs(&mut tx, queue, now).await?,
         None => 0,
     };
-    let bucket = match (q.rate_limit_per_minute, q.rate_burst) {
-        (Some(per_minute), Some(burst)) => Some(refill(
-            Bucket {
-                tokens_milli: q.rate_tokens_milli,
-                refilled_at: q.rate_refilled_at,
-            },
-            per_minute,
-            burst,
-            now,
-        )),
-        _ => None,
-    };
+    let bucket = refill_bucket(&mut tx, &q, now).await?;
     let allowed = allowance(
         limit,
         q.max_concurrency,
@@ -165,15 +147,9 @@ pub async fn claim(
     }
 
     if let Some(refilled) = bucket {
-        let remaining = consume(refilled, claimed.len() as i64);
-        sqlx::query(
-            "UPDATE queues SET rate_tokens_milli = $2, rate_refilled_at = $3 WHERE name = $1",
-        )
-        .bind(queue)
-        .bind(remaining.tokens_milli)
-        .bind(remaining.refilled_at)
-        .execute(&mut *tx)
-        .await?;
+        if !claimed.is_empty() {
+            save_bucket(&mut tx, queue, consume(refilled, claimed.len() as i64)).await?;
+        }
     }
     tx.commit().await?;
     Ok(claimed)
