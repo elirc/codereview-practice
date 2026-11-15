@@ -6,6 +6,7 @@ module Manage
 
     def index
       @promo_codes = @event.promo_codes.includes(:ticket_tiers).order(:code)
+      @import_sources = manageable_events.where.not(id: @event.id).order(starts_at: :desc)
     end
 
     def new
@@ -37,6 +38,14 @@ module Manage
       else
         render :edit, status: :unprocessable_entity
       end
+    end
+
+    def import
+      source = EventPolicy.visible_scope(current_user).where.not(id: @event.id).find(params.require(:source_event_id))
+      copied = Promos::CopyFromEvent.call(source:, target: @event)
+
+      redirect_to manage_event_promo_codes_path(@event),
+        notice: "Copied #{copied.size} promo #{"code".pluralize(copied.size)} from #{source.title}."
     end
 
     private

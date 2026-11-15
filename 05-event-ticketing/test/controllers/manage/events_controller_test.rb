@@ -74,4 +74,18 @@ class Manage::EventsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal Time.utc(2030, 6, 2, 3, 59), events(:concert).reload.ends_at
   end
+
+  test "organiser creates and publishes in one step" do
+    sign_in_as users(:organizer)
+
+    post manage_events_path, params: { event: {
+      title: "Open Air", venue: "Common", time_zone: "America/New_York",
+      starts_at_local: "2030-08-01T19:00", ends_at_local: "2030-08-01T22:00", sales_close_at_local: "",
+      status: "published"
+    } }
+
+    event = Event.order(:created_at).last
+    assert event.published?
+    assert_equal "Event published.", flash[:notice]
+  end
 end

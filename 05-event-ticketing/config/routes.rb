@@ -27,7 +27,9 @@ Rails.application.routes.draw do
       end
 
       resources :tiers, only: %i[ new create edit update ]
-      resources :promo_codes, only: %i[ index new create edit update ]
+      resources :promo_codes, only: %i[ index new create edit update ] do
+        post :import, on: :collection
+      end
       resources :waitlist_entries, only: :index
       resources :orders, only: %i[ index show ], param: :number do
         member do

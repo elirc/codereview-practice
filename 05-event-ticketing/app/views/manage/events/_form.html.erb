@@ -38,5 +38,10 @@
     <p class="muted">Leave blank to close sales when the event starts.</p>
   </div>
 
-  <%= form.submit %>
+  <div class="inline-form">
+    <%= form.submit %>
+    <% if event.new_record? %>
+      <%= form.button "Save and publish", name: "event[status]", value: "published" %>
+    <% end %>
+  </div>
 <% end %>

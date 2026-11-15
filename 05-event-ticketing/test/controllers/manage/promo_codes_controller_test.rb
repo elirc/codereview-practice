@@ -55,4 +55,17 @@ class Manage::PromoCodesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, promo.redemptions_count
     assert_not promo.active?
   end
+
+  test "copies codes from another of the organiser's events" do
+    PromoCode.create!(event: events(:draft_show), code: "PREVIEW", kind: "fixed", amount_off_cents: 500)
+
+    get manage_event_promo_codes_path(@event)
+    assert_select "select[name=source_event_id] option", text: events(:draft_show).title
+
+    post import_manage_event_promo_codes_path(@event), params: { source_event_id: events(:draft_show).id }
+
+    assert_redirected_to manage_event_promo_codes_path(@event)
+    assert_equal "Copied 1 promo code from #{events(:draft_show).title}.", flash[:notice]
+    assert_equal 500, @event.promo_codes.find_by!(code: "PREVIEW").amount_off_cents
+  end
 end

@@ -6,6 +6,15 @@
 
 <% unless @event.cancelled? %>
   <p><%= link_to "New promo code", new_manage_event_promo_code_path(@event) %></p>
+
+  <% if @import_sources.any? %>
+    <%= form_with url: import_manage_event_promo_codes_path(@event), class: "inline-form" do |form| %>
+      <%= form.label :source_event_id, "Copy codes from" %>
+      <%= form.select :source_event_id, @import_sources.map { |source| [ source.title, source.id ] } %>
+      <%= form.submit "Copy codes" %>
+    <% end %>
+    <p class="muted">Codes this event already has are skipped. Copied codes keep their discount and limits but not their dates or tier restrictions.</p>
+  <% end %>
 <% end %>
 
 <table>

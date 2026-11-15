@@ -20,7 +20,7 @@ module Manage
       @event.organizer = current_user
 
       if @event.save
-        redirect_to manage_event_path(@event), notice: "Event created as a draft."
+        redirect_to manage_event_path(@event), notice: @event.published? ? "Event published." : "Event created as a draft."
       else
         render :new, status: :unprocessable_entity
       end
@@ -61,7 +61,7 @@ module Manage
 
       def event_params
         params.require(:event).permit(
-          :title, :description, :venue, :time_zone, :starts_at_local, :ends_at_local, :sales_close_at_local
+          :title, :description, :venue, :time_zone, :starts_at_local, :ends_at_local, :sales_close_at_local, :status
         )
       end
   end
