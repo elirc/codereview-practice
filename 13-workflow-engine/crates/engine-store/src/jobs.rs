@@ -1,5 +1,7 @@
 //! Enqueueing, reading, listing, cancelling and requeueing jobs.
 
+use std::collections::{BTreeSet, HashMap};
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
@@ -9,6 +11,9 @@ use crate::error::is_unique_violation;
 use crate::models::{Job, JobAttempt, JOB_COLUMNS};
 use crate::page::TimeCursor;
 use crate::StoreError;
+
+/// Largest number of jobs [`enqueue_batch`] accepts.
+pub const MAX_BATCH: usize = 100;
 
 /// A job to enqueue. Omitted limits are taken from the queue.
 #[derive(Debug, Clone)]
@@ -143,6 +148,113 @@ pub async fn enqueue_on(
         }
     }
     Err(StoreError::UniqueKeyConflict)
+}
+
+/// Enqueues several jobs in one transaction and returns them in request order. A job whose
+/// unique key is held by a live job, or by an earlier job of the same batch, returns that job
+/// instead.
+pub async fn enqueue_batch(
+    pool: &PgPool,
+    batch: &[NewJob],
+    now: DateTime<Utc>,
+) -> Result<Vec<Enqueued>, StoreError> {
+    let mut tx = pool.begin().await?;
+
+    let names: Vec<String> = batch
+        .iter()
+        .map(|j| j.queue.clone())
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect();
+    let defaults: HashMap<String, (i32, i32)> = sqlx::query_as::<_, (String, i32, i32)>(
+        "SELECT name, default_max_attempts, default_lease_seconds FROM queues \
+         WHERE name = ANY($1)",
+    )
+    .bind(&names)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(|(name, attempts, lease)| (name, (attempts, lease)))
+    .collect();
+
+    let (key_queues, keys): (Vec<String>, Vec<String>) = batch
+        .iter()
+        .filter_map(|j| j.unique_key.clone().map(|key| (j.queue.clone(), key)))
+        .unzip();
+    let mut holders: HashMap<(String, String), Job> = HashMap::new();
+    if !keys.is_empty() {
+        let live = format!(
+            "SELECT {JOB_COLUMNS} FROM jobs WHERE state IN ('pending', 'running') \
+             AND (queue, unique_key) IN \
+                 (SELECT q, k FROM unnest($1::text[], $2::text[]) AS t(q, k))"
+        );
+        let rows = sqlx::query_as::<_, Job>(&live)
+            .bind(&key_queues)
+            .bind(&keys)
+            .fetch_all(&mut *tx)
+            .await?;
+        for job in rows {
+            if let Some(key) = job.unique_key.clone() {
+                holders.insert((job.queue.clone(), key), job);
+            }
+        }
+    }
+
+    let insert = format!(
+        "INSERT INTO jobs (id, queue, kind, payload, priority, state, run_at, max_attempts, \
+         lease_seconds, unique_key, schedule_id, scheduled_for, created_by_token_id, created_at) \
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9, $10, $11, $12, $13) \
+         RETURNING {JOB_COLUMNS}"
+    );
+    let mut enqueued = Vec::with_capacity(batch.len());
+    for new in batch {
+        let (default_attempts, default_lease) = *defaults
+            .get(&new.queue)
+            .ok_or_else(|| StoreError::UnknownQueue(new.queue.clone()))?;
+        let held = new
+            .unique_key
+            .as_ref()
+            .and_then(|key| holders.get(&(new.queue.clone(), key.clone())));
+        if let Some(job) = held {
+            enqueued.push(Enqueued {
+                job: job.clone(),
+                deduplicated: true,
+            });
+            continue;
+        }
+        let job = sqlx::query_as::<_, Job>(&insert)
+            .bind(Uuid::new_v4())
+            .bind(&new.queue)
+            .bind(&new.kind)
+            .bind(&new.payload)
+            .bind(new.priority)
+            .bind(new.run_at.max(now))
+            .bind(new.max_attempts.unwrap_or(default_attempts))
+            .bind(new.lease_seconds.unwrap_or(default_lease))
+            .bind(&new.unique_key)
+            .bind(new.schedule_id)
+            .bind(new.scheduled_for)
+            .bind(new.created_by_token_id)
+            .bind(now)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|err| {
+                if is_unique_violation(&err, "jobs_live_unique_key") {
+                    StoreError::UniqueKeyConflict
+                } else {
+                    StoreError::from(err)
+                }
+            })?;
+        if let Some(key) = &new.unique_key {
+            holders.insert((new.queue.clone(), key.clone()), job.clone());
+        }
+        enqueued.push(Enqueued {
+            job,
+            deduplicated: false,
+        });
+    }
+    tx.commit().await?;
+    Ok(enqueued)
 }
 
 /// Loads a job by id.

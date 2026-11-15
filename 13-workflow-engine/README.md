@@ -40,6 +40,10 @@ curl -s -X POST localhost:8130/api/jobs \
   -d '{"queue":"default","kind":"noop","payload":{"hello":"world"}}'
 ```
 
+`POST /api/jobs/batch` takes `{"jobs": [...]}` with up to 100 of the same job bodies and
+enqueues them in one transaction; the reply lists the jobs in request order, each with its
+`deduplicated` flag.
+
 Both binaries may run as several instances. Stop a worker with Ctrl-C or `SIGTERM`; it stops
 claiming, lets running jobs finish within `SHUTDOWN_GRACE_SECONDS`, and gives back what is
 left.

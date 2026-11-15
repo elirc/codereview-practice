@@ -28,6 +28,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/queues/:name/resume", post(queues::resume))
         .route("/queues/:name/stats", get(queues::stats))
         .route("/jobs", get(jobs::list).post(jobs::enqueue))
+        .route("/jobs/batch", post(jobs::enqueue_batch))
         .route("/jobs/:id", get(jobs::show))
         .route("/jobs/:id/cancel", post(jobs::cancel))
         .route("/jobs/:id/requeue", post(jobs::requeue))

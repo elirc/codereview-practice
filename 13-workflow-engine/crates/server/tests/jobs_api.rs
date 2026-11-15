@@ -100,3 +100,73 @@ async fn cancel_respects_roles_and_queue_scope(pool: PgPool) {
         .await;
     assert_eq!(reply.status, StatusCode::OK);
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn batch_enqueue_returns_the_jobs_in_order(pool: PgPool) {
+    let app = app(pool.clone());
+    let admin = token(&pool, Role::Admin, &[]).await;
+    app.queue(&admin, "email").await;
+    app.queue(&admin, "reports").await;
+    let held = app
+        .post(
+            "/api/jobs",
+            &admin,
+            json!({ "queue": "email", "kind": "k", "payload": {}, "unique_key": "u1" }),
+        )
+        .await;
+    assert_eq!(held.status, StatusCode::CREATED);
+
+    let reply = app
+        .post(
+            "/api/jobs/batch",
+            &admin,
+            json!({ "jobs": [
+                { "queue": "email", "kind": "email.send", "payload": { "n": 1 } },
+                { "queue": "reports", "kind": "report.build", "payload": {}, "priority": 8 },
+                { "queue": "email", "kind": "k", "payload": {}, "unique_key": "u1" },
+                { "queue": "email", "kind": "k", "payload": {}, "unique_key": "u2" },
+                { "queue": "email", "kind": "k", "payload": {}, "unique_key": "u2" }
+            ] }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.body);
+    let items = reply.body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 5);
+    assert_eq!(items[0]["payload"], json!({ "n": 1 }));
+    assert_eq!(items[0]["state"], "pending");
+    assert_eq!(items[1]["queue"], "reports");
+    assert_eq!(items[1]["priority"], 8);
+    assert_eq!(items[2]["id"], held.body["id"]);
+    assert_eq!(items[2]["deduplicated"], true);
+    assert_eq!(items[3]["deduplicated"], false);
+    assert_eq!(items[4]["id"], items[3]["id"]);
+    assert_eq!(items[4]["deduplicated"], true);
+
+    let reply = app.get("/api/jobs?queue=email", &admin).await;
+    assert_eq!(reply.body["items"].as_array().unwrap().len(), 3);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn batch_enqueue_names_the_invalid_item(pool: PgPool) {
+    let app = app(pool.clone());
+    let admin = token(&pool, Role::Admin, &[]).await;
+    app.queue(&admin, "email").await;
+
+    let reply = app
+        .post(
+            "/api/jobs/batch",
+            &admin,
+            json!({ "jobs": [
+                { "queue": "email", "kind": "k", "payload": {} },
+                { "queue": "email", "kind": "k", "payload": {}, "priority": 12 }
+            ] }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    assert_eq!(reply.body["error"]["details"]["fields"][0]["path"], "jobs[1].priority");
+
+    let reply = app.post("/api/jobs/batch", &admin, json!({ "jobs": [] })).await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    let reply = app.get("/api/jobs", &admin).await;
+    assert_eq!(reply.body["items"].as_array().unwrap().len(), 0);
+}
