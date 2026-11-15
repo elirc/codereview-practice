@@ -122,23 +122,26 @@ func (l *Loader) Err() error {
 
 // Common holds the settings every service reads.
 type Common struct {
-	JWTSecret    string
-	NATSURL      string
-	Currency     string
-	LoopsEnabled bool
-	LogLevel     string
+	JWTSecret         string
+	JWTPreviousSecret string
+	NATSURL           string
+	Currency          string
+	LoopsEnabled      bool
+	LogLevel          string
 }
 
 // LoadCommon reads the shared settings into a Common value.
 func LoadCommon(l *Loader) Common {
 	c := Common{
-		JWTSecret:    l.Required("AUTH_JWT_SECRET"),
-		NATSURL:      l.String("NATS_URL", "nats://localhost:6393"),
-		Currency:     strings.ToUpper(l.String("APP_CURRENCY", "USD")),
-		LoopsEnabled: l.Bool("LOOPS_ENABLED", true),
-		LogLevel:     l.String("LOG_LEVEL", "info"),
+		JWTSecret:         l.Required("AUTH_JWT_SECRET"),
+		JWTPreviousSecret: l.String("AUTH_JWT_PREVIOUS_SECRET", ""),
+		NATSURL:           l.String("NATS_URL", "nats://localhost:6393"),
+		Currency:          strings.ToUpper(l.String("APP_CURRENCY", "USD")),
+		LoopsEnabled:      l.Bool("LOOPS_ENABLED", true),
+		LogLevel:          l.String("LOG_LEVEL", "info"),
 	}
 	l.Check(c.JWTSecret == "" || len(c.JWTSecret) >= 32, "AUTH_JWT_SECRET", "must be at least 32 bytes")
+	l.Check(c.JWTPreviousSecret == "" || len(c.JWTPreviousSecret) >= 32, "AUTH_JWT_PREVIOUS_SECRET", "must be at least 32 bytes")
 	l.Check(len(c.Currency) == 3, "APP_CURRENCY", "must be a three-letter ISO-4217 code")
 	return c
 }

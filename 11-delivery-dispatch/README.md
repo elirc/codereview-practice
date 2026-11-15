@@ -108,6 +108,8 @@ Request flow: router (request id → access log → recover → bearer auth) →
 
 `orders seed` and `couriers seed` print a 30-day token for each account (signed with `AUTH_JWT_SECRET`); `devtoken` mints others.
 
+To rotate the signing secret, move the old value to `AUTH_JWT_PREVIOUS_SECRET` and set a new `AUTH_JWT_SECRET`; tokens signed with either are accepted until the previous secret is removed.
+
 | Account | Role | Subject | Notes |
 |---|---|---|---|
 | customer | customer | `11111111-1111-4111-8111-111111111111` | |

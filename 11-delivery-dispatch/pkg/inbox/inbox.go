@@ -36,9 +36,15 @@ type Outcome struct {
 	Delay time.Duration
 }
 
+// Store is the database a Processor works against; *pgxpool.Pool satisfies it.
+type Store interface {
+	pgxtx.Beginner
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // Processor handles messages for one named consumer.
 type Processor struct {
-	db       pgxtx.Beginner
+	db       Store
 	consumer string
 	handlers map[string]Handler
 	clock    clock.Clock
@@ -47,7 +53,7 @@ type Processor struct {
 }
 
 // NewProcessor returns a Processor for consumer dispatching on event type.
-func NewProcessor(db pgxtx.Beginner, consumer string, handlers map[string]Handler, clk clock.Clock, ids idgen.Generator, logger *slog.Logger) *Processor {
+func NewProcessor(db Store, consumer string, handlers map[string]Handler, clk clock.Clock, ids idgen.Generator, logger *slog.Logger) *Processor {
 	return &Processor{
 		db:       db,
 		consumer: consumer,
@@ -131,22 +137,34 @@ func (p *Processor) Process(ctx context.Context, subject string, payload []byte,
 	return Outcome{Delay: NakDelay(numDelivered)}
 }
 
-// apply records env in the inbox and runs h in the same transaction. It
-// reports true when the inbox already held the event.
+// apply runs h for env in a transaction that also records env in the inbox.
+// It reports true, without running h, when the inbox already holds the event.
 func (p *Processor) apply(ctx context.Context, env envelope.Envelope, h Handler) (bool, error) {
-	var seen bool
-	err := pgxtx.WithTx(ctx, p.db, func(tx pgx.Tx) error {
-		inserted, err := p.record(ctx, tx, env.ID)
-		if err != nil {
+	seen, err := p.processed(ctx, env.ID)
+	if err != nil {
+		return false, err
+	}
+	if seen {
+		return true, nil
+	}
+	return false, pgxtx.WithTx(ctx, p.db, func(tx pgx.Tx) error {
+		if _, err := p.record(ctx, tx, env.ID); err != nil {
 			return err
-		}
-		if !inserted {
-			seen = true
-			return nil
 		}
 		return h(ctx, tx, env)
 	})
-	return seen, err
+}
+
+// processed reports whether the inbox already holds eventID for this consumer.
+func (p *Processor) processed(ctx context.Context, eventID uuid.UUID) (bool, error) {
+	var found bool
+	err := p.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM inbox WHERE consumer = $1 AND event_id = $2)`,
+		p.consumer, eventID).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("check inbox: %w", err)
+	}
+	return found, nil
 }
 
 func (p *Processor) record(ctx context.Context, tx pgx.Tx, eventID uuid.UUID) (bool, error) {

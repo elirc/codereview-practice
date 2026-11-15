@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -101,28 +100,26 @@ func TestProcessAppliesAnEventOnceWhenDeliveredTwice(t *testing.T) {
 	}
 }
 
-func TestProcessConcurrentCopiesOfOneEvent(t *testing.T) {
+func TestRedeliveryOfProcessedEventSkipsTheHandler(t *testing.T) {
 	pool := setup(t)
-	p := newProcessor(pool, map[string]Handler{"thing.happened": recordEffect})
+	var calls atomic.Int32
+	p := newProcessor(pool, map[string]Handler{"thing.happened": func(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
+		calls.Add(1)
+		return recordEffect(ctx, tx, env)
+	}})
 	msg := testEnvelope(t, "thing.happened")
+	ctx := context.Background()
 
-	var wg sync.WaitGroup
-	var acked atomic.Int32
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if p.Process(context.Background(), "things.thing.happened", msg, 1).Ack {
-				acked.Add(1)
-			}
-		}()
+	for i := uint64(1); i <= 3; i++ {
+		if out := p.Process(ctx, "things.thing.happened", msg, i); !out.Ack {
+			t.Fatalf("delivery %d not acked", i)
+		}
 	}
-	wg.Wait()
-	if acked.Load() != 8 {
-		t.Fatalf("acked = %d, want 8", acked.Load())
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("handler calls = %d, want 1", n)
 	}
-	if n := count(t, pool, `SELECT count(*) FROM effects`); n != 1 {
-		t.Fatalf("effects = %d, want 1", n)
+	if n := count(t, pool, `SELECT count(*) FROM inbox`); n != 1 {
+		t.Fatalf("inbox rows = %d, want 1", n)
 	}
 }
 

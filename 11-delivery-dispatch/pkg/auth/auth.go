@@ -57,25 +57,28 @@ var ErrInvalidToken = errors.New("invalid token")
 
 // Verifier checks token signatures and claims.
 type Verifier struct {
-	secret []byte
-	clock  clock.Clock
+	secrets [][]byte
+	clock   clock.Clock
 }
 
-// NewVerifier returns a Verifier for tokens signed with secret.
-func NewVerifier(secret []byte, clk clock.Clock) *Verifier {
-	return &Verifier{secret: secret, clock: clk}
+// NewVerifier returns a Verifier for tokens signed with secret or with any of
+// the previous secrets that are still accepted during a rotation. Empty
+// previous secrets are ignored.
+func NewVerifier(secret []byte, clk clock.Clock, previous ...[]byte) *Verifier {
+	secrets := make([][]byte, 0, 1+len(previous))
+	secrets = append(secrets, secret)
+	for _, p := range previous {
+		if len(p) > 0 {
+			secrets = append(secrets, p)
+		}
+	}
+	return &Verifier{secrets: secrets, clock: clk}
 }
 
 // Verify parses raw and returns the principal it names.
 func (v *Verifier) Verify(raw string) (Principal, error) {
-	var c tokenClaims
-	tok, err := jwt.ParseWithClaims(raw, &c, func(*jwt.Token) (interface{}, error) {
-		return v.secret, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithTimeFunc(v.clock.Now))
-	if err != nil || !tok.Valid {
-		return Principal{}, ErrInvalidToken
-	}
-	if c.ExpiresAt == nil {
+	c, err := v.parse(raw)
+	if err != nil {
 		return Principal{}, ErrInvalidToken
 	}
 	sub, err := uuid.Parse(c.Subject)
@@ -97,6 +100,22 @@ func (v *Verifier) Verify(raw string) (Principal, error) {
 		return Principal{}, ErrInvalidToken
 	}
 	return p, nil
+}
+
+// parse returns the claims of raw when it is signed with one of the accepted
+// secrets and its registered claims are valid at the verifier's clock.
+func (v *Verifier) parse(raw string) (tokenClaims, error) {
+	parser := jwt.NewParser(jwt.WithTimeFunc(v.clock.Now))
+	for _, secret := range v.secrets {
+		var c tokenClaims
+		tok, err := parser.ParseWithClaims(raw, &c, func(*jwt.Token) (interface{}, error) {
+			return secret, nil
+		})
+		if err == nil && tok.Valid {
+			return c, nil
+		}
+	}
+	return tokenClaims{}, ErrInvalidToken
 }
 
 // Mint signs a token for p that expires at expiresAt.
