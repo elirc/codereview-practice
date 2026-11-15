@@ -38,7 +38,10 @@ data class Hold(
     val version: Long,
     val createdAt: Instant,
     val updatedAt: Instant
-)
+) {
+    /** True when the hold's expiry is at or before [now]. */
+    fun isDue(now: Instant): Boolean = !expiresAt.isAfter(now)
+}
 
 /** Reads and writes rows of the `holds` table. */
 @Component

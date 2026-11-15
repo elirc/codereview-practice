@@ -125,31 +125,26 @@ class HoldService(
                 )
             }
 
-            val wallet = accounts.get(hold.accountId)
             val merchant = accounts.get(hold.merchantAccountId)
-            val remainder = hold.amountMinor - amountMinor
-            if (remainder > 0) limits.giveBack(wallet.ownerId!!, hold.currency, hold.authorizedOn, remainder)
-
             val fee = Fees.captureFee(amountMinor, merchant.feeBps ?: 0)
+            val feesId = if (fee > 0) accounts.system(SystemRole.FEES, hold.currency).id else null
+            val locks = balances.lock(listOfNotNull(hold.accountId, merchant.id, feesId))
+            val wallet = locks[hold.accountId].account
             val lines = buildList {
                 add(PostingLine(wallet.id, -amountMinor, hold.currency))
                 add(PostingLine(merchant.id, amountMinor - fee, hold.currency))
-                if (fee > 0) add(PostingLine(accounts.system(SystemRole.FEES, hold.currency).id, fee, hold.currency))
+                if (feesId != null) add(PostingLine(feesId, fee, hold.currency))
             }
             val entry = ledger.post(
                 NewEntry(EntryKind.CAPTURE, lines, caller.keyId),
+                locks = locks,
                 heldDeltas = mapOf(wallet.id to -hold.amountMinor)
             )
-            val captured = hold.copy(
-                status = HoldStatus.CAPTURED,
-                capturedMinor = amountMinor,
-                captureEntryId = entry.id,
-                version = hold.version + 1,
-                updatedAt = now
-            )
-            holds.update(captured)
-            events.hold(HOLD_CAPTURED, captured, now)
-            captured
+            val remainder = hold.amountMinor - amountMinor
+            if (remainder > 0) limits.giveBack(wallet.ownerId!!, hold.currency, now.utcDate(), remainder)
+
+            val captured = hold.copy(status = HoldStatus.CAPTURED, capturedMinor = amountMinor, captureEntryId = entry.id)
+            record(captured, HOLD_CAPTURED, now)
         }
     }
 
@@ -160,37 +155,42 @@ class HoldService(
             val hold = holds.lock(id) ?: throw holdNotFound(id)
             requireVisible(caller, hold)
             if (hold.status != HoldStatus.ACTIVE) throw holdNotActive(hold)
-            finish(hold, HoldStatus.RELEASED, clock.instant())
+            close(hold, HoldStatus.RELEASED, clock.instant())
         }
     }
 
-    /** Expires the hold if it is still active and its expiry is at or before [now]; returns whether it did. */
+    /** Expires the hold if it is due at [now]; returns whether it did. */
     fun expire(id: UUID, now: Instant): Boolean =
         tx.inTx {
             val hold = holds.lock(id)
-            if (hold == null || hold.status != HoldStatus.ACTIVE || hold.expiresAt.isAfter(now)) {
+            if (hold == null || !hold.isDue(now)) {
                 false
             } else {
-                finish(hold, HoldStatus.EXPIRED, now)
+                close(hold, HoldStatus.EXPIRED, now)
                 true
             }
         }
 
-    private fun finish(hold: Hold, status: HoldStatus, now: Instant): Hold {
-        val wallet = accounts.get(hold.accountId)
-        limits.giveBack(wallet.ownerId!!, hold.currency, hold.authorizedOn, hold.amountMinor)
+    /** Takes the whole hold off the wallet's held amount and the owner's usage, and stores it with [status]. */
+    private fun close(hold: Hold, status: HoldStatus, now: Instant): Hold {
         val locked = balances.lock(listOf(hold.accountId))[hold.accountId]
         val balance = balances.apply(hold.accountId, 0, -hold.amountMinor, locked.balance.availableMinor)
         events.balanceChanged(locked.account, balance, CauseType.HOLD, hold.id, now)
-        val finished = hold.copy(status = status, version = hold.version + 1, updatedAt = now)
-        holds.update(finished)
-        events.hold(if (status == HoldStatus.EXPIRED) HOLD_EXPIRED else HOLD_RELEASED, finished, now)
-        return finished
+        limits.giveBack(locked.account.ownerId!!, hold.currency, hold.authorizedOn, hold.amountMinor)
+        return record(hold.copy(status = status), if (status == HoldStatus.EXPIRED) HOLD_EXPIRED else HOLD_RELEASED, now)
+    }
+
+    /** Stores [changed] with the next version and records [eventType] for it. */
+    private fun record(changed: Hold, eventType: String, now: Instant): Hold {
+        val stored = changed.copy(version = changed.version + 1, updatedAt = now)
+        holds.update(stored)
+        events.hold(eventType, stored, now)
+        return stored
     }
 
     private fun requireCapturable(hold: Hold, now: Instant) {
         if (hold.status != HoldStatus.ACTIVE) throw holdNotActive(hold)
-        if (!now.isBefore(hold.expiresAt)) {
+        if (hold.isDue(now)) {
             throw ConflictException("hold_expired", "Hold ${hold.id} has expired.", mapOf("expiresAt" to hold.expiresAt))
         }
     }
