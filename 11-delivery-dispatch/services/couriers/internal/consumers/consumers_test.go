@@ -186,6 +186,25 @@ func TestReservationRejections(t *testing.T) {
 	}
 }
 
+func TestRejectedRequestLeavesCourierUnchanged(t *testing.T) {
+	e := newEnv(t)
+	c := e.onShiftCourier()
+	if _, err := e.svc.Suspend(asOps(), c.ID); err != nil {
+		t.Fatal(err)
+	}
+	before := e.courier(c.ID)
+	e.send("delivery.courier_requested", uuid.New(), map[string]any{"courier_id": c.ID})
+
+	after := e.courier(c.ID)
+	if after.StatusVersion != before.StatusVersion || !after.UpdatedAt.Equal(before.UpdatedAt) || after.ActiveDeliveryID.Valid {
+		t.Fatalf("courier changed by a rejected request: %+v", after)
+	}
+	rejected := e.outbox(service.EventReservationRejected)
+	if len(rejected) != 1 || rejected[0].Sequence != before.StatusVersion || reasonOf(t, rejected[0]) != "suspended" {
+		t.Fatalf("rejections = %+v", rejected)
+	}
+}
+
 func TestReleaseBeforeRequestLeavesCourierUnattached(t *testing.T) {
 	e := newEnv(t)
 	c := e.onShiftCourier()
