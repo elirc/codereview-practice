@@ -53,10 +53,18 @@ def _report_event(ctx: ServiceContext, report: Report, action: str, before: audi
     )
 
 
-def _chain_directory(ctx: ServiceContext) -> dict[uuid.UUID, ChainMember]:
-    rows = ctx.db.execute(
-        select(User.id, User.role, User.manager_id, User.approval_limit_minor, User.active)
+def _chain_directory(ctx: ServiceContext, owner_id: uuid.UUID) -> dict[uuid.UUID, ChainMember]:
+    """Load the owner, their reporting line and the finance users, keyed by id."""
+    columns = (User.id, User.role, User.manager_id, User.approval_limit_minor, User.active)
+    reporting_line = (
+        select(*columns).where(User.id == owner_id).cte("reporting_line", recursive=True)
     )
+    above = reporting_line.alias()
+    reporting_line = reporting_line.union(
+        select(*columns).join(above, User.id == above.c.manager_id).where(User.active.is_(True))
+    )
+    finance = select(*columns).where(User.role == Role.FINANCE)
+    rows = ctx.db.execute(select(reporting_line).union(finance))
     return {
         row.id: ChainMember(
             id=row.id,
@@ -115,7 +123,7 @@ def submit(ctx: ServiceContext, report_id: uuid.UUID, expected_version: int) -> 
         )
 
     total = Money.total((conv.base for _, conv in converted), ctx.base_currency)
-    chain = build_chain(report.owner_id, _chain_directory(ctx), total.amount_minor)
+    chain = build_chain(report.owner_id, _chain_directory(ctx, report.owner_id), total.amount_minor)
 
     before = audit.snapshot(report, REPORT_WORKFLOW_FIELDS)
     for line, conv in converted:

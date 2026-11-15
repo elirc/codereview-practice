@@ -37,7 +37,9 @@ def _manager_approvers(
         if next_id in visited:
             raise ValueError("manager graph contains a cycle")
         visited.add(next_id)
-        member = users[next_id]
+        member = users.get(next_id)
+        if member is None:
+            break
         if member.active:
             approvers.append(member.id)
             if member.approval_limit_minor >= total_base_minor:
@@ -53,7 +55,7 @@ def build_chain(
 
     Manager steps walk up from the owner's manager until someone's limit covers
     the total or the top of the reporting line is reached; one finance step
-    follows.
+    follows. `users` needs the owner, their reporting line and the finance users.
     """
     owner = users[owner_id]
     has_finance_approver = any(
